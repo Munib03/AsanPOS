@@ -1,0 +1,13 @@
+exports.seed = async function(knex: any): Promise<void> {
+  // Clear existing data
+  await knex('stores').del();
+
+  // Insert seed data
+  await knex('stores').insert([
+    {
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'Main Store',
+      address: '123 Main Street',
+    }
+  ]);
+};
