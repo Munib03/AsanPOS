@@ -1,9 +1,11 @@
-exports.up = async function(knex: any): Promise<void> {
+exports.up = async function (knex: any): Promise<void> {
   await knex.schema.createTable('employees', (table: any) => {
-    table.uuid('id').primary();
-    table.string('username').notNullable();
+    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    table.string('email').notNullable().unique();
+    table.string('name').notNullable();
     table.string('password').notNullable();
     table.string('phone').notNullable();
+    table.string('title').nullable();
     table.timestamp('verified_at').nullable();
     table.uuid('store_id').notNullable().references('id').inTable('stores').onDelete('CASCADE');
     table.timestamp('created_at').defaultTo(knex.fn.now());
@@ -11,6 +13,6 @@ exports.up = async function(knex: any): Promise<void> {
   });
 };
 
-exports.down = async function(knex: any): Promise<void> {
+exports.down = async function (knex: any): Promise<void> {
   await knex.schema.dropTable('employees');
 };

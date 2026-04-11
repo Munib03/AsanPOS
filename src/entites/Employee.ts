@@ -4,17 +4,23 @@ import { Store } from './Store';
 @Entity()
 export class Employee {
 
-  @PrimaryKey({ type: 'uuid' })
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
   id!: string;
 
+  @Property({ unique: true })
+  email!: string;
+
   @Property()
-  username!: string;
+  name!: string;
 
   @Property()
   password!: string;
 
   @Property()
   phone!: string;
+
+  @Property({ nullable: true })
+  title?: string;
 
   @Property({ nullable: true })
   verifiedAt?: Date;
