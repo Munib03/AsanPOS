@@ -5,13 +5,23 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Post('register')
+  register(@Body() body: { name: string; email: string; phone: string; password: string; storeId: string }) {
+    return this.authService.register(body);
+  }
+
+  @Post('verify-register')
+  verifyRegister(@Body() body: { email: string; code: string }) {
+    return this.authService.verifyRegister(body.email, body.code);
+  }
+
   @Post('login')
   login(@Body() body: { email: string; password: string }) {
     return this.authService.login(body.email, body.password);
   }
 
-  @Post('verify-otp')
-  verifyOtp(@Body() body: { email: string; code: string }) {
-    return this.authService.verifyOtp(body.email, body.code);
+  @Post('verify-login')
+  verifyLogin(@Body() body: { email: string; code: string }) {
+    return this.authService.verifyLogin(body.email, body.code);
   }
-}
+} 
