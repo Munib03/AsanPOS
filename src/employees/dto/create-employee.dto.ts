@@ -19,5 +19,5 @@ export class CreateEmployeeDto {
 
   @IsNotEmpty()
   @IsString()
-  storeId!: string;
+  storeName!: string;
 }

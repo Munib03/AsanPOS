@@ -8,6 +8,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
+
 @Injectable()
 export class EmployeeService {
   constructor(
@@ -33,9 +34,9 @@ export class EmployeeService {
   }
 
   async create(dto: CreateEmployeeDto) {
-    const store = await this.storeRepo.findOne({ id: dto.storeId });
+    const store = await this.storeRepo.findOne({ id: dto.storeName });
     if (!store)
-      throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+      throw new NotFoundException(`Store with id ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const employee = this.employeeRepo.create({
@@ -48,6 +49,7 @@ export class EmployeeService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
     await this.em.persistAndFlush(employee);
 
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };

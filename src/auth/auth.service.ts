@@ -8,7 +8,6 @@ import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
 
-
 @Injectable()
 export class AuthService {
   constructor(
@@ -41,12 +40,12 @@ export class AuthService {
     });
   }
 
-  async register(dto: { name: string; email: string; phone: string; password: string; storeId: string }) {
+  async register(dto: { name: string; email: string; phone: string; password: string; storeName: string }) {
     const existing = await this.employeeRepo.findOne({ email: dto.email });
     if (existing) throw new BadRequestException('Email already in use');
 
-    const store = await this.storeRepo.findOne({ id: dto.storeId });
-    if (!store) throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+    const store = await this.storeRepo.findOne({ name: dto.storeName });
+    if (!store) throw new NotFoundException(`Store with name ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
