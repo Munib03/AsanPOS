@@ -21,4 +21,5 @@ export class Store {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()' })
   updatedAt: Date = new Date();
+  
 }

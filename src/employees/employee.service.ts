@@ -22,13 +22,17 @@ export class EmployeeService {
 
   async findOne(id: string) {
     const employee = await this.employeeRepo.findOne({ id }, { exclude: ['password'] });
-    if (!employee) throw new NotFoundException(`Employee with id ${id} not found`);
+    if (!employee) 
+      throw new NotFoundException(`Employee with id ${id} not found`);
+    
     return employee;
   }
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.storeRepo.findOne({ id: dto.storeId });
-    if (!store) throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+    if (!store) 
+      throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+    
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const employee = this.employeeRepo.create({
       name: dto.name,
@@ -40,6 +44,7 @@ export class EmployeeService {
       updatedAt: new Date(),
     });
     await this.employeeRepo.getEntityManager().persistAndFlush(employee);
+    
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }
 
@@ -51,23 +56,32 @@ export class EmployeeService {
     if (dto.password) {
       dto.password = await bcrypt.hash(dto.password, 10);
     }
+    
     this.employeeRepo.assign(employee, dto);
     await this.employeeRepo.getEntityManager().flush();
+    
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }
 
   async remove(id: string) {
     const employee = await this.employeeRepo.findOne({ id });
-    if (!employee) throw new NotFoundException(`Employee with id ${id} not found`);
+    if (!employee) 
+      throw new NotFoundException(`Employee with id ${id} not found`);
+    
     await this.employeeRepo.getEntityManager().removeAndFlush(employee);
+    
     return { message: `Employee ${id} deleted successfully` };
   }
 
   async login(email: string, password: string) {
     const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) throw new NotFoundException('Invalid email or password');
+    if (!employee) 
+      throw new NotFoundException('Invalid email or password');
+    
     const isMatch = await bcrypt.compare(password, employee.password);
-    if (!isMatch) throw new NotFoundException('Invalid email or password');
+    if (!isMatch) 
+      throw new NotFoundException('Invalid email or password');
+    
     return { message: 'Login successful', employee_id: employee.id };
   }
 }
