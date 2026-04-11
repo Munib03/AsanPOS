@@ -30,9 +30,11 @@ export class EmployeeService {
     return employee;
   }
 
-async create(dto: CreateEmployeeDto) {
+  async create(dto: CreateEmployeeDto) {
   const store = await this.storeRepo.findOne({ id: dto.storeId });
-  if (!store) throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+  if (!store) 
+    throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+  
   const hashedPassword = await bcrypt.hash(dto.password, 10);
   const employee = this.employeeRepo.create({
     id: uuidv4(),
@@ -45,6 +47,7 @@ async create(dto: CreateEmployeeDto) {
     updatedAt: new Date(),
   });
   await this.employeeRepo.getEntityManager().persistAndFlush(employee);
+  
   return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
 }
 
