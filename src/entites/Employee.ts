@@ -1,7 +1,7 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { Store } from './Store';
 
-@Entity()
+@Entity({ tableName: 'employees' })
 export class Employee {
 
   @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
@@ -12,6 +12,9 @@ export class Employee {
 
   @Property()
   name!: string;
+
+  @Property() 
+  email!: string;
 
   @Property()
   password!: string;
