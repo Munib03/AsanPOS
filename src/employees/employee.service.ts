@@ -6,6 +6,8 @@ import { Store } from '../entites/Store';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
+
 
 @Injectable()
 export class EmployeeService {
@@ -28,25 +30,23 @@ export class EmployeeService {
     return employee;
   }
 
-  async create(dto: CreateEmployeeDto) {
-    const store = await this.storeRepo.findOne({ id: dto.storeId });
-    if (!store) 
-      throw new NotFoundException(`Store with id ${dto.storeId} not found`);
-    
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const employee = this.employeeRepo.create({
-      name: dto.name,
-      email: dto.email,
-      password: hashedPassword,
-      phone: dto.phone,
-      store,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    await this.employeeRepo.getEntityManager().persistAndFlush(employee);
-    
-    return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
-  }
+async create(dto: CreateEmployeeDto) {
+  const store = await this.storeRepo.findOne({ id: dto.storeId });
+  if (!store) throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+  const hashedPassword = await bcrypt.hash(dto.password, 10);
+  const employee = this.employeeRepo.create({
+    id: uuidv4(),
+    name: dto.name,
+    email: dto.email,
+    password: hashedPassword,
+    phone: dto.phone,
+    store,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await this.employeeRepo.getEntityManager().persistAndFlush(employee);
+  return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+}
 
   async update(id: string, dto: UpdateEmployeeDto) {
     const employee = await this.employeeRepo.findOne({ id });
