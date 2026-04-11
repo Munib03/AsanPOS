@@ -10,6 +10,9 @@ export class Employee {
   @Property()
   username!: string;
 
+  @Property() 
+  email!: string;
+
   @Property()
   password!: string;
 
