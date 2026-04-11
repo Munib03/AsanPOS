@@ -1,5 +1,5 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Employee } from './Employee';
+import { Employee } from './mployee.entity';
 
 @Entity({ tableName: 'two_factor_auth' })
 export class TwoFactorAuth {

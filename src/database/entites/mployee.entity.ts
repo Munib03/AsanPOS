@@ -1,5 +1,6 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Store } from './Store';
+import { Store } from './store.entity';
+
 
 @Entity({ tableName: 'employees' })
 export class Employee {

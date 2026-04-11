@@ -1,10 +1,9 @@
 import 'dotenv/config';
 import { Options } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { Employee } from './entites/Employee';
-import { Store } from './entites/Store';
-import { TwoFactorAuth } from './entites/TwoFactorAuth';
-
+import { Employee } from './database/entites/mployee.entity';
+import { Store } from './database/entites/store.entity';
+import { TwoFactorAuth } from './database/entites/twoFactorAuth.entity';
 
 const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,

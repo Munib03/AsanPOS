@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
-import { Employee } from '../entites/Employee';
-import { TwoFactorAuth } from '../entites/TwoFactorAuth';
-import { Store } from '../entites/Store';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
+import { Employee } from '../database/entites/mployee.entity';
+import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
+import { Store } from '../database/entites/store.entity';
 
 
 @Injectable()

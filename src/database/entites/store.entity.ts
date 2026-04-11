@@ -1,5 +1,5 @@
 import { Entity, PrimaryKey, Property, OneToMany } from '@mikro-orm/core';
-import { Employee } from './Employee';
+import { Employee } from './mployee.entity';
 
 @Entity({ tableName: 'stores' })
 export class Store {
