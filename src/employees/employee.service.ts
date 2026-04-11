@@ -8,11 +8,13 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
+
 @Injectable()
 export class EmployeeService {
   constructor(
     @InjectRepository(Employee)
     private readonly employeeRepo: EntityRepository<Employee>,
+
     @InjectRepository(Store)
     private readonly storeRepo: EntityRepository<Store>,
   ) {}
@@ -23,13 +25,17 @@ export class EmployeeService {
 
   async findOne(id: string) {
     const employee = await this.employeeRepo.findOne({ id }, { exclude: ['password'] });
-    if (!employee) throw new NotFoundException(`Employee with id ${id} not found`);
+    if (!employee) 
+      throw new NotFoundException(`Employee with id ${id} not found`);
+    
     return employee;
   }
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.storeRepo.findOne({ id: dto.storeId });
-    if (!store) throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+    if (!store) 
+      throw new NotFoundException(`Store with id ${dto.storeId} not found`);
+    
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const employee = this.employeeRepo.create({
       id: uuidv4(),
@@ -41,13 +47,18 @@ export class EmployeeService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
     await this.employeeRepo.getEntityManager().persistAndFlush(employee);
+    
     return { id: employee.id, username: employee.username, email: employee.email, phone: employee.phone };
   }
 
   async update(id: string, dto: UpdateEmployeeDto) {
     const employee = await this.employeeRepo.findOne({ id });
-    if (!employee) throw new NotFoundException(`Employee with id ${id} not found`);
+
+    if (!employee) 
+      throw new NotFoundException(`Employee with id ${id} not found`);
+
     if (dto.password) {
       dto.password = await bcrypt.hash(dto.password, 10);
     }
@@ -58,16 +69,23 @@ export class EmployeeService {
 
   async remove(id: string) {
     const employee = await this.employeeRepo.findOne({ id });
-    if (!employee) throw new NotFoundException(`Employee with id ${id} not found`);
+    if (!employee) 
+      throw new NotFoundException(`Employee with id ${id} not found`);
+
     await this.employeeRepo.getEntityManager().removeAndFlush(employee);
+
     return { message: `Employee ${id} deleted successfully` };
   }
 
   async login(username: string, password: string) {
     const employee = await this.employeeRepo.findOne({ username });
-    if (!employee) throw new NotFoundException('Invalid username or password');
+    if (!employee) 
+      throw new NotFoundException('Invalid username or password');
+    
     const isMatch = await bcrypt.compare(password, employee.password);
-    if (!isMatch) throw new NotFoundException('Invalid username or password');
+    if (!isMatch) 
+      throw new NotFoundException('Invalid username or password');
+
     return { message: 'Login successful', employee_id: employee.id };
   }
 }
