@@ -54,7 +54,8 @@ export class AuthService {
     }
 
     const store = await this.storeRepo.findOne({ name: dto.storeName });
-    if (!store) throw new NotFoundException(`Store with name ${dto.storeName} not found`);
+    if (!store) 
+      throw new NotFoundException(`Store with name ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
@@ -89,7 +90,8 @@ export class AuthService {
 
   async verifyRegister(email: string, code: string) {
     const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee) 
+      throw new NotFoundException('Employee not found');
 
     const otp = await this.twoFactorRepo.findOne({
       employee,
@@ -97,10 +99,12 @@ export class AuthService {
       usedAt: null,
     });
 
-    if (!otp) throw new BadRequestException('Invalid OTP code');
+    if (!otp) 
+      throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
-    if (otp.expiresAt < now) throw new BadRequestException('OTP has expired');
+    if (otp.expiresAt < now) 
+      throw new BadRequestException('OTP has expired');
 
     otp.usedAt = new Date();
     employee.verifiedAt = new Date();
@@ -111,12 +115,15 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) throw new NotFoundException('Invalid email or password');
+    if (!employee) 
+      throw new NotFoundException('Invalid email or password');
 
-    if (!employee.verifiedAt) throw new BadRequestException('Please verify your email first');
+    if (!employee.verifiedAt) 
+      throw new BadRequestException('Please verify your email first');
 
     const isMatch = await bcrypt.compare(password, employee.password);
-    if (!isMatch) throw new NotFoundException('Invalid email or password');
+    if (!isMatch) 
+      throw new NotFoundException('Invalid email or password');
 
     const code = this.generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -136,7 +143,8 @@ export class AuthService {
 
   async verifyLogin(email: string, code: string) {
     const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee) 
+      throw new NotFoundException('Employee not found');
 
     const otp = await this.twoFactorRepo.findOne({
       employee,
@@ -144,7 +152,8 @@ export class AuthService {
       usedAt: null,
     });
 
-    if (!otp) throw new BadRequestException('Invalid OTP code');
+    if (!otp) 
+      throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
     if (otp.expiresAt < now) throw new BadRequestException('OTP has expired');
