@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository } from '@mikro-orm/postgresql';
+import { EntityRepository, EntityManager } from '@mikro-orm/postgresql';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,6 +17,7 @@ export class AuthService {
     private readonly twoFactorRepo: EntityRepository<TwoFactorAuth>,
     @InjectRepository(Store)
     private readonly storeRepo: EntityRepository<Store>,
+    private readonly em: EntityManager,
   ) {}
 
   private generateOTP(): string {
@@ -42,7 +43,15 @@ export class AuthService {
 
   async register(dto: { name: string; email: string; phone: string; password: string; storeName: string }) {
     const existing = await this.employeeRepo.findOne({ email: dto.email });
-    if (existing) throw new BadRequestException('Email already in use');
+
+    if (existing) {
+      if (existing.verifiedAt) {
+        throw new BadRequestException('Email already in use');
+      }
+      // delete unverified employee and their OTPs so they can re-register
+      await this.twoFactorRepo.nativeDelete({ employee: existing });
+      await this.em.removeAndFlush(existing);
+    }
 
     const store = await this.storeRepo.findOne({ name: dto.storeName });
     if (!store) throw new NotFoundException(`Store with name ${dto.storeName} not found`);
@@ -60,7 +69,7 @@ export class AuthService {
       updatedAt: new Date(),
     });
 
-    await this.employeeRepo.getEntityManager().persistAndFlush(employee);
+    await this.em.persistAndFlush(employee);
 
     const code = this.generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -72,7 +81,7 @@ export class AuthService {
       createdAt: new Date(),
     });
 
-    await this.twoFactorRepo.getEntityManager().persistAndFlush(otp);
+    await this.em.persistAndFlush(otp);
     await this.sendEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
@@ -95,7 +104,7 @@ export class AuthService {
 
     otp.usedAt = new Date();
     employee.verifiedAt = new Date();
-    await this.twoFactorRepo.getEntityManager().flush();
+    await this.em.flush();
 
     return { message: 'Registration successful', employee_id: employee.id };
   }
@@ -119,7 +128,7 @@ export class AuthService {
       createdAt: new Date(),
     });
 
-    await this.twoFactorRepo.getEntityManager().persistAndFlush(otp);
+    await this.em.persistAndFlush(otp);
     await this.sendEmail(employee.email, code);
 
     return { message: 'OTP sent to your email' };
@@ -141,7 +150,7 @@ export class AuthService {
     if (otp.expiresAt < now) throw new BadRequestException('OTP has expired');
 
     otp.usedAt = new Date();
-    await this.twoFactorRepo.getEntityManager().flush();
+    await this.em.flush();
 
     return { message: 'Login successful', employee_id: employee.id };
   }

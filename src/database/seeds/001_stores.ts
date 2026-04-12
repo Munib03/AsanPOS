@@ -1,4 +1,6 @@
-exports.seed = async function(knex: any): Promise<void> {
+import { Knex } from "knex";
+
+exports.seed = async function(knex: Knex): Promise<void> {
   // Clear existing data
   await knex('stores').del();
 

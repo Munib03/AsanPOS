@@ -1,5 +1,8 @@
-exports.up = async function (knex: any): Promise<void> {
-  await knex.schema.createTable('employees', (table: any) => {
+import { Knex } from "knex";
+
+
+exports.up = async function (knex: Knex): Promise<void> {
+  await knex.schema.createTable('employees', (table: Knex.TableBuilder) => {
     table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     table.string('email').notNullable().unique();
     table.string('name').notNullable();
@@ -13,6 +16,6 @@ exports.up = async function (knex: any): Promise<void> {
   });
 };
 
-exports.down = async function (knex: any): Promise<void> {
+exports.down = async function (knex: Knex): Promise<void> {
   await knex.schema.dropTable('employees');
 };
