@@ -1,8 +1,8 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { Employee } from './mployee.entity';
 
-@Entity({ tableName: 'two_factor_auth' })
-export class TwoFactorAuth {
+@Entity({ tableName: 'security_actions' })
+export class SecurityAction {
 
   @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
   id!: string;
@@ -11,11 +11,14 @@ export class TwoFactorAuth {
   employee!: Employee;
 
   @Property()
-  secret!: string;
+  actionType!: string;
 
   @Property({ nullable: true })
-  createdAt?: Date;
+  secret?: string;
 
   @Property({ nullable: true })
   expiresAt?: Date;
+
+  @Property({ defaultRaw: 'now()' })
+  createdAt: Date = new Date();
 }

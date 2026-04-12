@@ -1,15 +1,20 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, EntityManager } from '@mikro-orm/postgresql';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
+import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
+import * as crypto from 'crypto';
+import * as OTPAuth from 'otpauth';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class AuthService {
@@ -20,11 +25,54 @@ export class AuthService {
     private readonly twoFactorRepo: EntityRepository<TwoFactorAuth>,
     @InjectRepository(Store)
     private readonly storeRepo: EntityRepository<Store>,
+    @InjectRepository(SecurityAction)
+    private readonly securityActionRepo: EntityRepository<SecurityAction>,
     private readonly em: EntityManager,
+    private readonly jwtService: JwtService,
   ) {}
 
   private generateOTP(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 999999).toString();
+  }
+
+  private generateJWT(employee: Employee): string {
+    return this.jwtService.sign({
+      sub: employee.id,
+      email: employee.email,
+    });
+  }
+
+  async enableTwoFactor(employeeId: string) {
+    const employee = await this.employeeRepo.findOne({ id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    const existing = await this.twoFactorRepo.findOne({ employee });
+    if (existing)
+      throw new BadRequestException('2FA is already enabled');
+
+    const totp = new OTPAuth.TOTP({
+      issuer: 'AsanPOS',
+      label: employee.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+    });
+
+    const secret = totp.secret.base32;
+
+    const twoFactor = this.twoFactorRepo.create({
+      employee,
+      secret,
+      createdAt: new Date(),
+    });
+
+    await this.em.persistAndFlush(twoFactor);
+
+    const otpAuthUrl = totp.toString();
+    const qrCode = await QRCode.toDataURL(otpAuthUrl);
+
+    return { qrCode, secret };
   }
 
   private async sendEmail(to: string, code: string) {
@@ -51,7 +99,7 @@ export class AuthService {
       if (existing.verifiedAt) {
         throw new BadRequestException('Email already in use');
       }
-      await this.twoFactorRepo.nativeDelete({ employee: existing });
+      await this.securityActionRepo.nativeDelete({ employee: existing });
       await this.em.removeAndFlush(existing);
     }
 
@@ -77,14 +125,15 @@ export class AuthService {
     const code = this.generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    const otp = this.twoFactorRepo.create({
+    const securityAction = this.securityActionRepo.create({
       employee,
-      code,
+      actionType: 'sign-up',
+      secret: code,
       expiresAt,
       createdAt: new Date(),
     });
 
-    await this.em.persistAndFlush(otp);
+    await this.em.persistAndFlush(securityAction);
     await this.sendEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
@@ -95,21 +144,21 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const otp = await this.twoFactorRepo.findOne({
+    const securityAction = await this.securityActionRepo.findOne({
       employee,
-      code: dto.code,
-      usedAt: null,
+      secret: dto.code,
+      actionType: 'sign-up',
     });
 
-    if (!otp)
+    if (!securityAction)
       throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
-    if (otp.expiresAt < now)
+    if (securityAction.expiresAt && securityAction.expiresAt < now)
       throw new BadRequestException('OTP has expired');
 
-    otp.usedAt = new Date();
     employee.verifiedAt = new Date();
+    await this.em.removeAndFlush(securityAction);
     await this.em.flush();
 
     return { message: 'Registration successful', employee_id: employee.id };
@@ -127,20 +176,17 @@ export class AuthService {
     if (!isMatch)
       throw new NotFoundException('Invalid email or password');
 
-    const code = this.generateOTP();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    // check if 2FA is enabled
+    const twoFactor = await this.twoFactorRepo.findOne({ employee });
 
-    const otp = this.twoFactorRepo.create({
-      employee,
-      code,
-      expiresAt,
-      createdAt: new Date(),
-    });
+    if (twoFactor) {
+      // 2FA is enabled → ask for Google Authenticator code
+      return { message: 'Please enter your Google Authenticator code', twoFactorRequired: true };
+    }
 
-    await this.em.persistAndFlush(otp);
-    await this.sendEmail(employee.email, code);
-
-    return { message: 'OTP sent to your email' };
+    // 2FA is disabled → return JWT directly
+    const token = this.generateJWT(employee);
+    return { message: 'Login successful', token };
   }
 
   async verifyLogin(dto: VerifyDto) {
@@ -148,22 +194,26 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const otp = await this.twoFactorRepo.findOne({
-      employee,
-      code: dto.code,
-      usedAt: null,
+    // get 2FA secret from db
+    const twoFactor = await this.twoFactorRepo.findOne({ employee });
+    if (!twoFactor)
+      throw new BadRequestException('2FA is not enabled');
+
+    // verify Google Authenticator code
+    const totp = new OTPAuth.TOTP({
+      issuer: 'AsanPOS',
+      label: employee.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: OTPAuth.Secret.fromBase32(twoFactor.secret),
     });
 
-    if (!otp)
-      throw new BadRequestException('Invalid OTP code');
+    const isValid = totp.validate({ token: dto.code, window: 1 });
+    if (isValid === null)
+      throw new BadRequestException('Invalid or expired code');
 
-    const now = new Date();
-    if (otp.expiresAt < now)
-      throw new BadRequestException('OTP has expired');
-
-    otp.usedAt = new Date();
-    await this.em.flush();
-
-    return { message: 'Login successful', employee_id: employee.id };
+    const token = this.generateJWT(employee);
+    return { message: 'Login successful', token };
   }
 }

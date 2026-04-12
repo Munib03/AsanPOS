@@ -27,4 +27,9 @@ export class AuthController {
   verifyLogin(@Body() dto: VerifyDto) {
     return this.authService.verifyLogin(dto);
   }
+
+  @Post('enable-2fa')
+ enableTwoFactor(@Body() body: { employeeId: string }) {
+  return this.authService.enableTwoFactor(body.employeeId);
+  }
 }
