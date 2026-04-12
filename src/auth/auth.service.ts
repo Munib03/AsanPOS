@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { VerifyDto } from './dto/verify.dto';
 
 @Injectable()
 export class AuthService {
@@ -41,20 +44,19 @@ export class AuthService {
     });
   }
 
-  async register(dto: { name: string; email: string; phone: string; password: string; storeName: string }) {
+  async register(dto: RegisterDto) {
     const existing = await this.employeeRepo.findOne({ email: dto.email });
 
     if (existing) {
       if (existing.verifiedAt) {
         throw new BadRequestException('Email already in use');
       }
-      // delete unverified employee and their OTPs so they can re-register
       await this.twoFactorRepo.nativeDelete({ employee: existing });
       await this.em.removeAndFlush(existing);
     }
 
     const store = await this.storeRepo.findOne({ name: dto.storeName });
-    if (!store) 
+    if (!store)
       throw new NotFoundException(`Store with name ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
@@ -88,22 +90,22 @@ export class AuthService {
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
 
-  async verifyRegister(email: string, code: string) {
-    const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) 
+  async verifyRegister(dto: VerifyDto) {
+    const employee = await this.employeeRepo.findOne({ email: dto.email });
+    if (!employee)
       throw new NotFoundException('Employee not found');
 
     const otp = await this.twoFactorRepo.findOne({
       employee,
-      code,
+      code: dto.code,
       usedAt: null,
     });
 
-    if (!otp) 
+    if (!otp)
       throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
-    if (otp.expiresAt < now) 
+    if (otp.expiresAt < now)
       throw new BadRequestException('OTP has expired');
 
     otp.usedAt = new Date();
@@ -113,16 +115,16 @@ export class AuthService {
     return { message: 'Registration successful', employee_id: employee.id };
   }
 
-  async login(email: string, password: string) {
-    const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) 
+  async login(dto: LoginDto) {
+    const employee = await this.employeeRepo.findOne({ email: dto.email });
+    if (!employee)
       throw new NotFoundException('Invalid email or password');
 
-    if (!employee.verifiedAt) 
+    if (!employee.verifiedAt)
       throw new BadRequestException('Please verify your email first');
 
-    const isMatch = await bcrypt.compare(password, employee.password);
-    if (!isMatch) 
+    const isMatch = await bcrypt.compare(dto.password, employee.password);
+    if (!isMatch)
       throw new NotFoundException('Invalid email or password');
 
     const code = this.generateOTP();
@@ -141,22 +143,23 @@ export class AuthService {
     return { message: 'OTP sent to your email' };
   }
 
-  async verifyLogin(email: string, code: string) {
-    const employee = await this.employeeRepo.findOne({ email });
-    if (!employee) 
+  async verifyLogin(dto: VerifyDto) {
+    const employee = await this.employeeRepo.findOne({ email: dto.email });
+    if (!employee)
       throw new NotFoundException('Employee not found');
 
     const otp = await this.twoFactorRepo.findOne({
       employee,
-      code,
+      code: dto.code,
       usedAt: null,
     });
 
-    if (!otp) 
+    if (!otp)
       throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
-    if (otp.expiresAt < now) throw new BadRequestException('OTP has expired');
+    if (otp.expiresAt < now)
+      throw new BadRequestException('OTP has expired');
 
     otp.usedAt = new Date();
     await this.em.flush();
