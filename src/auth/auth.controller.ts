@@ -32,14 +32,8 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('enable-2fa')
-  enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.enableTwoFactor(user.id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('2fa-qr')
-  regenerateQRCode(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.regenerateQRCode(user.id);
+  @Delete('disable-2fa')
+  disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.disableTwoFactor(user.id);
   }
 }
