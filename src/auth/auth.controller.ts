@@ -4,6 +4,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { CurrentUser } from './current-user.decorator';
+
 
 @Controller('auth')
 export class AuthController {
@@ -31,19 +33,19 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('enable-2fa')
-  enableTwoFactor(@Body() body: { employeeId: string }) {
-    return this.authService.enableTwoFactor(body.employeeId);
+  enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.enableTwoFactor(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('2fa-qr/:employeeId')
-  regenerateQRCode(@Param('employeeId') employeeId: string) {
-    return this.authService.regenerateQRCode(employeeId);
+  @Get('2fa-qr')
+  regenerateQRCode(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.regenerateQRCode(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Delete('disable-2fa/:employeeId')
-  disableTwoFactor(@Param('employeeId') employeeId: string) {
-    return this.authService.disableTwoFactor(employeeId);
+  @Delete('disable-2fa')
+  disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.disableTwoFactor(user.id);
   }
 }
