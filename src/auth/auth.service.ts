@@ -89,30 +89,6 @@ export class AuthService {
     return { message: '2FA disabled successfully' };
   }
 
-  async regenerateQRCode(employeeId: string) {
-    const employee = await this.employeeRepo.findOne({ id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    const twoFactor = await this.twoFactorRepo.findOne({ employee });
-    if (!twoFactor)
-      throw new BadRequestException('2FA is not enabled');
-
-    const totp = new OTPAuth.TOTP({
-      issuer: 'AsanPOS',
-      label: employee.email,
-      algorithm: 'SHA1',
-      digits: 6,
-      period: 30,
-      secret: OTPAuth.Secret.fromBase32(twoFactor.secret),
-    });
-
-    const otpAuthUrl = totp.toString();
-    const qrCode = await QRCode.toDataURL(otpAuthUrl);
-
-    return { qrCode, secret: twoFactor.secret };
-  }
-
   private async sendEmail(to: string, code: string) {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -217,36 +193,23 @@ export class AuthService {
     const twoFactor = await this.twoFactorRepo.findOne({ employee });
 
     if (twoFactor) {
-      return { message: 'Please enter your Google Authenticator code', twoFactorRequired: true };
+      if (!dto.code)
+        return { twoFactorRequired: true, message: 'Please provide your Google Authenticator code' };
+
+      const totp = new OTPAuth.TOTP({
+        issuer: 'AsanPOS',
+        label: employee.email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(twoFactor.secret),
+      });
+
+      const isValid = totp.validate({ token: dto.code, window: 1 });
+      if (isValid === null)
+        throw new BadRequestException('Invalid or expired 2FA code');
     }
 
-    const token = this.generateJWT(employee);
-    return { message: 'Login successful', token };
-  }
-
-  async verifyLogin(dto: VerifyDto) {
-    const employee = await this.employeeRepo.findOne({ email: dto.email });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    const twoFactor = await this.twoFactorRepo.findOne({ employee });
-    if (!twoFactor)
-      throw new BadRequestException('2FA is not enabled');
-
-    const totp = new OTPAuth.TOTP({
-      issuer: 'AsanPOS',
-      label: employee.email,
-      algorithm: 'SHA1',
-      digits: 6,
-      period: 30,
-      secret: OTPAuth.Secret.fromBase32(twoFactor.secret),
-    });
-
-    const isValid = totp.validate({ token: dto.code, window: 1 });
-    if (isValid === null)
-      throw new BadRequestException('Invalid or expired code');
-
-    const token = this.generateJWT(employee);
-    return { message: 'Login successful', token };
+    return { message: 'Login successful', token: this.generateJWT(employee) };
   }
 }

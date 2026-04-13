@@ -26,11 +26,6 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-  @Post('verify-login')
-  verifyLogin(@Body() dto: VerifyDto) {
-    return this.authService.verifyLogin(dto);
-  }
-
   @UseGuards(JwtAuthGuard)
   @Post('enable-2fa')
   enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
