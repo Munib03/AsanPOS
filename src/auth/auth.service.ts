@@ -75,6 +75,44 @@ export class AuthService {
     return { qrCode, secret };
   }
 
+  async disableTwoFactor(employeeId: string) {
+    const employee = await this.employeeRepo.findOne({ id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    const twoFactor = await this.twoFactorRepo.findOne({ employee });
+    if (!twoFactor)
+      throw new BadRequestException('2FA is not enabled');
+
+    await this.em.removeAndFlush(twoFactor);
+
+    return { message: '2FA disabled successfully' };
+  }
+
+  async regenerateQRCode(employeeId: string) {
+    const employee = await this.employeeRepo.findOne({ id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    const twoFactor = await this.twoFactorRepo.findOne({ employee });
+    if (!twoFactor)
+      throw new BadRequestException('2FA is not enabled');
+
+    const totp = new OTPAuth.TOTP({
+      issuer: 'AsanPOS',
+      label: employee.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: OTPAuth.Secret.fromBase32(twoFactor.secret),
+    });
+
+    const otpAuthUrl = totp.toString();
+    const qrCode = await QRCode.toDataURL(otpAuthUrl);
+
+    return { qrCode, secret: twoFactor.secret };
+  }
+
   private async sendEmail(to: string, code: string) {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -176,15 +214,12 @@ export class AuthService {
     if (!isMatch)
       throw new NotFoundException('Invalid email or password');
 
-    // check if 2FA is enabled
     const twoFactor = await this.twoFactorRepo.findOne({ employee });
 
     if (twoFactor) {
-      // 2FA is enabled → ask for Google Authenticator code
       return { message: 'Please enter your Google Authenticator code', twoFactorRequired: true };
     }
 
-    // 2FA is disabled → return JWT directly
     const token = this.generateJWT(employee);
     return { message: 'Login successful', token };
   }
@@ -194,12 +229,10 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    // get 2FA secret from db
     const twoFactor = await this.twoFactorRepo.findOne({ employee });
     if (!twoFactor)
       throw new BadRequestException('2FA is not enabled');
 
-    // verify Google Authenticator code
     const totp = new OTPAuth.TOTP({
       issuer: 'AsanPOS',
       label: employee.email,
