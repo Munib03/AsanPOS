@@ -1,13 +1,8 @@
-import { Knex } from "knex";
+import { Knex } from 'knex';
 
 exports.up = async function(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('employees', (table: Knex.TableBuilder) => {
-    table.renameColumn('username', 'name');
-  });
+  // name already exists in 002 migration
 };
 
 exports.down = async function(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('employees', (table: Knex.TableBuilder) => {
-    table.renameColumn('name', 'username');
-  });
 };

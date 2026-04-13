@@ -4,11 +4,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
+import { JwtStrategy } from '../shared/jwt/jwt.strategy';
+
 
 @Module({
   imports: [

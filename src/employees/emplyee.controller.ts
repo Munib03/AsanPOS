@@ -1,7 +1,7 @@
 import { Controller, Get, Put, Delete, Param, Body, UseGuards, Post } from '@nestjs/common';
 import { EmployeeService } from './employee.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 
 @Controller('employees')
 export class EmployeeController {

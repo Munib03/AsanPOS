@@ -1,13 +1,8 @@
 import { Knex } from "knex";
 
 exports.up = async function(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('employees', (table: Knex.TableBuilder) => {
-    table.string('title').nullable();
-  });
+  // title already exists in 002 migration
 };
 
 exports.down = async function(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('employees', (table: Knex.TableBuilder) => {
-    table.dropColumn('title');
-  });
 };

@@ -1,11 +1,7 @@
-exports.up = async function(knex: any): Promise<void> {
-  await knex.schema.alterTable('employees', (table: any) => {
-    table.unique('email');
-  });
+import { Knex } from 'knex';
+
+exports.up = async function(knex: Knex): Promise<void> {
 };
 
-exports.down = async function(knex: any): Promise<void> {
-  await knex.schema.alterTable('employees', (table: any) => {
-    table.dropUnique('email');
-  });
+exports.down = async function(knex: Knex): Promise<void> {
 };

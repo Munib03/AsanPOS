@@ -3,8 +3,9 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { CurrentUser } from './current-user.decorator';
+import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
+  
 
 @Controller('auth')
 export class AuthController {
