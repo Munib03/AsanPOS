@@ -42,10 +42,4 @@ export class AuthController {
   regenerateQRCode(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.regenerateQRCode(user.id);
   }
-
-  @UseGuards(JwtAuthGuard)
-  @Delete('disable-2fa')
-  disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.disableTwoFactor(user.id);
-  }
 }
