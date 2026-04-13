@@ -6,7 +6,6 @@ import { VerifyDto } from './dto/verify.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 
-
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -29,6 +28,12 @@ export class AuthController {
   @Post('verify-login')
   verifyLogin(@Body() dto: VerifyDto) {
     return this.authService.verifyLogin(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('enable-2fa')
+  enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.enableTwoFactor(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
