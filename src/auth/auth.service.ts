@@ -16,6 +16,7 @@ import * as crypto from 'crypto';
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 
+
 @Injectable()
 export class AuthService {
   constructor(
