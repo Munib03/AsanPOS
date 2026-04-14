@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
@@ -86,21 +85,24 @@ export class AuthService {
       await this.em.removeAndFlush(existing);
     }
 
-    const store = await this.em.findOne(Store, { name: dto.storeName });
-    if (!store)
-      throw new NotFoundException(`Store with name ${dto.storeName} not found`);
+    // find store or create new one
+    let store = await this.em.findOne(Store, { name: dto.storeName });
+    if (!store) {
+      store = this.em.create(Store, {
+        name: dto.storeName,
+        address: dto.storeAddress,
+      });
+      await this.em.persistAndFlush(store);
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const employee = this.em.create(Employee, {
-      id: uuidv4(),
       name: dto.name,
       email: dto.email,
       password: hashedPassword,
       phone: dto.phone,
       store,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     });
 
     await this.em.persistAndFlush(employee);

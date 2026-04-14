@@ -11,8 +11,8 @@ export class Store {
   @Property()
   name!: string;
 
-  @Property()
-  address!: string;
+  @Property({ nullable: true })
+  address?: string;
 
   @OneToMany(() => Employee, e => e.store)
   employees = new Collection<Employee>(this);

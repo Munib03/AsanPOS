@@ -20,4 +20,8 @@ export class RegisterDto {
   @IsNotEmpty()
   @IsString()
   storeName!: string;
+
+  @IsOptional()
+  @IsString()
+  storeAddress?: string;
 }
