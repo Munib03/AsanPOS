@@ -32,14 +32,11 @@ export class EmployeeService {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const employee = this.em.create(Employee, {
-      id: uuidv4(),
       name: dto.name,
       email: dto.email,
       password: hashedPassword,
       phone: dto.phone,
-      store,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      store
     });
 
     await this.em.persistAndFlush(employee);

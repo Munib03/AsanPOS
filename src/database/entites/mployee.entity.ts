@@ -1,12 +1,12 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { Store } from './store.entity';
-
+import { v4 as uuidv4 } from 'uuid';
 
 @Entity({ tableName: 'employees' })
 export class Employee {
 
-  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
-  id!: string;
+  @PrimaryKey({ type: 'uuid' })
+  id: string = uuidv4();
 
   @Property({ unique: true })
   email!: string;
@@ -29,9 +29,9 @@ export class Employee {
   @ManyToOne(() => Store)
   store!: Store;
 
-  @Property({ defaultRaw: 'now()' })
-  createdAt: Date = new Date();
+  @Property({ defaultRaw: 'now()', nullable: true })
+  createdAt?: Date;
 
-  @Property({ onUpdate: () => new Date(), defaultRaw: 'now()' })
-  updatedAt: Date = new Date();
+  @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
+  updatedAt?: Date;
 }
