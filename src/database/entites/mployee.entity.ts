@@ -18,7 +18,7 @@ export class Employee {
   password!: string;
 
   @Property({ nullable: true })
-  phone!: string;
+  phone?: string;
 
   @Property({ nullable: true })
   title?: string;
