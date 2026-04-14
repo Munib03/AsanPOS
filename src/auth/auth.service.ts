@@ -1,9 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import * as nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
@@ -12,29 +10,16 @@ import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
-import * as crypto from 'crypto';
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
-
+import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(Employee)
-    private readonly employeeRepo: EntityRepository<Employee>,
-    @InjectRepository(TwoFactorAuth)
-    private readonly twoFactorRepo: EntityRepository<TwoFactorAuth>,
-    @InjectRepository(Store)
-    private readonly storeRepo: EntityRepository<Store>,
-    @InjectRepository(SecurityAction)
-    private readonly securityActionRepo: EntityRepository<SecurityAction>,
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
   ) {}
-
-  private generateOTP(): string {
-    return crypto.randomInt(100000, 999999).toString();
-  }
 
   private generateJWT(employee: Employee): string {
     return this.jwtService.sign({
@@ -44,11 +29,11 @@ export class AuthService {
   }
 
   async enableTwoFactor(employeeId: string) {
-    const employee = await this.employeeRepo.findOne({ id: employeeId });
+    const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const existing = await this.twoFactorRepo.findOne({ employee });
+    const existing = await this.em.findOne(TwoFactorAuth, { employee });
     if (existing)
       throw new BadRequestException('2FA is already enabled');
 
@@ -62,7 +47,7 @@ export class AuthService {
 
     const secret = totp.secret.base32;
 
-    const twoFactor = this.twoFactorRepo.create({
+    const twoFactor = this.em.create(TwoFactorAuth, {
       employee,
       secret,
       createdAt: new Date(),
@@ -77,11 +62,11 @@ export class AuthService {
   }
 
   async disableTwoFactor(employeeId: string) {
-    const employee = await this.employeeRepo.findOne({ id: employeeId });
+    const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const twoFactor = await this.twoFactorRepo.findOne({ employee });
+    const twoFactor = await this.em.findOne(TwoFactorAuth, { employee });
     if (!twoFactor)
       throw new BadRequestException('2FA is not enabled');
 
@@ -90,41 +75,24 @@ export class AuthService {
     return { message: '2FA disabled successfully' };
   }
 
-  private async sendEmail(to: string, code: string) {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER,
-      to,
-      subject: 'Your OTP Code',
-      text: `Your OTP code is: ${code}. It expires in 5 minutes.`,
-    });
-  }
-
   async register(dto: RegisterDto) {
-    const existing = await this.employeeRepo.findOne({ email: dto.email });
+    const existing = await this.em.findOne(Employee, { email: dto.email });
 
     if (existing) {
-      if (existing.verifiedAt) {
+      if (existing.verifiedAt)
         throw new BadRequestException('Email already in use');
-      }
-      await this.securityActionRepo.nativeDelete({ employee: existing });
+
+      await this.em.nativeDelete(SecurityAction, { employee: existing });
       await this.em.removeAndFlush(existing);
     }
 
-    const store = await this.storeRepo.findOne({ name: dto.storeName });
+    const store = await this.em.findOne(Store, { name: dto.storeName });
     if (!store)
       throw new NotFoundException(`Store with name ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const employee = this.employeeRepo.create({
+    const employee = this.em.create(Employee, {
       id: uuidv4(),
       name: dto.name,
       email: dto.email,
@@ -137,10 +105,10 @@ export class AuthService {
 
     await this.em.persistAndFlush(employee);
 
-    const code = this.generateOTP();
+    const code = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    const securityAction = this.securityActionRepo.create({
+    const securityAction = this.em.create(SecurityAction, {
       employee,
       actionType: 'sign-up',
       secret: code,
@@ -149,17 +117,17 @@ export class AuthService {
     });
 
     await this.em.persistAndFlush(securityAction);
-    await this.sendEmail(dto.email, code);
+    await sendEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
 
   async verifyRegister(dto: VerifyDto) {
-    const employee = await this.employeeRepo.findOne({ email: dto.email });
+    const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const securityAction = await this.securityActionRepo.findOne({
+    const securityAction = await this.em.findOne(SecurityAction, {
       employee,
       secret: dto.code,
       actionType: 'sign-up',
@@ -180,7 +148,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const employee = await this.employeeRepo.findOne({ email: dto.email });
+    const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
       throw new NotFoundException('Invalid email or password');
 
@@ -191,7 +159,7 @@ export class AuthService {
     if (!isMatch)
       throw new NotFoundException('Invalid email or password');
 
-    const twoFactor = await this.twoFactorRepo.findOne({ employee });
+    const twoFactor = await this.em.findOne(TwoFactorAuth, { employee });
 
     if (twoFactor) {
       if (!dto.code)

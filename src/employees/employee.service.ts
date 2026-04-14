@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository, EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Employee } from '../database/entites/mployee.entity';
 import { Store } from '../database/entites/store.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -8,38 +7,31 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
-
 @Injectable()
 export class EmployeeService {
   constructor(
-    @InjectRepository(Employee)
-    private readonly employeeRepo: EntityRepository<Employee>,
-    @InjectRepository(Store)
-    private readonly storeRepo: EntityRepository<Store>,
     private readonly em: EntityManager,
-  ) {
-
-  }
+  ) {}
 
   async findAll() {
-    return this.employeeRepo.findAll({ exclude: ['password'] });
+    return this.em.findAll(Employee, { exclude: ['password'] });
   }
 
   async findOne(id: string) {
-    const employee = await this.employeeRepo.findOne({ id }, { exclude: ['password'] });
+    const employee = await this.em.findOne(Employee, { id }, { exclude: ['password'] });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
-    
     return employee;
   }
 
   async create(dto: CreateEmployeeDto) {
-    const store = await this.storeRepo.findOne({ id: dto.storeName });
+    const store = await this.em.findOne(Store, { name: dto.storeName });
     if (!store)
-      throw new NotFoundException(`Store with id ${dto.storeName} not found`);
+      throw new NotFoundException(`Store with name ${dto.storeName} not found`);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const employee = this.employeeRepo.create({
+
+    const employee = this.em.create(Employee, {
       id: uuidv4(),
       name: dto.name,
       email: dto.email,
@@ -56,7 +48,7 @@ export class EmployeeService {
   }
 
   async update(id: string, dto: UpdateEmployeeDto) {
-    const employee = await this.employeeRepo.findOne({ id });
+    const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
@@ -64,14 +56,14 @@ export class EmployeeService {
       dto.password = await bcrypt.hash(dto.password, 10);
     }
 
-    this.employeeRepo.assign(employee, dto);
+    this.em.assign(employee, dto);
     await this.em.flush();
 
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }
 
   async remove(id: string) {
-    const employee = await this.employeeRepo.findOne({ id });
+    const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
@@ -81,7 +73,7 @@ export class EmployeeService {
   }
 
   async login(email: string, password: string) {
-    const employee = await this.employeeRepo.findOne({ email });
+    const employee = await this.em.findOne(Employee, { email });
     if (!employee)
       throw new NotFoundException('Invalid email or password');
 
