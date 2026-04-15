@@ -13,6 +13,7 @@ import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
 
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -57,7 +58,7 @@ export class AuthService {
     const otpAuthUrl = totp.toString();
     const qrCode = await QRCode.toDataURL(otpAuthUrl);
 
-    return { qrCode, secret };
+    return { qrCode };
   }
 
   async disableTwoFactor(employeeId: string) {
@@ -74,9 +75,13 @@ export class AuthService {
     return { message: '2FA disabled successfully' };
   }
 
-  async register(dto: RegisterDto) {
-    const existing = await this.em.findOne(Employee, { email: dto.email });
 
+  async register(dto: RegisterDto) {
+    const existingStore = await this.em.findOne(Store, { name: dto.storeName });
+    if (existingStore)
+      throw new NotFoundException(`Store with name ${dto.storeName} already exists`);
+
+    const existing = await this.em.findOne(Employee, { email: dto.email });
     if (existing) {
       if (existing.verifiedAt)
         throw new BadRequestException('Email already in use');
@@ -85,15 +90,13 @@ export class AuthService {
       await this.em.removeAndFlush(existing);
     }
 
-    // find store or create new one
     let store = await this.em.findOne(Store, { name: dto.storeName });
-    if (!store) {
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
       });
+
       await this.em.persistAndFlush(store);
-    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
@@ -124,6 +127,8 @@ export class AuthService {
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
 
+
+  
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -148,6 +153,8 @@ export class AuthService {
 
     return { message: 'Registration successful', employee_id: employee.id };
   }
+
+
 
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });

@@ -13,9 +13,11 @@ export class EmployeeService {
     private readonly em: EntityManager,
   ) {}
 
+  
   async findAll() {
     return this.em.findAll(Employee, { exclude: ['password'] });
   }
+
 
   async findOne(id: string) {
     const employee = await this.em.findOne(Employee, { id }, { exclude: ['password'] });
@@ -23,6 +25,7 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with id ${id} not found`);
     return employee;
   }
+
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.em.findOne(Store, { name: dto.storeName });
@@ -44,6 +47,7 @@ export class EmployeeService {
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }
 
+
   async update(id: string, dto: UpdateEmployeeDto) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -59,6 +63,7 @@ export class EmployeeService {
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }
 
+
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -68,6 +73,7 @@ export class EmployeeService {
 
     return { message: `Employee ${id} deleted successfully` };
   }
+
 
   async login(email: string, password: string) {
     const employee = await this.em.findOne(Employee, { email });

@@ -20,11 +20,6 @@ export class StoresController {
     return this.storesService.findOne(id);
   }
 
-  @Post()
-  create(@Body() dto: CreateStoreDto) {
-    return this.storesService.create(dto);
-  }
-
   @UseGuards(JwtAuthGuard)
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateStoreDto) {
