@@ -90,6 +90,7 @@ export class AuthService {
       await this.em.removeAndFlush(existing);
     }
 
+
     let store = await this.em.findOne(Store, { name: dto.storeName });
       store = this.em.create(Store, {
         name: dto.storeName,
