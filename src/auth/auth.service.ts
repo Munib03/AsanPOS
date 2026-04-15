@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
@@ -9,16 +11,18 @@ import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
+import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
-
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager
   ) {}
 
   private generateJWT(employee: Employee): string {
@@ -47,6 +51,39 @@ export class AuthService {
 
     const secret = totp.secret.base32;
 
+    // store secret in cache temporarily — not in db yet
+    await this.cacheManager.set(`2fa_secret_${employeeId}`, secret, 300000);
+
+    const otpAuthUrl = totp.toString();
+    const qrCode = await QRCode.toDataURL(otpAuthUrl);
+
+    return { qrCode };
+  }
+
+  async verifyTwoFactorSetup(employeeId: string, dto: VerifyTwoFactorDto) {
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    // get secret from cache
+  const secret = await this.cacheManager.get(`2fa_secret_${employeeId}`) as string;    
+if (!secret)
+      throw new BadRequestException('2FA setup expired. Please try enabling 2FA again');
+
+    const totp = new OTPAuth.TOTP({
+      issuer: 'AsanPOS',
+      label: employee.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: OTPAuth.Secret.fromBase32(secret),
+    });
+
+    const isValid = totp.validate({ token: dto.code, window: 1 });
+    if (isValid === null)
+      throw new BadRequestException('Invalid code. Please scan the QR code again');
+
+    // code is valid — now save to db
     const twoFactor = this.em.create(TwoFactorAuth, {
       employee,
       secret,
@@ -55,10 +92,10 @@ export class AuthService {
 
     await this.em.persistAndFlush(twoFactor);
 
-    const otpAuthUrl = totp.toString();
-    const qrCode = await QRCode.toDataURL(otpAuthUrl);
+    // remove from cache
+    await this.cacheManager.del(`2fa_secret_${employeeId}`);
 
-    return { qrCode };
+    return { message: '2FA enabled successfully' };
   }
 
   async disableTwoFactor(employeeId: string) {
@@ -75,13 +112,9 @@ export class AuthService {
     return { message: '2FA disabled successfully' };
   }
 
-
   async register(dto: RegisterDto) {
-    const existingStore = await this.em.findOne(Store, { name: dto.storeName });
-    if (existingStore)
-      throw new NotFoundException(`Store with name ${dto.storeName} already exists`);
-
     const existing = await this.em.findOne(Employee, { email: dto.email });
+
     if (existing) {
       if (existing.verifiedAt)
         throw new BadRequestException('Email already in use');
@@ -90,14 +123,14 @@ export class AuthService {
       await this.em.removeAndFlush(existing);
     }
 
-
     let store = await this.em.findOne(Store, { name: dto.storeName });
+    if (!store) {
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
       });
-
       await this.em.persistAndFlush(store);
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
@@ -128,8 +161,6 @@ export class AuthService {
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
 
-
-  
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -154,8 +185,6 @@ export class AuthService {
 
     return { message: 'Registration successful', employee_id: employee.id };
   }
-
-
 
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });

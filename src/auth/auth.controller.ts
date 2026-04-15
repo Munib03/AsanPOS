@@ -3,9 +3,9 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
-  
 
 @Controller('auth')
 export class AuthController {
@@ -30,6 +30,15 @@ export class AuthController {
   @Post('enable-2fa')
   enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.enableTwoFactor(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-2fa-setup')
+  verifyTwoFactorSetup(
+    @CurrentUser() user: { id: string; email: string },
+    @Body() dto: VerifyTwoFactorDto,
+  ) {
+    return this.authService.verifyTwoFactorSetup(user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)
