@@ -2,23 +2,23 @@ import { IsString, IsNotEmpty, IsEmail, IsOptional } from 'class-validator';
 
 export class RegisterDto {
   @IsNotEmpty()
-  @IsString()
+  @IsString({ message: "Name is required" })
   name!: string;
 
   @IsNotEmpty()
-  @IsEmail()
+  @IsEmail({}, { message: "Please enter a valid email address" })
   email!: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: "Phone number is required" })
   phone?: string;
 
   @IsNotEmpty()
-  @IsString()
+  @IsString({ message: "Password is required" })
   password!: string;
 
   @IsNotEmpty()
-  @IsString()
+  @IsString({ message: "Store name is required" })
   storeName!: string;
 
   @IsOptional()
