@@ -126,7 +126,19 @@ export class AuthService {
     }
 
     let store = await this.em.findOne(Store, { name: dto.storeName });
-    if (!store) {
+    if (store) {
+      // Check if any verified employee already belongs to this store
+      const existingEmployee = await this.em.findOne(Employee, {
+        store,
+        verifiedAt: { $ne: null },  // only count verified employees
+      });
+
+      if (existingEmployee) {
+        throw new BadRequestException('This store already has an owner. Please create a new store.');
+      }
+      // Store exists but has no verified employee → allow joining
+    } else {
+      // Store doesn't exist → create it
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
