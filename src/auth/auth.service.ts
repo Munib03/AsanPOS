@@ -14,16 +14,18 @@ import { VerifyDto } from './dto/verify.dto';
 import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
-import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
+import { generateOTP } from '../shared/utils/auth.utils';
+import { QueueService } from '../queue/queue.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
+    private readonly queueService: QueueService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager
-  ) {}
+  ) { }
 
   private generateJWT(employee: Employee): string {
     return this.jwtService.sign({
@@ -66,8 +68,8 @@ export class AuthService {
       throw new NotFoundException('Employee not found');
 
     // get secret from cache
-  const secret = await this.cacheManager.get(`2fa_secret_${employeeId}`) as string;    
-if (!secret)
+    const secret = await this.cacheManager.get(`2fa_secret_${employeeId}`) as string;
+    if (!secret)
       throw new BadRequestException('2FA setup expired. Please try enabling 2FA again');
 
     const totp = new OTPAuth.TOTP({
@@ -156,8 +158,7 @@ if (!secret)
     });
 
     await this.em.persistAndFlush(securityAction);
-    await sendEmail(dto.email, code);
-
+    await this.queueService.sendVerificationEmail(dto.email, code);
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
 
