@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, IsDate, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsDateString, IsEnum } from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
 export class UpdateEmployeeDto {
@@ -28,14 +28,14 @@ export class UpdateEmployeeDto {
 
   @IsOptional()
   @IsString()
-  firstname?: string;
+  firstName?: string;
 
   @IsOptional()
   @IsString()
-  lastname?: string;
+  lastName?: string;
 
   @IsOptional()
-  @IsDate()
+  @IsDateString()
   dob?: Date;
 
   @IsOptional()
