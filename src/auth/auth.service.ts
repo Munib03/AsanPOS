@@ -131,12 +131,9 @@ export class AuthService {
         verifiedAt: { $ne: null }
       });
 
-      if (existingEmployee) {
+      if (existingEmployee)
         throw new BadRequestException('This store already has an owner. Please create a new store.');
-      }
-    } 
-    
-    else {
+    } else {
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
@@ -146,12 +143,17 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
- 
+
     const employee = this.em.create(Employee, {
       name: dto.name,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
       email: dto.email,
       password: hashedPassword,
       phone: dto.phone,
+      imageUrl: dto.imageUrl,
+      gender: dto.gender,
+      dob: dto.dob,
       store,
     });
 
@@ -173,7 +175,6 @@ export class AuthService {
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
-
 
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
@@ -264,47 +265,47 @@ export class AuthService {
 
 
     async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
-      const employee = await this.em.findOne(Employee, { id });
-      if (!employee)
-        throw new NotFoundException(`Employee with id ${id} not found`);
+    const employee = await this.em.findOne(Employee, { id });
+    if (!employee)
+      throw new NotFoundException(`Employee with id ${id} not found`);
 
-      if (dto.password) 
-        dto.password = await bcrypt.hash(dto.password, 10);
-      
-      if (dto.storeName) 
-        employee.store.name = dto.storeName;
+    if (dto.password) 
+      dto.password = await bcrypt.hash(dto.password, 10);
+    
+    if (dto.storeName) 
+      employee.store.name = dto.storeName;
 
-      let emailChange = false;
-      if (dto.email && dto.email != employee.email) {
-        emailChange = true;
+    let emailChange = false;
+    if (dto.email && dto.email != employee.email) {
+      emailChange = true;
 
-        employee.verifiedAt = undefined;
+      employee.verifiedAt = undefined;
 
-        const code = generateOTP();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-
-        const securityAction = this.em.create(SecurityAction, {
-          employee,
-          actionType: 'email-update',
-          secret: code,
-          expiresAt,
-          createdAt: new Date(),
-        });
-
-        await this.em.persistAndFlush(securityAction);
-        await sendEmail(dto.email, code);
-      }
-
-      const { storeName, ...rest } = dto;
-      this.em.assign(employee, rest);
-
-      await this.em.flush();
-
-      if (emailChange)
-        return { message: 'Profile updated. Please verify your new email address.', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+      const code = generateOTP();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
 
-      return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+      const securityAction = this.em.create(SecurityAction, {
+        employee,
+        actionType: 'email-update',
+        secret: code,
+        expiresAt,
+        createdAt: new Date(),
+      });
+
+      await this.em.persistAndFlush(securityAction);
+      await sendEmail(dto.email, code);
     }
+
+    const { storeName, ...rest } = dto;
+    this.em.assign(employee, rest);
+
+    await this.em.flush();
+
+    if (emailChange)
+      return { message: 'Profile updated. Please verify your new email address.', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+
+
+    return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+  }
 }

@@ -1,6 +1,7 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
 @Entity({ tableName: 'employees' })
 export class Employee {
@@ -22,6 +23,21 @@ export class Employee {
 
   @Property({ nullable: true })
   title?: string;
+
+  @Property({ nullable: true })
+  firstName?: string;
+
+  @Property({ nullable: true })
+  lastName?: string;
+
+  @Property({ nullable: true })
+  imageUrl?: string;
+
+  @Property({ nullable: true })
+  dob?: Date;
+
+  @Property({ type: 'string', nullable: true })
+  gender?: EmployeeGender;
 
   @Property({ nullable: true })
   verifiedAt?: Date;

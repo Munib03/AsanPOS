@@ -1,27 +1,48 @@
-import { IsString, IsNotEmpty, IsEmail, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
 export class RegisterDto {
   @IsNotEmpty()
-  @IsString({ message: "Name is required" })
+  @IsString()
   name!: string;
 
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
   @IsNotEmpty()
-  @IsEmail({}, { message: "Please enter a valid email address" })
+  @IsEmail()
   email!: string;
 
   @IsOptional()
-  @IsString({ message: "Phone number is required" })
+  @IsString()
   phone?: string;
 
   @IsNotEmpty()
-  @IsString({ message: "Password is required" })
+  @IsString()
   password!: string;
 
   @IsNotEmpty()
-  @IsString({ message: "Store name is required" })
+  @IsString()
   storeName!: string;
 
   @IsOptional()
   @IsString()
   storeAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsEnum(EmployeeGender)
+  gender?: EmployeeGender;
+
+  @IsOptional()
+  @IsDateString()
+  dob?: Date;
 }
