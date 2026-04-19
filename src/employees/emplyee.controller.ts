@@ -5,9 +5,9 @@ import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 
 @Controller('employees')
 export class EmployeeController {
-  constructor(private readonly employeeService: EmployeeService) {}
+  constructor(private readonly employeeService: EmployeeService) { }
 
-  @UseGuards(JwtAuthGuard)
+  //@UseGuards(JwtAuthGuard)
   @Get()
   findAll() {
     return this.employeeService.findAll();
