@@ -53,7 +53,6 @@ export class AuthService {
 
     const secret = totp.secret.base32;
 
-    // store secret in cache temporarily — not in db yet
     await this.cacheManager.set(`2fa_secret_${employeeId}`, secret, 300000);
 
     const otpAuthUrl = totp.toString();
@@ -85,7 +84,6 @@ export class AuthService {
     if (isValid === null)
       throw new BadRequestException('Invalid code. Please scan the QR code again');
 
-    // code is valid — now save to db
     const twoFactor = this.em.create(TwoFactorAuth, {
       employee,
       secret,
@@ -94,7 +92,6 @@ export class AuthService {
 
     await this.em.persistAndFlush(twoFactor);
 
-    // remove from cache
     await this.cacheManager.del(`2fa_secret_${employeeId}`);
 
     return { message: '2FA enabled successfully' };
@@ -127,18 +124,15 @@ export class AuthService {
 
     let store = await this.em.findOne(Store, { name: dto.storeName });
     if (store) {
-      // Check if any verified employee already belongs to this store
       const existingEmployee = await this.em.findOne(Employee, {
         store,
-        verifiedAt: { $ne: null },  // only count verified employees
+        verifiedAt: { $ne: null },  
       });
 
       if (existingEmployee) {
         throw new BadRequestException('This store already has an owner. Please create a new store.');
       }
-      // Store exists but has no verified employee → allow joining
     } else {
-      // Store doesn't exist → create it
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
