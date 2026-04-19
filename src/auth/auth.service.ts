@@ -66,7 +66,6 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    // get secret from cache
     const secret = await this.cacheManager.get(`2fa_secret_${employeeId}`) as string;
     if (!secret)
       throw new BadRequestException('2FA setup expired. Please try enabling 2FA again');
