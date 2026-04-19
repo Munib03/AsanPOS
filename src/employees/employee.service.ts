@@ -1,11 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Employee } from '../database/entites/mployee.entity';
 import { Store } from '../database/entites/store.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
-import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class EmployeeService {
@@ -43,22 +41,6 @@ export class EmployeeService {
     });
 
     await this.em.persistAndFlush(employee);
-
-    return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
-  }
-
-
-  async update(id: string, dto: UpdateEmployeeDto) {
-    const employee = await this.em.findOne(Employee, { id });
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
-
-    if (dto.password) {
-      dto.password = await bcrypt.hash(dto.password, 10);
-    }
-
-    this.em.assign(employee, dto);
-    await this.em.flush();
 
     return { id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
   }

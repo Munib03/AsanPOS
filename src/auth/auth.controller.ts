@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Delete, UseGuards, Put, Param, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -6,6 +6,7 @@ import { VerifyDto } from './dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -45,5 +46,18 @@ export class AuthController {
   @Delete('disable-2fa')
   disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.disableTwoFactor(user.id);
+  }
+
+
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-updated-email')
+  verifyUpdatedEmail(@Body() dto: VerifyDto) {
+    return this.authService.verifyUpdatedEmail(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('update-employee-info')
+  updateEmployeeInfo(@CurrentUser() user, @Body() dto: UpdateEmployeeDto) {
+    return this.authService.updateEmployeeInfo(user.id, dto);
   }
 }

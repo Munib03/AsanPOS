@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, BadRequestException, Inject } from '@nes
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { Employee } from '../database/entites/mployee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
@@ -14,8 +13,9 @@ import { VerifyDto } from './dto/verify.dto';
 import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
-import { generateOTP } from '../shared/utils/auth.utils';
+import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +33,7 @@ export class AuthService {
       email: employee.email,
     });
   }
+
 
   async enableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
@@ -60,6 +61,7 @@ export class AuthService {
 
     return { qrCode };
   }
+
 
   async verifyTwoFactorSetup(employeeId: string, dto: VerifyTwoFactorDto) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
@@ -110,6 +112,7 @@ export class AuthService {
     return { message: '2FA disabled successfully' };
   }
 
+
   async register(dto: RegisterDto) {
     const existing = await this.em.findOne(Employee, { email: dto.email });
 
@@ -125,22 +128,25 @@ export class AuthService {
     if (store) {
       const existingEmployee = await this.em.findOne(Employee, {
         store,
-        verifiedAt: { $ne: null },  
+        verifiedAt: { $ne: null }
       });
 
       if (existingEmployee) {
         throw new BadRequestException('This store already has an owner. Please create a new store.');
       }
-    } else {
+    } 
+    
+    else {
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
       });
+
       await this.em.persistAndFlush(store);
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-
+ 
     const employee = this.em.create(Employee, {
       name: dto.name,
       email: dto.email,
@@ -164,8 +170,10 @@ export class AuthService {
 
     await this.em.persistAndFlush(securityAction);
     await this.queueService.sendVerificationEmail(dto.email, code);
+
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
+
 
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
@@ -191,6 +199,33 @@ export class AuthService {
 
     return { message: 'Registration successful', employee_id: employee.id };
   }
+
+    async verifyUpdatedEmail(dto: VerifyDto) {
+        const employee = await this.em.findOne(Employee, { email: dto.email });
+        if (!employee)
+          throw new NotFoundException('Employee not found');
+    
+        const securityAction = await this.em.findOne(SecurityAction, {
+          employee,
+          secret: dto.code,
+          actionType: 'email-update',
+        });
+    
+        if (!securityAction)
+          throw new BadRequestException('Invalid OTP code');
+    
+        const now = new Date();
+        if (securityAction.expiresAt && securityAction.expiresAt < now)
+          throw new BadRequestException('OTP has expired');
+    
+        employee.verifiedAt = new Date();
+        await this.em.removeAndFlush(securityAction);
+        await this.em.flush();
+    
+        return { message: 'New Email verified successfullyu', employee_id: employee.id };
+      }
+  
+
 
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
@@ -226,4 +261,50 @@ export class AuthService {
 
     return { message: 'Login successful', token: this.generateJWT(employee) };
   }
+
+
+    async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
+      const employee = await this.em.findOne(Employee, { id });
+      if (!employee)
+        throw new NotFoundException(`Employee with id ${id} not found`);
+
+      if (dto.password) 
+        dto.password = await bcrypt.hash(dto.password, 10);
+      
+      if (dto.storeName) 
+        employee.store.name = dto.storeName;
+
+      let emailChange = false;
+      if (dto.email && dto.email != employee.email) {
+        emailChange = true;
+
+        employee.verifiedAt = undefined;
+
+        const code = generateOTP();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+
+        const securityAction = this.em.create(SecurityAction, {
+          employee,
+          actionType: 'email-update',
+          secret: code,
+          expiresAt,
+          createdAt: new Date(),
+        });
+
+        await this.em.persistAndFlush(securityAction);
+        await sendEmail(dto.email, code);
+      }
+
+      const { storeName, ...rest } = dto;
+      this.em.assign(employee, rest);
+
+      await this.em.flush();
+
+      if (emailChange)
+        return { message: 'Profile updated. Please verify your new email address.', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+
+
+      return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+    }
 }
