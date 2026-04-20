@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Delete, Param, Body, UseGuards, Post, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Param, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { MinioService } from '../shared/services/minio.service';
@@ -42,15 +42,15 @@ export class EmployeeController {
     fileFilter: (req, file, cb) => {
       if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
         cb(new BadRequestException('Only image files are allowed'), false);
-      } else {
+      } 
+      else {
         cb(null, true);
       }
     },
   }))
   async uploadImage(
     @CurrentUser() user: { id: string; email: string },
-    @UploadedFile() file: any,
-  ) {
+    @UploadedFile() file: any) {
     const imageUrl = await this.minioService.uploadFile(file);
     return this.employeeService.uploadImage(user.id, imageUrl);
   }

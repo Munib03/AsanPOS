@@ -21,6 +21,20 @@ export class MinioService implements OnModuleInit {
     const exists = await this.client.bucketExists(this.bucket);
     if (!exists)
       await this.client.makeBucket(this.bucket);
+
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Principal: { AWS: ['*'] },
+          Action: ['s3:GetObject'],
+          Resource: [`arn:aws:s3:::${this.bucket}/*`],
+        },
+      ],
+    };
+
+    await this.client.setBucketPolicy(this.bucket, JSON.stringify(policy));
   }
 
   async uploadFile(file: any): Promise<string> {
