@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from '../shared/jwt/jwt.strategy';
 import { QueueModule } from '../queue/queue.module';
+import { MinioService } from '../shared/services/minio.service';
+
 
 @Module({
   imports: [
@@ -24,6 +26,6 @@ import { QueueModule } from '../queue/queue.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, MinioService],
 })
 export class AuthModule { }

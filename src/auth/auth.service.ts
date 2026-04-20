@@ -288,8 +288,8 @@ export class AuthService {
   }
 
 
-  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
-    const employee = await this.em.findOne(Employee, { id });
+  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
@@ -299,15 +299,16 @@ export class AuthService {
     if (dto.storeName)
       employee.store.name = dto.storeName;
 
-    let emailChange = false;
-    if (dto.email && dto.email != employee.email) {
-      emailChange = true;
+    if (imageUrl)
+      employee.imageUrl = imageUrl;
 
+    let emailChange = false;
+    if (dto.email && dto.email !== employee.email) {
+      emailChange = true;
       employee.verifiedAt = undefined;
 
       const code = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
 
       const securityAction = this.em.create(SecurityAction, {
         employee,
@@ -323,13 +324,11 @@ export class AuthService {
 
     const { storeName, ...rest } = dto;
     this.em.assign(employee, rest);
-
     await this.em.flush();
 
     if (emailChange)
       return { message: 'Profile updated. Please verify your new email address.', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
 
-
-    return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
+    return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone, imageUrl: employee.imageUrl };
   }
 }

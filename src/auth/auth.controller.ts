@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Delete, UseGuards, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Delete, UseGuards, Put, UseInterceptors, BadRequestException, UploadedFile } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -7,10 +7,16 @@ import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { MinioService } from '../shared/services/minio.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly minioService: MinioService,
+    
+  ) { }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -63,7 +69,27 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Put('update-employee-info')
-  updateEmployeeInfo(@CurrentUser() user, @Body() dto: UpdateEmployeeDto) {
-    return this.authService.updateEmployeeInfo(user.id, dto);
+  @UseInterceptors(FileInterceptor('image', {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+        cb(new BadRequestException('Only image files are allowed'), false);
+      } else {
+        cb(null, true);
+      }
+    },
+  }))
+  async updateEmployeeInfo(
+    @CurrentUser() user: { id: string; email: string },
+    @Body() dto: UpdateEmployeeDto,
+    @UploadedFile() file: any,
+  ) {
+    let imageUrl: string | undefined;
+
+    if (file) {
+      imageUrl = await this.minioService.uploadFile(file);
+    }
+
+    return this.authService.updateEmployeeInfo(user.id, dto, imageUrl);
   }
 }
