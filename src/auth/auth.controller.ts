@@ -6,27 +6,23 @@ import { VerifyDto } from './dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
-import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { MinioService } from '../shared/services/minio.service';
+
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly minioService: MinioService,
-    
-  ) { }
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
+
   @Post('verify-register')
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
   }
+
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
@@ -34,16 +30,19 @@ export class AuthController {
     return this.authService.getMe(user.id);
   }
 
+
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
+
 
   @UseGuards(JwtAuthGuard)
   @Post('enable-2fa')
   enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.enableTwoFactor(user.id);
   }
+
 
   @UseGuards(JwtAuthGuard)
   @Post('verify-2fa-setup')
@@ -54,6 +53,7 @@ export class AuthController {
     return this.authService.verifyTwoFactorSetup(user.id, dto);
   }
 
+  
   @UseGuards(JwtAuthGuard)
   @Delete('disable-2fa')
   disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
@@ -65,31 +65,5 @@ export class AuthController {
   @Post('verify-updated-email')
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.authService.verifyUpdatedEmail(dto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Put('update-employee-info')
-  @UseInterceptors(FileInterceptor('image', {
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-        cb(new BadRequestException('Only image files are allowed'), false);
-      } else {
-        cb(null, true);
-      }
-    },
-  }))
-  async updateEmployeeInfo(
-    @CurrentUser() user: { id: string; email: string },
-    @Body() dto: UpdateEmployeeDto,
-    @UploadedFile() file: any,
-  ) {
-    let imageUrl: string | undefined;
-
-    if (file) {
-      imageUrl = await this.minioService.uploadFile(file);
-    }
-
-    return this.authService.updateEmployeeInfo(user.id, dto, imageUrl);
   }
 }

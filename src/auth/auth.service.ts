@@ -15,7 +15,7 @@ import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
-import { UpdateEmployeeDto } from './dto/update-employee.dto';
+
 
 @Injectable()
 export class AuthService {
@@ -35,6 +35,7 @@ export class AuthService {
   }
 
 
+  
   async enableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
@@ -285,50 +286,5 @@ export class AuthService {
       storeName: employee.store?.name ?? null,
       createdAt: employee.createdAt ?? null,
     };
-  }
-
-
-  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
-    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
-
-    if (dto.password)
-      dto.password = await bcrypt.hash(dto.password, 10);
-
-    if (dto.storeName)
-      employee.store.name = dto.storeName;
-
-    if (imageUrl)
-      employee.imageUrl = imageUrl;
-
-    let emailChange = false;
-    if (dto.email && dto.email !== employee.email) {
-      emailChange = true;
-      employee.verifiedAt = undefined;
-
-      const code = generateOTP();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-      const securityAction = this.em.create(SecurityAction, {
-        employee,
-        actionType: 'email-update',
-        secret: code,
-        expiresAt,
-        createdAt: new Date(),
-      });
-
-      await this.em.persistAndFlush(securityAction);
-      await sendEmail(dto.email, code);
-    }
-
-    const { storeName, ...rest } = dto;
-    this.em.assign(employee, rest);
-    await this.em.flush();
-
-    if (emailChange)
-      return { message: 'Profile updated. Please verify your new email address.', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone };
-
-    return { message: 'Profile updated successfully', id: employee.id, name: employee.name, email: employee.email, phone: employee.phone, imageUrl: employee.imageUrl };
   }
 }
