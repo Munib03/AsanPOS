@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
+import { VerifyDto } from './dto/verify.dto';
 
 
 @Injectable()
@@ -85,6 +86,31 @@ export class EmployeeService {
     return { message: 'Image updated successfully', imageUrl: employee.imageUrl };
   }
 
+    async verifyUpdatedEmail(dto: VerifyDto) {
+      const employee = await this.em.findOne(Employee, { email: dto.email });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+  
+      const securityAction = await this.em.findOne(SecurityAction, {
+        employee,
+        secret: dto.code,
+        actionType: 'email-update',
+      });
+  
+      if (!securityAction)
+        throw new BadRequestException('Invalid OTP code');
+  
+      const now = new Date();
+      if (securityAction.expiresAt && securityAction.expiresAt < now)
+        throw new BadRequestException('OTP has expired');
+  
+      employee.verifiedAt = new Date();
+      await this.em.removeAndFlush(securityAction);
+      await this.em.flush();
+  
+      return { message: 'New Email verified successfullyu', employee_id: employee.id };
+    }
+  
 
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });

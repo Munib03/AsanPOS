@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Delete, UseGuards, Put, UseInterceptors, B
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { VerifyDto } from './dto/verify.dto';
+import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
@@ -61,10 +61,4 @@ export class AuthController {
     return this.authService.disableTwoFactor(user.id);
   }
 
-
-  @UseGuards(JwtAuthGuard)
-  @Post('verify-updated-email')
-  verifyUpdatedEmail(@Body() dto: VerifyDto) {
-    return this.authService.verifyUpdatedEmail(dto);
-  }
 }

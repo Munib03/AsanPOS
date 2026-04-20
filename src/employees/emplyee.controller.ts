@@ -1,10 +1,11 @@
-import { Controller, Get, Put, Delete, Param, UseGuards, UploadedFile, UseInterceptors, BadRequestException, Body } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Param, UseGuards, UploadedFile, UseInterceptors, BadRequestException, Body, Post } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { EmployeeService } from './employee.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { MinioService } from '../shared/services/minio.service';
+import { VerifyDto } from './dto/verify.dto';
 
 
 
@@ -47,7 +48,7 @@ export class EmployeeController {
         cb(null, true);
       
     },
-    
+
   }))
   async updateEmployeeInfo(
     @CurrentUser() user: { id: string; },
@@ -61,5 +62,12 @@ export class EmployeeController {
     }
 
     return this.employeeService.updateEmployeeInfo(user.id, dto, imageUrl);
+  }
+
+
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-updated-email')
+  verifyUpdatedEmail(@Body() dto: VerifyDto) {
+    return this.employeeService.verifyUpdatedEmail(dto);
   }
 }

@@ -9,7 +9,7 @@ import { Store } from '../database/entites/store.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { VerifyDto } from './dto/verify.dto';
+import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
@@ -97,7 +97,7 @@ export class AuthService {
 
     return { message: '2FA enabled successfully' };
   }
-  
+
 
   async disableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
@@ -202,32 +202,6 @@ export class AuthService {
     await this.em.flush();
 
     return { message: 'Registration successful', employee_id: employee.id };
-  }
-
-
-  async verifyUpdatedEmail(dto: VerifyDto) {
-    const employee = await this.em.findOne(Employee, { email: dto.email });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    const securityAction = await this.em.findOne(SecurityAction, {
-      employee,
-      secret: dto.code,
-      actionType: 'email-update',
-    });
-
-    if (!securityAction)
-      throw new BadRequestException('Invalid OTP code');
-
-    const now = new Date();
-    if (securityAction.expiresAt && securityAction.expiresAt < now)
-      throw new BadRequestException('OTP has expired');
-
-    employee.verifiedAt = new Date();
-    await this.em.removeAndFlush(securityAction);
-    await this.em.flush();
-
-    return { message: 'New Email verified successfullyu', employee_id: employee.id };
   }
 
 
