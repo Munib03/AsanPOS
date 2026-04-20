@@ -18,6 +18,7 @@ export class EmployeeController {
     return this.employeeService.findOne(id);
   }
 
+
   // @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {

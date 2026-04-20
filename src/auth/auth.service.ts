@@ -201,31 +201,31 @@ export class AuthService {
     return { message: 'Registration successful', employee_id: employee.id };
   }
 
-    async verifyUpdatedEmail(dto: VerifyDto) {
-        const employee = await this.em.findOne(Employee, { email: dto.email });
-        if (!employee)
-          throw new NotFoundException('Employee not found');
-    
-        const securityAction = await this.em.findOne(SecurityAction, {
-          employee,
-          secret: dto.code,
-          actionType: 'email-update',
-        });
-    
-        if (!securityAction)
-          throw new BadRequestException('Invalid OTP code');
-    
-        const now = new Date();
-        if (securityAction.expiresAt && securityAction.expiresAt < now)
-          throw new BadRequestException('OTP has expired');
-    
-        employee.verifiedAt = new Date();
-        await this.em.removeAndFlush(securityAction);
-        await this.em.flush();
-    
-        return { message: 'New Email verified successfullyu', employee_id: employee.id };
-      }
-  
+  async verifyUpdatedEmail(dto: VerifyDto) {
+    const employee = await this.em.findOne(Employee, { email: dto.email });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    const securityAction = await this.em.findOne(SecurityAction, {
+      employee,
+      secret: dto.code,
+      actionType: 'email-update',
+    });
+
+    if (!securityAction)
+      throw new BadRequestException('Invalid OTP code');
+
+    const now = new Date();
+    if (securityAction.expiresAt && securityAction.expiresAt < now)
+      throw new BadRequestException('OTP has expired');
+
+    employee.verifiedAt = new Date();
+    await this.em.removeAndFlush(securityAction);
+    await this.em.flush();
+
+    return { message: 'New Email verified successfullyu', employee_id: employee.id };
+  }
+
 
 
   async login(dto: LoginDto) {
@@ -263,16 +263,37 @@ export class AuthService {
     return { message: 'Login successful', token: this.generateJWT(employee) };
   }
 
+  async getMe(id: string) {
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
 
-    async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
+    return {
+      id: employee.id,
+      email: employee.email,
+      name: employee.name,
+      firstName: employee.firstName ?? null,
+      lastName: employee.lastName ?? null,
+      phone: employee.phone ?? null,
+      title: employee.title ?? null,
+      imageUrl: employee.imageUrl ?? null,
+      dob: employee.dob ?? null,
+      gender: employee.gender ?? null,
+      storeName: employee.store?.name ?? null,
+      createdAt: employee.createdAt ?? null,
+    };
+  }
+
+
+  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.password) 
+    if (dto.password)
       dto.password = await bcrypt.hash(dto.password, 10);
-    
-    if (dto.storeName) 
+
+    if (dto.storeName)
       employee.store.name = dto.storeName;
 
     let emailChange = false;

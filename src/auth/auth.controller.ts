@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Delete, UseGuards, Put, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Delete, UseGuards, Put, Param, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -10,7 +10,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -20,6 +20,12 @@ export class AuthController {
   @Post('verify-register')
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.getMe(user.id);
   }
 
   @Post('login')
