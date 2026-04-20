@@ -35,7 +35,6 @@ export class AuthService {
   }
 
 
-  
   async enableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
@@ -98,6 +97,7 @@ export class AuthService {
 
     return { message: '2FA enabled successfully' };
   }
+  
 
   async disableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });

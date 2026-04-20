@@ -18,6 +18,7 @@ export class AuthController {
   }
 
 
+  @UseGuards(JwtAuthGuard)
   @Post('verify-register')
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);

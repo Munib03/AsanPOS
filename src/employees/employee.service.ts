@@ -7,14 +7,12 @@ import * as bcrypt from 'bcrypt';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
-import { QueueService } from '../queue/queue.service';
 
 
 @Injectable()
 export class EmployeeService {
   constructor(
     private readonly em: EntityManager,
-    private readonly queueService: QueueService
   ) {}
 
   
@@ -88,7 +86,6 @@ export class EmployeeService {
   }
 
 
-
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee)
@@ -106,10 +103,11 @@ export class EmployeeService {
     let emailChange = false;
     if (dto.email && dto.email !== employee.email) {
       emailChange = true;
-      
+      employee.verifiedAt = undefined;
+
       const code = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-      
+
       const securityAction = this.em.create(SecurityAction, {
         employee,
         actionType: 'email-update',
@@ -117,11 +115,8 @@ export class EmployeeService {
         expiresAt,
         createdAt: new Date(),
       });
-      
-      
+
       await this.em.persistAndFlush(securityAction);
-      employee.verifiedAt = undefined;
-     
       await sendEmail(dto.email, code);
     }
 
