@@ -102,6 +102,11 @@ export class EmployeeService {
 
     let emailChange = false;
     if (dto.email && dto.email !== employee.email) {
+      const existing = await this.em.findOne(Employee, { email: dto.email });
+      if (existing)
+        throw new BadRequestException('Email already in use');
+        
+
       emailChange = true;
       employee.verifiedAt = undefined;
 
