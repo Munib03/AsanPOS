@@ -3,7 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as bcrypt from 'bcrypt';
-import { Employee } from '../database/entites/mployee.entity';
+import { Employee } from '../database/entites/Employee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
@@ -133,7 +133,8 @@ export class AuthService {
 
       if (existingEmployee)
         throw new BadRequestException('This store already has an owner. Please create a new store.');
-    } else {
+    } 
+    else {
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
@@ -157,8 +158,7 @@ export class AuthService {
       store,
     });
 
-    await this.em.persistAndFlush(employee);
-
+  
     const code = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -170,11 +170,13 @@ export class AuthService {
       createdAt: new Date(),
     });
 
+    await this.em.persistAndFlush(employee);
     await this.em.persistAndFlush(securityAction);
     await this.queueService.sendVerificationEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
   }
+
 
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
@@ -201,6 +203,7 @@ export class AuthService {
     return { message: 'Registration successful', employee_id: employee.id };
   }
 
+
   async verifyUpdatedEmail(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -225,7 +228,6 @@ export class AuthService {
 
     return { message: 'New Email verified successfullyu', employee_id: employee.id };
   }
-
 
 
   async login(dto: LoginDto) {
@@ -262,6 +264,7 @@ export class AuthService {
 
     return { message: 'Login successful', token: this.generateJWT(employee) };
   }
+
 
   async getMe(id: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });

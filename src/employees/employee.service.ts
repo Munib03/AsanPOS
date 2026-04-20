@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Employee } from '../database/entites/mployee.entity';
+import { Employee } from '../database/entites/Employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import * as bcrypt from 'bcrypt';
@@ -67,5 +67,17 @@ export class EmployeeService {
       throw new NotFoundException('Invalid email or password');
 
     return { message: 'Login successful', employee_id: employee.id };
+  }
+
+
+  async uploadImage(id: string, imageUrl: string) {
+    const employee = await this.em.findOne(Employee, { id });
+    if (!employee)
+      throw new NotFoundException(`Employee with id ${id} not found`);
+
+    employee.imageUrl = imageUrl;
+    await this.em.flush();
+
+    return { message: 'Image updated successfully', imageUrl: employee.imageUrl };
   }
 }

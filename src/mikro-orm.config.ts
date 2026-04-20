@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Options } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { Employee } from './database/entites/mployee.entity';
+import { Employee } from './database/entites/Employee.entity';
 import { Store } from './database/entites/store.entity';
 import { TwoFactorAuth } from './database/entites/twoFactorAuth.entity';
 import { SecurityAction } from './database/entites/securityAction.entity';
