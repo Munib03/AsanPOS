@@ -6,7 +6,7 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import * as bcrypt from 'bcrypt';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { SecurityAction } from '../database/entites/securityAction.entity';
-import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
+import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 
@@ -61,19 +61,6 @@ export class EmployeeService {
     await this.em.removeAndFlush(employee);
 
     return { message: `Employee ${id} deleted successfully` };
-  }
-
-
-  async login(email: string, password: string) {
-    const employee = await this.em.findOne(Employee, { email });
-    if (!employee)
-      throw new NotFoundException('Invalid email or password');
-
-    const isMatch = await bcrypt.compare(password, employee.password);
-    if (!isMatch)
-      throw new NotFoundException('Invalid email or password');
-
-    return { message: 'Login successful', employee_id: employee.id };
   }
 
 

@@ -13,7 +13,7 @@ import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
-import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
+import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 
 
@@ -205,7 +205,6 @@ export class AuthService {
   }
 
 
-
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -241,7 +240,6 @@ export class AuthService {
     return { message: 'Login successful', token: this.generateJWT(employee) };
   }
 
-  
 
   async getMe(id: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });

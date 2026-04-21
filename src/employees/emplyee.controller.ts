@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Delete, Param, UseGuards, UploadedFile, UseInterceptors, BadRequestException, Body, Post } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Param, UseGuards, UploadedFile, UseInterceptors, Body, Post } from '@nestjs/common';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { EmployeeService } from './employee.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
