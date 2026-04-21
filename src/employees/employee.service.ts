@@ -9,6 +9,8 @@ import { SecurityAction } from '../database/entites/securityAction.entity';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
+import { stripUndefined } from '../shared/utils/strip-undefined.util';
+
 
 
 @Injectable()
@@ -75,6 +77,7 @@ export class EmployeeService {
     return { message: 'Image updated successfully', imageUrl: employee.imageUrl };
   }
 
+
   async verifyUpdatedEmail(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -120,7 +123,6 @@ export class EmployeeService {
       const existing = await this.em.findOne(Employee, { email: dto.email });
       if (existing)
         throw new BadRequestException('Email already in use');
-        
 
       emailChange = true;
       employee.verifiedAt = undefined;
@@ -141,7 +143,7 @@ export class EmployeeService {
     }
 
     const { storeName, ...rest } = dto;
-    this.em.assign(employee, rest);
+    this.em.assign(employee, stripUndefined(rest));
     await this.em.flush();
 
     if (emailChange)

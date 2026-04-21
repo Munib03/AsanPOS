@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { Store } from '../database/entites/store.entity';
+import { stripUndefined } from '../shared/utils/strip-undefined.util';
 
 @Injectable()
 export class StoresService {
@@ -42,7 +43,7 @@ export class StoresService {
     if (!store)
       throw new NotFoundException(`Store with id ${id} not found`);
 
-    this.em.assign(store, dto);
+    this.em.assign(store, stripUndefined(dto));
     await this.em.flush();
 
     return store;
