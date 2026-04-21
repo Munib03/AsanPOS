@@ -29,9 +29,10 @@ export class EmployeeController {
   }
 
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.employeeService.remove(id);
+  @UseGuards(JwtAuthGuard)
+  @Delete()
+  remove(@CurrentUser() user: { id: string; }) {
+    return this.employeeService.remove( user.id );
   }
 
 

@@ -115,9 +115,6 @@ export class EmployeeService {
     if (dto.storeName)
       employee.store.name = dto.storeName;
 
-    if (imageUrl)
-      employee.imageUrl = imageUrl;
-
     let emailChange = false;
     if (dto.email && dto.email !== employee.email) {
       const existing = await this.em.findOne(Employee, { email: dto.email });
@@ -143,7 +140,7 @@ export class EmployeeService {
     }
 
     const { storeName, ...rest } = dto;
-    this.em.assign(employee, stripUndefined(rest));
+    this.em.assign(employee, stripUndefined({ ...rest, imageUrl }));
     await this.em.flush();
 
     if (emailChange)

@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { EmployeeModule } from './employees/employee.module';
 import { StoresModule } from './stores/stores.module';
+import { CategoryModule } from "./categories/category.module";
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { QueueModule } from './queue/queue.module';  
@@ -18,7 +19,8 @@ import config from './mikro-orm.config';
     EmployeeModule,
     StoresModule,
     AuthModule,
-    SharedModule
+    SharedModule,
+    CategoryModule
   ],
   controllers: [AppController],
   providers: [AppService],

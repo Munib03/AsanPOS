@@ -1,24 +1,22 @@
-import { Collection, Entity, OneToMany, PrimaryKey, Property } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, OneToMany, Collection } from '@mikro-orm/core';
+import { Product } from './product.entity';
 import { v4 as uuidv4 } from 'uuid';
-import { Product } from "./product.entity";
 
-
-
-@Entity({ tableName: "categories"} )
+@Entity({ tableName: 'categories' })
 export class Category {
-    
-    @PrimaryKey({ type: "uuid" })
-    id: string = uuidv4();
 
-    @Property()
-    name!: string;
+  @PrimaryKey({ type: 'uuid' })
+  id: string = uuidv4();
 
-    @OneToMany(() => Product, p => p.category)
-    product = new Collection<Product>(this);
+  @Property()
+  name!: string;
 
-    @Property({ defaultRaw: "now()", nullable: true })
-    createdAt?: Date;
+  @OneToMany(() => Product, p => p.category)
+  products = new Collection<Product>(this);
 
-    @Property({ onUpdate: () => new Date(), defaultRaw: "now()", nullable: true })
-    updatedAt?: Date;
+  @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
+  createdAt?: Date;
+
+  @Property({ fieldName: 'updated_at', onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
+  updatedAt?: Date;
 }
