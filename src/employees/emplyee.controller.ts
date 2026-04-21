@@ -36,7 +36,6 @@ export class EmployeeController {
   }
 
 
-
   @UseGuards(JwtAuthGuard)
   @Put('info')
   @UseInterceptors(ImageUploadInterceptor)
