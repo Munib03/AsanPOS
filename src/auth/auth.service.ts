@@ -205,6 +205,7 @@ export class AuthService {
   }
 
 
+
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee)
@@ -240,6 +241,7 @@ export class AuthService {
     return { message: 'Login successful', token: this.generateJWT(employee) };
   }
 
+  
 
   async getMe(id: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
