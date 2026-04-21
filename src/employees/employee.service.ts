@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Employee } from '../database/entites/Employee.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import * as bcrypt from 'bcrypt';

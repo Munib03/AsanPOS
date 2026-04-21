@@ -3,7 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as bcrypt from 'bcrypt';
-import { Employee } from '../database/entites/Employee.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
 import { Store } from '../database/entites/store.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';

@@ -1,5 +1,5 @@
 import { Entity, PrimaryKey, Property, OneToMany, Collection } from '@mikro-orm/core';
-import { Employee } from './Employee.entity';
+import { Employee } from './employee.entity';
 import { v4 as uuidv4 } from 'uuid';
 
 @Entity({ tableName: 'stores' })
