@@ -6,11 +6,13 @@ import { Readable } from 'stream';
 export class MinioService implements OnModuleInit {
   private client: Minio.Client;
   private bucket: string = process.env.MINIO_BUCKET ?? 'asan-pos';
+  private endpoint: string = process.env.MINIO_ENDPOINT ?? 'localhost';
+  private port: number = Number(process.env.MINIO_PORT) ?? 9000;
 
   constructor() {
     this.client = new Minio.Client({
-      endPoint: process.env.MINIO_ENDPOINT ?? 'localhost',
-      port: Number(process.env.MINIO_PORT) ?? 9000,
+      endPoint: this.endpoint,
+      port: this.port,
       useSSL: false,
       accessKey: process.env.MINIO_ACCESS_KEY ?? 'minioadmin',
       secretKey: process.env.MINIO_SECRET_KEY ?? 'minioadmin',
@@ -49,7 +51,7 @@ export class MinioService implements OnModuleInit {
       { 'Content-Type': file.mimetype },
     );
 
-    return `http://${process.env.MINIO_ENDPOINT}:${process.env.MINIO_PORT}/${this.bucket}/${fileName}`;
+    return `http://${this.endpoint}:${this.port}/${this.bucket}/${fileName}`;
   }
 
   async deleteFile(fileUrl: string): Promise<void> {
