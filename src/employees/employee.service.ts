@@ -8,13 +8,15 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { generateOTP, sendEmail } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
+import { QueueService } from '../queue/queue.service';
 
 
 @Injectable()
 export class EmployeeService {
   constructor(
     private readonly em: EntityManager,
-  ) {}
+    private readonly queueService: QueueService) 
+    {}
 
   
   async findAll() {
@@ -148,7 +150,7 @@ export class EmployeeService {
       });
 
       await this.em.persistAndFlush(securityAction);
-      await sendEmail(dto.email, code);
+      await this.queueService.sendVerificationEmail(dto.email, code);
     }
 
     const { storeName, ...rest } = dto;
