@@ -17,6 +17,7 @@ import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 
 
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -151,6 +152,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
+      role: dto.role,
       password: hashedPassword,
       phone: dto.phone,
       imageUrl: dto.imageUrl,
@@ -253,7 +255,7 @@ export class AuthService {
       firstName: employee.firstName ?? null,
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
-      title: employee.title ?? null,
+      role: employee.role ?? null,
       imageUrl: employee.imageUrl ?? null,
       dob: employee.dob ?? null,
       gender: employee.gender ?? null,

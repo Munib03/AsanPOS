@@ -22,7 +22,7 @@ export class Employee {
   phone?: string;
 
   @Property({ nullable: true })
-  title?: string;
+  role?: string;
 
   @Property({ nullable: true })
   firstName?: string;
