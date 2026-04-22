@@ -28,8 +28,7 @@ export class CategoryController {
     @Post()
     create(
     @CurrentUser() user: { id: string },
-    @Body() dto: CreateCategoryDto,
-    ) {
+    @Body() dto: CreateCategoryDto) {
         return this.categoryService.create(user.id, dto);
     }
 
@@ -39,7 +38,7 @@ export class CategoryController {
         return this.categoryService.remove(id);
     }
     
-    
+
     @Put(':id')
     update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
         return this.categoryService.update(id, dto);
