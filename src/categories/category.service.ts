@@ -26,6 +26,10 @@ export class CategoryService {
 
 
     async create(employeeId: string, dto: CreateCategoryDto) {
+        const existing = await this.em.findOne(Category, { name: dto.name });
+        if (existing)
+            throw new BadRequestException(`Store with name ${dto.name} already exists!`)
+
         const employee = await this.em.findOne(Employee, { id: employeeId }, { populate: ['store'] });
         if (!employee)
             throw new NotFoundException('Employee not found');
@@ -35,7 +39,7 @@ export class CategoryService {
             store: employee.store,
         });
         await this.em.persistAndFlush(category);
-        
+
         return category;
     }
 

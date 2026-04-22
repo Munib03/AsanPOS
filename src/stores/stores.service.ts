@@ -24,20 +24,6 @@ export class StoresService {
     return store;
   }
 
-
-  async create(dto: CreateStoreDto) {
-
-    const store = this.em.create(Store, {
-      name: dto.name,
-      address: dto.address,
-    });
-
-    await this.em.persistAndFlush(store);
-
-    return { id: store.id, name: store.name, address: store.address };
-  }
-
-
   async update(id: string, dto: UpdateStoreDto) {
     const store = await this.em.findOne(Store, { id });
     if (!store)
