@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { CategoryService } from "./category.service";
-import { CreateCategoryDTO } from "./dto/create-category.dto";
+import { CreateCategoryDto } from "./dto/create-category.dto";
 import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 
@@ -24,7 +24,7 @@ export class CategoryController {
 
     @UseGuards(JwtAuthGuard)
     @Post()
-    create(@Body() dto: CreateCategoryDTO) {
+    create(@Body() dto: CreateCategoryDto ) {
         return this.categoryService.create(dto);
     }
 

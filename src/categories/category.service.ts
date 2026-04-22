@@ -1,15 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { CreateCategoryDTO } from "./dto/create-category.dto";
-import { EntityManager } from "@mikro-orm/knex";
-import { Category } from "../database/entites/category.entity";
-import { UpdateCategoryDto } from "./dto/update-category.dto";
-
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
+import { Category } from '../database/entites/category.entity';
+import { Store } from '../database/entites/store.entity';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoryService {
-
     constructor(private readonly em: EntityManager) {}
-    
+
     async findAll() {
         return this.em.findAll(Category, {});
     }
@@ -17,32 +16,39 @@ export class CategoryService {
 
     async findOne(id: string) {
         const category = await this.em.findOne(Category, { id });
-        if (!category) 
-            throw new NotFoundException(`Category with id ${id} not found.`);
-
+        if (!category)
+            throw new NotFoundException(`Category with id ${id} not found`);
+        
         return category;
     }
 
 
-    async create(dto: CreateCategoryDTO) {
-        const category = this.em.create(Category, { name: dto.name });
+    async create(dto: CreateCategoryDto) {
+        const store = await this.em.findOne(Store, { name: dto.storeName });
+        if (!store)
+            throw new NotFoundException(`Store with name ${dto.storeName} not found`);
+
+        const category = this.em.create(Category, {
+            name: dto.name,
+            store,
+        });
+
         await this.em.persistAndFlush(category);
         return category;
     }
 
-
+    
     async update(id: string, dto: UpdateCategoryDto) {
         const category = await this.em.findOne(Category, { id });
         if (!category)
             throw new NotFoundException(`Category with id ${id} not found`);
-        
+
         if (dto.name)
             category.name = dto.name;
 
         await this.em.flush();
         return category;
     }
-
 
     async remove(id: string) {
         const category = await this.em.findOne(Category, { id }, { populate: ['products'] });
