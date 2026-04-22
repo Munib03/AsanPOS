@@ -4,6 +4,7 @@ import { Category } from '../database/entites/category.entity';
 import { Store } from '../database/entites/store.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { Employee } from '../database/entites/employee.entity';
 
 
 @Injectable()
@@ -24,17 +25,17 @@ export class CategoryService {
     }
 
 
-    async create(dto: CreateCategoryDto) {
-        const store = await this.em.findOne(Store, { name: dto.storeName });
-        if (!store)
-            throw new NotFoundException(`Store with name ${dto.storeName} not found`);
+    async create(employeeId: string, dto: CreateCategoryDto) {
+        const employee = await this.em.findOne(Employee, { id: employeeId }, { populate: ['store'] });
+        if (!employee)
+            throw new NotFoundException('Employee not found');
 
         const category = this.em.create(Category, {
             name: dto.name,
-            store,
+            store: employee.store,
         });
-
         await this.em.persistAndFlush(category);
+        
         return category;
     }
 
