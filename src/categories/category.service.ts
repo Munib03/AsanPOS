@@ -18,6 +18,7 @@ export class CategoryService {
     return employee.store;
   }
 
+  
   async findAll(employeeId: string) {
     const store = await this.getEmployeeStore(employeeId);
 
@@ -41,6 +42,7 @@ export class CategoryService {
     return category;
   }
 
+
   async update(employeeId: string, id: string, dto: UpdateCategoryDto) {
     const store = await this.getEmployeeStore(employeeId);
     const category = await this.em.findOne(Category, { id, store });
@@ -53,6 +55,7 @@ export class CategoryService {
     await this.em.persistAndFlush(category);
     return category;
   }
+
 
   async remove(employeeId: string, id: string) {
     const store = await this.getEmployeeStore(employeeId);
