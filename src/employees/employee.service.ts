@@ -68,7 +68,7 @@ export class EmployeeService {
   }
   
   
-  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
+  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string | null) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
       if (!employee)
         throw new NotFoundException(`Employee with id ${id} not found`);

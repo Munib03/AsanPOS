@@ -28,7 +28,7 @@ export class UpdateEmployeeDto {
 
   @IsOptional()
   @IsString()
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @IsOptional()
   @IsString()

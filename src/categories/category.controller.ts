@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { CurrentUser } from "../shared/decorators/current-user.decorator";
 
+
 @Controller("categories")
 @UseGuards(JwtAuthGuard)
 export class CategoryController {

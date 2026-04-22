@@ -42,10 +42,13 @@ export class EmployeeController {
     @Body() dto: UpdateEmployeeDto,
     @UploadedFile() file: any,
   ) {
-    let imageUrl: string | undefined;
+    let imageUrl: string | null | undefined;
 
     if (file)
       imageUrl = await this.minioService.uploadFile(file);
+    else if (dto.imageUrl === null)
+      imageUrl = null;
+      
 
     return this.employeeService.updateEmployeeInfo(user.id, dto, imageUrl);
   }
