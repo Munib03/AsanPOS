@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Category } from '../database/entites/category.entity';
-import { Store } from '../database/entites/store.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Employee } from '../database/entites/employee.entity';
+
 
 
 @Injectable()
@@ -26,13 +26,14 @@ export class CategoryService {
 
 
     async create(employeeId: string, dto: CreateCategoryDto) {
-        const existing = await this.em.findOne(Category, { name: dto.name });
-        if (existing)
-            throw new BadRequestException(`Store with name ${dto.name} already exists!`)
-
         const employee = await this.em.findOne(Employee, { id: employeeId }, { populate: ['store'] });
         if (!employee)
             throw new NotFoundException('Employee not found');
+
+        const existing = await this.em.findOne(Category, { name: dto.name, store: employee.store });
+        if (existing)
+            throw new BadRequestException(`Store with name ${dto.name} already exists!`)
+
 
         const category = this.em.create(Category, {
             name: dto.name,
