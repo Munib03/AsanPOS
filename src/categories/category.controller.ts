@@ -15,13 +15,7 @@ export class CategoryController {
   findAll(@CurrentUser() user: { id: string }) {
     return this.categoryService.findAll(user.id);
   }
-
-
-  @Get(":id")
-  findOne(@CurrentUser() user: { id: string }, @Param("id") id: string) {
-    return this.categoryService.findOne(user.id, id);
-  }
-
+  
 
   @Post()
   create(@CurrentUser() user: { id: string }, @Body() dto: CreateCategoryDto) {

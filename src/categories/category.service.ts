@@ -24,14 +24,6 @@ export class CategoryService {
     return this.em.findAll(Category, { where: { store } });
   }
 
-  async findOne(employeeId: string, id: string) {
-    const store = await this.getEmployeeStore(employeeId);
-    const category = await this.em.findOne(Category, { id, store });
-    if (!category)
-      throw new NotFoundException(`Category with id ${id} not found`);
-
-    return category;
-  }
 
   async create(employeeId: string, dto: CreateCategoryDto) {
     const store = await this.getEmployeeStore(employeeId);
