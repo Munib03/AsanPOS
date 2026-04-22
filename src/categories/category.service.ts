@@ -5,6 +5,7 @@ import { Store } from '../database/entites/store.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
+
 @Injectable()
 export class CategoryService {
     constructor(private readonly em: EntityManager) {}
@@ -49,6 +50,7 @@ export class CategoryService {
         await this.em.flush();
         return category;
     }
+
 
     async remove(id: string) {
         const category = await this.em.findOne(Category, { id }, { populate: ['products'] });
