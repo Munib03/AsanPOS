@@ -16,36 +16,27 @@ export class CategoryController {
     return this.categoryService.findAll(user.id);
   }
 
+
   @Get(":id")
-  findOne(
-    @CurrentUser() user: { id: string },
-    @Param("id") id: string,
-  ) {
+  findOne(@CurrentUser() user: { id: string }, @Param("id") id: string) {
     return this.categoryService.findOne(user.id, id);
   }
 
+
   @Post()
-  create(
-    @CurrentUser() user: { id: string },
-    @Body() dto: CreateCategoryDto,
-  ) {
+  create(@CurrentUser() user: { id: string }, @Body() dto: CreateCategoryDto) {
     return this.categoryService.create(user.id, dto);
   }
 
+
   @Put(':id')
-  update(
-    @CurrentUser() user: { id: string },
-    @Param('id') id: string,
-    @Body() dto: UpdateCategoryDto,
-  ) {
+  update(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     return this.categoryService.update(user.id, id, dto);
   }
 
+
   @Delete(":id")
-  remove(
-    @CurrentUser() user: { id: string },
-    @Param("id") id: string,
-  ) {
+  remove(@CurrentUser() user: { id: string }, @Param("id") id: string) {
     return this.categoryService.remove(user.id, id);
   }
 }

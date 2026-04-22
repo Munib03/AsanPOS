@@ -58,7 +58,7 @@ export class CategoryService {
     if (dto.name)
       category.name = dto.name;
 
-    await this.em.flush();
+    await this.em.persistAndFlush(category);
     return category;
   }
 
