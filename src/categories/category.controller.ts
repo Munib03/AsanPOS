@@ -5,42 +5,47 @@ import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { CurrentUser } from "../shared/decorators/current-user.decorator";
 
-
 @Controller("categories")
 @UseGuards(JwtAuthGuard)
 export class CategoryController {
 
-    constructor(private readonly categoryService: CategoryService) {}
-    
+  constructor(private readonly categoryService: CategoryService) {}
 
-    @Get()
-    findAll() {
-        return this.categoryService.findAll();
-    }
+  @Get()
+  findAll(@CurrentUser() user: { id: string }) {
+    return this.categoryService.findAll(user.id);
+  }
 
-
-    @Get(":id")
-    findOne(@Param("id") id: string) {
-        return this.categoryService.findOne(id);
-    }
-
-
-    @Post()
-    create(
+  @Get(":id")
+  findOne(
     @CurrentUser() user: { id: string },
-    @Body() dto: CreateCategoryDto) {
-        return this.categoryService.create(user.id, dto);
-    }
+    @Param("id") id: string,
+  ) {
+    return this.categoryService.findOne(user.id, id);
+  }
 
+  @Post()
+  create(
+    @CurrentUser() user: { id: string },
+    @Body() dto: CreateCategoryDto,
+  ) {
+    return this.categoryService.create(user.id, dto);
+  }
 
-    @Delete(":id")
-    remove(@Param("id") id: string) {
-        return this.categoryService.remove(id);
-    }
-    
+  @Put(':id')
+  update(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.categoryService.update(user.id, id, dto);
+  }
 
-    @Put(':id')
-    update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
-        return this.categoryService.update(id, dto);
-    }
+  @Delete(":id")
+  remove(
+    @CurrentUser() user: { id: string },
+    @Param("id") id: string,
+  ) {
+    return this.categoryService.remove(user.id, id);
+  }
 }

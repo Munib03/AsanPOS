@@ -6,67 +6,73 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Employee } from '../database/entites/employee.entity';
 
 
-
 @Injectable()
 export class CategoryService {
-    constructor(private readonly em: EntityManager) {}
+  constructor(private readonly em: EntityManager) {}
 
-    async findAll() {
-        return this.em.findAll(Category, {});
-    }
+  private async getEmployeeStore(employeeId: string) {
+    const employee = await this.em.findOne(Employee, { id: employeeId }, { populate: ['store'] });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
 
+    return employee.store;
+  }
 
-    async findOne(id: string) {
-        const category = await this.em.findOne(Category, { id });
-        if (!category)
-            throw new NotFoundException(`Category with id ${id} not found`);
-        
-        return category;
-    }
+  async findAll(employeeId: string) {
+    const store = await this.getEmployeeStore(employeeId);
 
+    return this.em.findAll(Category, { where: { store } });
+  }
 
-    async create(employeeId: string, dto: CreateCategoryDto) {
-        const employee = await this.em.findOne(Employee, { id: employeeId }, { populate: ['store'] });
-        if (!employee)
-            throw new NotFoundException('Employee not found');
+  async findOne(employeeId: string, id: string) {
+    const store = await this.getEmployeeStore(employeeId);
+    const category = await this.em.findOne(Category, { id, store });
+    if (!category)
+      throw new NotFoundException(`Category with id ${id} not found`);
 
-        const existing = await this.em.findOne(Category, { name: dto.name, store: employee.store });
-        if (existing)
-            throw new BadRequestException(`Store with name ${dto.name} already exists!`)
+    return category;
+  }
 
+  async create(employeeId: string, dto: CreateCategoryDto) {
+    const store = await this.getEmployeeStore(employeeId);
 
-        const category = this.em.create(Category, {
-            name: dto.name,
-            store: employee.store,
-        });
-        await this.em.persistAndFlush(category);
+    const existing = await this.em.findOne(Category, { name: dto.name, store });
+    if (existing)
+      throw new BadRequestException(`Category with name ${dto.name} already exists in your store`);
 
-        return category;
-    }
+    const category = this.em.create(Category, {
+      name: dto.name,
+      store,
+    });
 
+    await this.em.persistAndFlush(category);
+    return category;
+  }
+
+  async update(employeeId: string, id: string, dto: UpdateCategoryDto) {
+    const store = await this.getEmployeeStore(employeeId);
+    const category = await this.em.findOne(Category, { id, store });
+    if (!category)
+      throw new NotFoundException(`Category with id ${id} not found`);
+
+    if (dto.name)
+      category.name = dto.name;
+
+    await this.em.flush();
+    return category;
+  }
+
+  async remove(employeeId: string, id: string) {
+    const store = await this.getEmployeeStore(employeeId);
+    const category = await this.em.findOne(Category, { id, store }, { populate: ['products'] });
+    if (!category)
+      throw new NotFoundException(`Category with id ${id} not found`);
+
+    if (category.products.length > 0)
+      throw new BadRequestException('Cannot delete category that has products linked to it');
+
+    await this.em.removeAndFlush(category);
     
-    async update(id: string, dto: UpdateCategoryDto) {
-        const category = await this.em.findOne(Category, { id });
-        if (!category)
-            throw new NotFoundException(`Category with id ${id} not found`);
-
-        if (dto.name)
-            category.name = dto.name;
-
-        await this.em.flush();
-        return category;
-    }
-
-
-    async remove(id: string) {
-        const category = await this.em.findOne(Category, { id }, { populate: ['products'] });
-        if (!category)
-            throw new NotFoundException(`Category with id ${id} not found`);
-
-        if (category.products.length > 0)
-            throw new BadRequestException('Cannot delete category that has products linked to it');
-
-        await this.em.removeAndFlush(category);
-        return { message: `Category ${id} deleted successfully` };
-    }
+    return { message: `Category ${id} deleted successfully` };
+  }
 }

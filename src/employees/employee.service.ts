@@ -68,28 +68,24 @@ export class EmployeeService {
   }
   
   
-  async uploadImage(id: string, imageUrl: string) {
-    const employee = await this.em.findOne(Employee, { id });
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
-
-    employee.imageUrl = imageUrl;
-    await this.em.flush();
-
-    return { message: 'Image updated successfully', imageUrl: employee.imageUrl };
-  }
-
-  
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string) {
     const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
+      if (!employee)
+        throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.password)
-      dto.password = await bcrypt.hash(dto.password, 10);
+      if (dto.password)
+        dto.password = await bcrypt.hash(dto.password, 10);
 
-    if (dto.storeName)
-      employee.store.name = dto.storeName;
+      if (dto.storeName) {
+        if (dto.storeName === employee.store.name)
+          throw new BadRequestException('Store name is the same as the current one');
+
+        const existingStore = await this.em.findOne(Store, { name: dto.storeName });
+        if (existingStore)
+          throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
+
+        employee.store.name = dto.storeName;
+      }
 
     let emailChange = false;
     if (dto.email && dto.email !== employee.email) {

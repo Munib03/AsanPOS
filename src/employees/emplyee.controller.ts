@@ -10,6 +10,7 @@ import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.inte
 
 
 @Controller('employees')
+@UseGuards(JwtAuthGuard)
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
@@ -22,21 +23,18 @@ export class EmployeeController {
   }
 
 
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.employeeService.findOne(id);
   }
 
 
-  @UseGuards(JwtAuthGuard)
   @Delete()
   remove(@CurrentUser() user: { id: string; }) {
     return this.employeeService.remove( user.id );
   }
 
 
-  @UseGuards(JwtAuthGuard)
   @Put('info')
   @UseInterceptors(ImageUploadInterceptor)
   async updateEmployeeInfo(
@@ -53,7 +51,6 @@ export class EmployeeController {
   }
 
 
-  @UseGuards(JwtAuthGuard)
   @Post('verify-updated-email')
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
