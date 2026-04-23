@@ -5,20 +5,25 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Store } from '../database/entites/store.entity';
 
+
 @Injectable()
 export class CategoryService {
   constructor(private readonly em: EntityManager) {}
+
 
   async findAll(store: Store) {
     return this.em.findAll(Category, { where: { store } });
   }
 
+
   async findOne(store: Store, id: string) {
     const category = await this.em.findOne(Category, { id, store });
     if (!category)
       throw new NotFoundException(`Category with id ${id} not found`);
+
     return category;
   }
+
 
   async create(store: Store, dto: CreateCategoryDto) {
     const existing = await this.em.findOne(Category, { name: dto.name, store });
@@ -29,9 +34,11 @@ export class CategoryService {
       name: dto.name,
       store,
     });
+
     await this.em.persistAndFlush(category);
     return category;
   }
+
 
   async update(store: Store, id: string, dto: UpdateCategoryDto) {
     const category = await this.em.findOne(Category, { id, store });
@@ -44,6 +51,7 @@ export class CategoryService {
     await this.em.flush();
     return category;
   }
+  
 
   async remove(store: Store, id: string) {
     const category = await this.em.findOne(Category, { id, store }, { populate: ['products'] });

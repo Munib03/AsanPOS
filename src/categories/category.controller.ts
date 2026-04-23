@@ -3,13 +3,12 @@ import { CategoryService } from "./category.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
-import { StoreGuard } from "../shared/guards/store.guard";
 import { CurrentStore } from "../shared/decorators/store.decorator";
 import { Store } from "../database/entites/store.entity";
 
 
 @Controller("categories")
-@UseGuards(JwtAuthGuard, StoreGuard)
+@UseGuards(JwtAuthGuard)
 export class CategoryController {
 
   constructor(private readonly categoryService: CategoryService) {}
