@@ -3,35 +3,57 @@ import { CategoryService } from "./category.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
-import { CurrentUser } from "../shared/decorators/current-user.decorator";
+import { StoreGuard } from "../shared/guards/store.guard";
+import { CurrentStore } from "../shared/decorators/store.decorator";
+import { Store } from "../database/entites/store.entity";
 
 
 @Controller("categories")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StoreGuard)
 export class CategoryController {
 
   constructor(private readonly categoryService: CategoryService) {}
 
-  @Get()
-  findAll(@CurrentUser() user: { id: string }) {
-    return this.categoryService.findAll(user.id);
-  }
   
+  @Get()
+  findAll(@CurrentStore() store: Store) {
+    return this.categoryService.findAll(store);
+  }
+
+  
+  @Get(":id")
+  findOne(
+    @CurrentStore() store: Store,
+    @Param("id") id: string,
+  ) {
+    return this.categoryService.findOne(store, id);
+  }
+
 
   @Post()
-  create(@CurrentUser() user: { id: string }, @Body() dto: CreateCategoryDto) {
-    return this.categoryService.create(user.id, dto);
+  create(
+    @CurrentStore() store: Store,
+    @Body() dto: CreateCategoryDto,
+  ) {
+    return this.categoryService.create(store, dto);
   }
 
 
   @Put(':id')
-  update(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: UpdateCategoryDto) {
-    return this.categoryService.update(user.id, id, dto);
+  update(
+    @CurrentStore() store: Store,
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.categoryService.update(store, id, dto);
   }
 
 
   @Delete(":id")
-  remove(@CurrentUser() user: { id: string }, @Param("id") id: string) {
-    return this.categoryService.remove(user.id, id);
+  remove(
+    @CurrentStore() store: Store,
+    @Param("id") id: string,
+  ) {
+    return this.categoryService.remove(store, id);
   }
 }

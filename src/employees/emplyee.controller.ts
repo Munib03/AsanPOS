@@ -50,8 +50,10 @@ export class EmployeeController {
   ) {
     let imageUrl: string | null | undefined;
 
-    if (file) imageUrl = await this.minioService.uploadFile(file);
-    else if (dto.imageUrl === '') imageUrl = null;
+    if (file) 
+      imageUrl = await this.minioService.uploadFile(file);
+    else if (dto.imageUrl === '') 
+      imageUrl = null;
 
     return this.employeeService.updateEmployeeInfo(user.id, dto, imageUrl);
   }

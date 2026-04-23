@@ -72,11 +72,7 @@ export class EmployeeService {
     return { message: `Employee ${id} deleted successfully` };
   }
 
-  async updateEmployeeInfo(
-    id: string,
-    dto: UpdateEmployeeDto,
-    imageUrl?: string | null,
-  ) {
+  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string | null) {
     const employee = await this.em.findOne(
       Employee,
       { id },
