@@ -110,10 +110,7 @@ export class EmployeeService {
     }
 
     let emailChange = false;
-    if (dto.email) {
-      if (dto.email === employee.email)
-        throw new BadRequestException("New email is the same as the current one");
-
+    if (dto.email && dto.email !== employee.email) {
       const existing = await this.em.findOne(Employee, { email: dto.email });
       if (existing) 
         throw new BadRequestException('Email already in use');
