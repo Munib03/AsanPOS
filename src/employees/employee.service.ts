@@ -72,22 +72,43 @@ export class EmployeeService {
     return { message: `Employee ${id} deleted successfully` };
   }
 
-
-  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string | null) {
-    const employee = await this.em.findOne(Employee,{ id },{ populate: ['store'] });
+  async updateEmployeeInfo(
+    id: string,
+    dto: UpdateEmployeeDto,
+    imageUrl?: string | null,
+  ) {
+    const employee = await this.em.findOne(
+      Employee,
+      { id },
+      { populate: ['store'] },
+    );
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
+    if (dto.password) {
+      if (!dto.oldPassword)
+        throw new BadRequestException(
+          'Old password is required to change password',
+        );
 
-    if (dto.password) 
+      const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
+      if (!isMatch) throw new BadRequestException('Old password is incorrect');
+
       dto.password = await bcrypt.hash(dto.password, 10);
+    }
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException('Store name is the same as the current one');
+        throw new BadRequestException(
+          'Store name is the same as the current one',
+        );
 
-      const existingStore = await this.em.findOne(Store, {name: dto.storeName});
+      const existingStore = await this.em.findOne(Store, {
+        name: dto.storeName,
+      });
       if (existingStore)
-        throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
+        throw new BadRequestException(
+          `Store with name ${dto.storeName} already exists`,
+        );
 
       employee.store.name = dto.storeName;
     }
@@ -95,11 +116,12 @@ export class EmployeeService {
     let emailChange = false;
     if (dto.email) {
       if (dto.email === employee.email)
-        throw new BadRequestException('New email is the same as the current one');
+        throw new BadRequestException(
+          'New email is the same as the current one',
+        );
 
       const existing = await this.em.findOne(Employee, { email: dto.email });
-      if (existing) 
-        throw new BadRequestException('Email already in use');
+      if (existing) throw new BadRequestException('Email already in use');
 
       emailChange = true;
 
@@ -119,7 +141,7 @@ export class EmployeeService {
       await this.queueService.sendVerificationEmail(dto.email, code);
     }
 
-    const { storeName, email, ...rest } = dto;
+    const { storeName, email, oldPassword, ...rest } = dto;
     this.em.assign(employee, stripUndefined({ ...rest, imageUrl }));
     await this.em.flush();
 
@@ -142,7 +164,6 @@ export class EmployeeService {
     };
   }
 
-
   async verifyUpdatedEmail(dto: VerifyDto) {
     const securityAction = await this.em.findOne(
       SecurityAction,
@@ -153,22 +174,18 @@ export class EmployeeService {
       { populate: ['employee'] },
     );
 
-    if (!securityAction) 
-      throw new BadRequestException('Invalid OTP code');
+    if (!securityAction) throw new BadRequestException('Invalid OTP code');
 
     const employee = securityAction.employee;
-    if (!employee) 
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const now = new Date();
     if (securityAction.expiresAt && securityAction.expiresAt < now)
       throw new BadRequestException('OTP has expired');
 
-    if (securityAction.metadata?.email) 
+    if (securityAction.metadata?.email)
       employee.email = securityAction.metadata.email;
-    
-    else 
-      throw new BadRequestException('No email found in metadata');
+    else throw new BadRequestException('No email found in metadata');
 
     employee.verifiedAt = new Date();
 
