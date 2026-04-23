@@ -73,34 +73,21 @@ export class EmployeeService {
   }
 
 
-  async updateEmployeeInfo(
-    id: string,
-    dto: UpdateEmployeeDto,
-    imageUrl?: string | null,
-  ) {
-    const employee = await this.em.findOne(
-      Employee,
-      { id },
-      { populate: ['store'] },
-    );
+  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string | null) {
+    const employee = await this.em.findOne(Employee,{ id },{ populate: ['store'] });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.password) dto.password = await bcrypt.hash(dto.password, 10);
+    if (dto.password) 
+      dto.password = await bcrypt.hash(dto.password, 10);
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
-      const existingStore = await this.em.findOne(Store, {
-        name: dto.storeName,
-      });
+      const existingStore = await this.em.findOne(Store, {name: dto.storeName});
       if (existingStore)
-        throw new BadRequestException(
-          `Store with name ${dto.storeName} already exists`,
-        );
+        throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
 
       employee.store.name = dto.storeName;
     }
@@ -108,12 +95,11 @@ export class EmployeeService {
     let emailChange = false;
     if (dto.email) {
       if (dto.email === employee.email)
-        throw new BadRequestException(
-          'New email is the same as the current one',
-        );
+        throw new BadRequestException('New email is the same as the current one');
 
       const existing = await this.em.findOne(Employee, { email: dto.email });
-      if (existing) throw new BadRequestException('Email already in use');
+      if (existing) 
+        throw new BadRequestException('Email already in use');
 
       emailChange = true;
 
@@ -155,6 +141,7 @@ export class EmployeeService {
       imageUrl: employee.imageUrl,
     };
   }
+
 
   async verifyUpdatedEmail(dto: VerifyDto) {
     const securityAction = await this.em.findOne(
