@@ -16,6 +16,9 @@ export class SecurityAction {
   @Property({ nullable: true })
   secret?: string;
 
+  @Property({ nullable: true, type: 'json' })
+  metadata?: Record<string, string>;
+
   @Property({ nullable: true })
   expiresAt?: Date;
 

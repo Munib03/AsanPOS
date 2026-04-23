@@ -88,35 +88,30 @@ export class EmployeeService {
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.password) 
+    if (dto.password)
       dto.password = await bcrypt.hash(dto.password, 10);
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
-      const existingStore = await this.em.findOne(Store, {
-        name: dto.storeName,
-      });
-      
+      const existingStore = await this.em.findOne(Store, { name: dto.storeName });
       if (existingStore)
-        throw new BadRequestException(
-          `Store with name ${dto.storeName} already exists`,
-        );
+        throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
 
       employee.store.name = dto.storeName;
     }
 
     let emailChange = false;
-    if (dto.email && dto.email !== employee.email) {
+    if (dto.email) {
+      if (dto.email === employee.email)
+        throw new BadRequestException('New email is the same as the current one');
+
       const existing = await this.em.findOne(Employee, { email: dto.email });
-      if (existing) 
+      if (existing)
         throw new BadRequestException('Email already in use');
 
       emailChange = true;
-      employee.verifiedAt = undefined;
 
       const code = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -125,6 +120,7 @@ export class EmployeeService {
         employee,
         actionType: 'email-update',
         secret: code,
+        metadata: { email: dto.email }, // store new email in metadata as JSON
         expiresAt,
         createdAt: new Date(),
       });
@@ -133,7 +129,7 @@ export class EmployeeService {
       await this.queueService.sendVerificationEmail(dto.email, code);
     }
 
-    const { storeName, ...rest } = dto;
+    const { storeName, email, ...rest } = dto;
     this.em.assign(employee, stripUndefined({ ...rest, imageUrl }));
     await this.em.flush();
 
@@ -158,27 +154,36 @@ export class EmployeeService {
 
 
   async verifyUpdatedEmail(dto: VerifyDto) {
-    const employee = await this.em.findOne(Employee, { email: dto.email });
-    if (!employee) throw new NotFoundException('Employee not found');
-
     const securityAction = await this.em.findOne(SecurityAction, {
-      employee,
       secret: dto.code,
       actionType: 'email-update',
-    });
+    }, { populate: ['employee'] });
 
-    if (!securityAction) throw new BadRequestException('Invalid OTP code');
+    if (!securityAction)
+      throw new BadRequestException('Invalid OTP code');
+
+    const employee = securityAction.employee;
+
+    if (!employee)
+      throw new NotFoundException('Employee not found');
 
     const now = new Date();
     if (securityAction.expiresAt && securityAction.expiresAt < now)
       throw new BadRequestException('OTP has expired');
 
+    if (securityAction.metadata?.email) {
+      employee.email = securityAction.metadata.email;
+    } else {
+      throw new BadRequestException('No email found in metadata');
+    }
+
     employee.verifiedAt = new Date();
+
     await this.em.removeAndFlush(securityAction);
     await this.em.flush();
 
     return {
-      message: 'New Email verified successfullyu',
+      message: 'Email updated successfully',
       employee_id: employee.id,
     };
   }
