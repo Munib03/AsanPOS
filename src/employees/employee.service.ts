@@ -100,7 +100,7 @@ export class EmployeeService {
       const existingStore = await this.em.findOne(Store, {
         name: dto.storeName,
       });
-
+      
       if (existingStore)
         throw new BadRequestException(
           `Store with name ${dto.storeName} already exists`,
