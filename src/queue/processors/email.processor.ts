@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { sendEmail } from '../../shared/utils/auth.utils'; // your existing email util
+import { sendEmail } from '../../shared/utils/auth.utils'; 
 
 @Processor('email')
 export class EmailProcessor extends WorkerHost {
