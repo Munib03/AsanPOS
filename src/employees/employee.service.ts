@@ -15,16 +15,20 @@ import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 
+
 @Injectable()
 export class EmployeeService {
+
   constructor(
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
   ) {}
 
+
   async findAll() {
     return this.em.findAll(Employee, { exclude: ['password'] });
   }
+
 
   async findOne(id: string) {
     const employee = await this.em.findOne(
@@ -36,6 +40,7 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with id ${id} not found`);
     return employee;
   }
+
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.em.findOne(Store, { name: dto.storeName });
@@ -62,6 +67,7 @@ export class EmployeeService {
     };
   }
 
+
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -72,6 +78,7 @@ export class EmployeeService {
     return { message: `Employee ${id} deleted successfully` };
   }
 
+
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto, imageUrl?: string | null) {
     const employee = await this.em.findOne(
       Employee,
@@ -81,7 +88,8 @@ export class EmployeeService {
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.password) dto.password = await bcrypt.hash(dto.password, 10);
+    if (dto.password) 
+      dto.password = await bcrypt.hash(dto.password, 10);
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
@@ -92,6 +100,7 @@ export class EmployeeService {
       const existingStore = await this.em.findOne(Store, {
         name: dto.storeName,
       });
+
       if (existingStore)
         throw new BadRequestException(
           `Store with name ${dto.storeName} already exists`,
@@ -101,9 +110,13 @@ export class EmployeeService {
     }
 
     let emailChange = false;
-    if (dto.email && dto.email !== employee.email) {
+    if (dto.email) {
+      if (dto.email === employee.email)
+        throw new BadRequestException("New email is the same as the current one");
+
       const existing = await this.em.findOne(Employee, { email: dto.email });
-      if (existing) throw new BadRequestException('Email already in use');
+      if (existing) 
+        throw new BadRequestException('Email already in use');
 
       emailChange = true;
       employee.verifiedAt = undefined;
@@ -145,6 +158,7 @@ export class EmployeeService {
       imageUrl: employee.imageUrl,
     };
   }
+
 
   async verifyUpdatedEmail(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
