@@ -72,6 +72,7 @@ export class EmployeeService {
     return { message: `Employee ${id} deleted successfully` };
   }
 
+
   async updateEmployeeInfo(
     id: string,
     dto: UpdateEmployeeDto,
@@ -165,21 +166,22 @@ export class EmployeeService {
       { populate: ['employee'] },
     );
 
-    if (!securityAction) throw new BadRequestException('Invalid OTP code');
+    if (!securityAction) 
+      throw new BadRequestException('Invalid OTP code');
 
     const employee = securityAction.employee;
-
-    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee) 
+      throw new NotFoundException('Employee not found');
 
     const now = new Date();
     if (securityAction.expiresAt && securityAction.expiresAt < now)
       throw new BadRequestException('OTP has expired');
 
-    if (securityAction.metadata?.email) {
+    if (securityAction.metadata?.email) 
       employee.email = securityAction.metadata.email;
-    } else {
+    
+    else 
       throw new BadRequestException('No email found in metadata');
-    }
 
     employee.verifiedAt = new Date();
 
