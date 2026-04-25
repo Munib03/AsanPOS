@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   Injectable,
-  NotFoundException,
+  NotFoundException
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Employee } from '../database/entites/employee.entity';
@@ -14,6 +14,7 @@ import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+
 
 @Injectable()
 export class EmployeeService {
@@ -36,6 +37,7 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with id ${id} not found`);
     return employee;
   }
+  
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.em.findOne(Store, { name: dto.storeName });
@@ -62,6 +64,7 @@ export class EmployeeService {
     };
   }
 
+
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -71,6 +74,7 @@ export class EmployeeService {
 
     return { message: `Employee ${id} deleted successfully` };
   }
+
 
   async updateEmployeeInfo(
     id: string,
@@ -82,29 +86,29 @@ export class EmployeeService {
       { id },
       { populate: ['store'] },
     );
+
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
+    
     if (dto.password) {
       if (!dto.oldPassword)
-        throw new BadRequestException(
-          'Old password is required to change password',
-        );
+        throw new BadRequestException('Old password is required to change password');
 
       const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
-      if (!isMatch) throw new BadRequestException('Old password is incorrect');
+      if (!isMatch) 
+        throw new BadRequestException('Old password is incorrect');
 
       dto.password = await bcrypt.hash(dto.password, 10);
     }
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
       const existingStore = await this.em.findOne(Store, {
         name: dto.storeName,
       });
+      
       if (existingStore)
         throw new BadRequestException(
           `Store with name ${dto.storeName} already exists`,
