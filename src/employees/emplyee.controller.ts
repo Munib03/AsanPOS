@@ -45,22 +45,12 @@ export class EmployeeController {
   }
 
 
-  @UseGuards(JwtAuthGuard)
   @Put('info')
-  @UseInterceptors(ImageUploadInterceptor)
   async updateEmployeeInfo(
     @CurrentUser() user: { id: string },
     @Body() dto: UpdateEmployeeDto,
-    @UploadedFile() file: any,
   ) {
-    let imageUrl: string | null | undefined;
-
-    if (file) 
-      imageUrl = await this.minioService.uploadFile(file);
-    else if (dto.imageUrl === '') 
-      imageUrl = null;
-
-    return this.employeeService.updateEmployeeInfo(user.id, dto, imageUrl);
+    return this.employeeService.updateEmployeeInfo(user.id, dto);
   }
 
 

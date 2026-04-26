@@ -9,7 +9,7 @@ export class MinioService implements OnModuleInit {
   private endpoint: string = process.env.MINIO_ENDPOINT ?? 'localhost';
   private port: number = Number(process.env.MINIO_PORT) ?? 9000;
   private useSSL: boolean = process.env.MINIO_USE_SSL === 'true';
-  private protocol: string = this.useSSL ? 'https' : 'http';
+
 
   constructor() {
     this.client = new Minio.Client({
@@ -21,6 +21,7 @@ export class MinioService implements OnModuleInit {
     });
   }
 
+
   async onModuleInit() {
     const exists = await this.client.bucketExists(this.bucket);
     if (!exists)
@@ -28,37 +29,35 @@ export class MinioService implements OnModuleInit {
 
     const policy = {
       Version: '2012-10-17',
-      Statement: [
-        {
-          Effect: 'Allow',
-          Principal: { AWS: ['*'] },
-          Action: ['s3:GetObject'],
-          Resource: [`arn:aws:s3:::${this.bucket}/*`],
-        },
-      ],
+      Statement: [],
     };
 
     await this.client.setBucketPolicy(this.bucket, JSON.stringify(policy));
   }
 
+
   async uploadFile(file: any): Promise<string> {
-    const fileName = `${Date.now()}-${file.originalname}`;
+    const key = `${Date.now()}-${file.originalname}`;
     const stream = Readable.from(file.buffer);
 
     await this.client.putObject(
       this.bucket,
-      fileName,
+      key,
       stream,
       file.size,
       { 'Content-Type': file.mimetype },
     );
 
-    return `${this.protocol}://${this.endpoint}:${this.port}/${this.bucket}/${fileName}`;
+    return key; 
   }
 
-  async deleteFile(fileUrl: string): Promise<void> {
-    const fileName = fileUrl.split('/').pop();
-    if (fileName)
-      await this.client.removeObject(this.bucket, fileName);
+                                          
+  async getSignedUrl(key: string, expiry: number = 300): Promise<string> {
+    return this.client.presignedGetObject(this.bucket, key, expiry);
+  }
+
+
+  async deleteFile(key: string): Promise<void> {
+    await this.client.removeObject(this.bucket, key);
   }
 }

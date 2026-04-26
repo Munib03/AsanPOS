@@ -1,21 +1,20 @@
-import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Category } from './category.entity';
+import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 
-@Entity({ tableName: 'products' })
-export class Product {
 
+@Entity({ tableName: 'attachments' })
+export class Attachment {
   @PrimaryKey({ type: 'uuid' })
   id: string = uuidv4();
-
-  @Property()
-  name!: string;
 
   @Property({ nullable: true })
   imageUrl?: string;
 
-  @ManyToOne(() => Category, { nullable: true, fieldName: 'cat_id' })
-  category?: Category;
+  @Property({ persist: false })
+  signedUrl?: string;
+
+  @Property({ type: 'uuid', index: true })
+  entityId!: string;
 
   @Property({ defaultRaw: 'now()', nullable: true })
   createdAt?: Date;

@@ -78,8 +78,7 @@ export class EmployeeService {
 
   async updateEmployeeInfo(
     id: string,
-    dto: UpdateEmployeeDto,
-    imageUrl?: string | null,
+    dto: UpdateEmployeeDto
   ) {
     const employee = await this.em.findOne(
       Employee,
@@ -146,7 +145,7 @@ export class EmployeeService {
     }
 
     const { storeName, email, oldPassword, ...rest } = dto;
-    this.em.assign(employee, stripUndefined({ ...rest, imageUrl }));
+    this.em.assign(employee, stripUndefined(rest));
     await this.em.flush();
 
     if (emailChange)
@@ -164,7 +163,6 @@ export class EmployeeService {
       name: employee.name,
       email: employee.email,
       phone: employee.phone,
-      imageUrl: employee.imageUrl,
     };
   }
 

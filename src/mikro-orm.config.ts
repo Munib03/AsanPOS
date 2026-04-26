@@ -7,6 +7,7 @@ import { TwoFactorAuth } from './database/entites/twoFactorAuth.entity';
 import { SecurityAction } from './database/entites/securityAction.entity';
 import { Category } from './database/entites/category.entity';
 import { Product } from './database/entites/product.entity';
+import { Attachment } from './database/entites/attachment.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -16,7 +17,7 @@ const config: Options<PostgreSqlDriver> = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   dbName: process.env.DB_NAME,
-  entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, Product],
+  entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, Product, Attachment],
   migrations: {
     path: './src/migrations',
     glob: '!(*.d).{js,ts}',
