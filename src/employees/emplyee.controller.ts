@@ -17,6 +17,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { MinioService } from '../shared/services/minio.service';
 import { VerifyDto } from './dto/verify.dto';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
+import { use } from 'passport';
 
 @Controller('employees')
 export class EmployeeController {
@@ -30,13 +31,11 @@ export class EmployeeController {
     return this.employeeService.findAll();
   }
 
-
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.employeeService.findOne(id);
   }
-
 
   @UseGuards(JwtAuthGuard)
   @Delete()
@@ -44,7 +43,7 @@ export class EmployeeController {
     return this.employeeService.remove(user.id);
   }
 
-
+  @UseGuards(JwtAuthGuard)
   @Put('info')
   async updateEmployeeInfo(
     @CurrentUser() user: { id: string },
@@ -52,7 +51,6 @@ export class EmployeeController {
   ) {
     return this.employeeService.updateEmployeeInfo(user.id, dto);
   }
-
 
   @UseGuards(JwtAuthGuard)
   @Post('verify-updated-email')
