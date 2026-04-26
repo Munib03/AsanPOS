@@ -1,22 +1,15 @@
 import { Knex } from 'knex';
 
-export async function up(knex: Knex): Promise<void> {
-  await knex.raw(`
-    DO $$ BEGIN
-      CREATE TYPE entity_type_enum AS ENUM ('Employee', 'Product');
-    EXCEPTION
-      WHEN duplicate_object THEN null;
-    END $$;
-  `);
-
-  await knex.schema.alterTable('attachments', (table) => {
-    table.specificType('entity_type', 'entity_type_enum').notNullable().defaultTo('Employee');
+exports.up = async function(knex: Knex): Promise<void> {
+  await knex.schema.alterTable('attachments', (table: Knex.TableBuilder) => {
+    table.string('entity_type').notNullable().defaultTo('employee');
+    table.timestamp('claimed_at').nullable();
   });
-}
+};
 
-export async function down(knex: Knex): Promise<void> {
-  await knex.schema.alterTable('attachments', (table) => {
+exports.down = async function(knex: Knex): Promise<void> {
+  await knex.schema.alterTable('attachments', (table: Knex.TableBuilder) => {
     table.dropColumn('entity_type');
+    table.dropColumn('claimed_at');
   });
-  await knex.raw('DROP TYPE IF EXISTS entity_type_enum');
-}
+};

@@ -3,7 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { Attachment } from '../database/entites/attachment.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { Employee } from '../database/entites/employee.entity';
-
+import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
 @Injectable()
 export class AttachmentService {
@@ -13,56 +13,48 @@ export class AttachmentService {
   ) {}
 
 
-  async getImage(employeeId: string): Promise<Attachment> {
-   const attachment = await this.em.findOne(Attachment, { entityId: employeeId });
-   if (!attachment)
-    throw new NotFoundException('No image found');
-
-  return this.generateSignedUrl(attachment);
-  }
-
   
-  private async generateSignedUrl(attachment: Attachment): Promise<Attachment> {
-    if (attachment.imageUrl)
-      attachment.signedUrl = await this.minioService.getSignedUrl(attachment.imageUrl);
-
-    return attachment;
-  }
-
-  async uploadImage(employeeId: string, file: any): Promise<Attachment> {
+  
+  async uploadEmployeeImage(employeeId: string, file: any): Promise<Attachment> {
     if (!file)
       throw new BadRequestException('No image file provided');
 
     const key = await this.minioService.uploadFile(file);
 
-    const existing = await this.em.findOne(Attachment, { entityId: employeeId });
+    const existing = await this.em.findOne(Attachment, {
+      entityId: employeeId,
+      entityType: AttachmentEntityType.EMPLOYEE,
+    });
+
     if (existing) {
       if (existing.imageUrl)
         await this.minioService.deleteFile(existing.imageUrl);
 
       existing.imageUrl = key;
-
       await this.em.flush();
       await this.updateEmployeeImageUrl(employeeId, key);
-
+      
       return this.generateSignedUrl(existing);
     }
 
     const attachment = this.em.create(Attachment, {
       entityId: employeeId,
+      entityType: AttachmentEntityType.EMPLOYEE,
       imageUrl: key,
     });
 
     await this.em.persistAndFlush(attachment);
-
     await this.updateEmployeeImageUrl(employeeId, key);
-
     return this.generateSignedUrl(attachment);
   }
 
 
-  async removeImage(employeeId: string): Promise<{ message: string }> {
-    const attachment = await this.em.findOne(Attachment, { entityId: employeeId });
+  async removeEmployeeImage(employeeId: string): Promise<{ message: string }> {
+    const attachment = await this.em.findOne(Attachment, {
+      entityId: employeeId,
+      entityType: AttachmentEntityType.EMPLOYEE,
+    });
+
     if (!attachment)
       throw new NotFoundException('No image found');
 
@@ -70,10 +62,22 @@ export class AttachmentService {
       await this.minioService.deleteFile(attachment.imageUrl);
 
     await this.em.removeAndFlush(attachment);
-
     await this.updateEmployeeImageUrl(employeeId, null);
 
     return { message: 'Image deleted successfully' };
+  }
+
+
+  async getEmployeeImage(employeeId: string): Promise<Attachment> {
+    const attachment = await this.em.findOne(Attachment, {
+      entityId: employeeId,
+      entityType: AttachmentEntityType.EMPLOYEE,
+    });
+
+    if (!attachment)
+      throw new NotFoundException('No image found');
+
+    return this.generateSignedUrl(attachment);
   }
 
 
@@ -83,5 +87,12 @@ export class AttachmentService {
       employee.imageUrl = imageUrl ?? undefined;
       await this.em.flush();
     }
+  }
+
+
+  private async generateSignedUrl(attachment: Attachment): Promise<Attachment> {
+    if (attachment.imageUrl)
+      attachment.signedUrl = await this.minioService.getSignedUrl(attachment.imageUrl);
+    return attachment;
   }
 }
