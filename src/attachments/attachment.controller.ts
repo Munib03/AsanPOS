@@ -19,6 +19,12 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 export class AttachmentController {
   constructor(private readonly attachmentService: AttachmentService) {}
 
+
+  @Get()
+   getImage(@CurrentUser() user: { id: string }) {
+     return this.attachmentService.getImage(user.id);
+   }
+
   @Put('img')
   @UseInterceptors(ImageUploadInterceptor)
   uploadImage(@CurrentUser() user: { id: string }, @UploadedFile() file: any) {

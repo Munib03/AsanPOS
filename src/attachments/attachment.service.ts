@@ -13,6 +13,14 @@ export class AttachmentService {
   ) {}
 
 
+  async getImage(employeeId: string): Promise<Attachment> {
+   const attachment = await this.em.findOne(Attachment, { entityId: employeeId });
+   if (!attachment)
+    throw new NotFoundException('No image found');
+
+  return this.generateSignedUrl(attachment);
+  }
+
   
   private async generateSignedUrl(attachment: Attachment): Promise<Attachment> {
     if (attachment.imageUrl)
@@ -33,7 +41,7 @@ export class AttachmentService {
         await this.minioService.deleteFile(existing.imageUrl);
 
       existing.imageUrl = key;
-      
+
       await this.em.flush();
       await this.updateEmployeeImageUrl(employeeId, key);
 
