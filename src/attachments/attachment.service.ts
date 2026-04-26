@@ -33,8 +33,8 @@ export class AttachmentService {
         await this.minioService.deleteFile(existing.imageUrl);
 
       existing.imageUrl = key;
+      
       await this.em.flush();
-
       await this.updateEmployeeImageUrl(employeeId, key);
 
       return this.generateSignedUrl(existing);
