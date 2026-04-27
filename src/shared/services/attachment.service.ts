@@ -36,22 +36,12 @@ export class AttachmentService {
   async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
 
-    const existing = await this.em.findOne(Attachment, {
-      entityId,
-      entityType,
-      claimedAt: { $ne: null },
-    });
-
-    if (existing) {
-      if (existing.imageUrl)
-        await this.minioService.deleteFile(existing.imageUrl);
-      await this.em.removeAndFlush(existing);
-    }
 
     attachment.entityId = entityId;
     attachment.claimedAt = new Date();
     await this.em.flush();
 
+    // Remove this later for now it is ok
     if (entityType === AttachmentEntityType.EMPLOYEE) {
       const employee = await this.em.findOne(Employee, { id: entityId });
       if (employee) {
@@ -66,25 +56,6 @@ export class AttachmentService {
     return attachment;
   }
 
-
-  async deleteAttachment(entityId: string, entityType: AttachmentEntityType): Promise<{ message: string }> {
-    const attachment = await this.em.findOne(Attachment, {
-      entityId,
-      entityType,
-      claimedAt: { $ne: null },
-    });
-
-    if (!attachment)
-      throw new UnprocessableEntityException('Attachment not found');
-
-    if (attachment.imageUrl)
-      await this.minioService.deleteFile(attachment.imageUrl);
-
-    await this.em.removeAndFlush(attachment);
-    
-    return { message: 'Attachment deleted successfully' };
-  }
-  
 
   async getAttachment(id: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.em.findOne(Attachment, {

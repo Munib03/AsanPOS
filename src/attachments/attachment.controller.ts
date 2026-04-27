@@ -29,10 +29,4 @@ export class AttachmentController {
   ) {
     return this.attachmentService.claimAttachment(body.id, user.id, AttachmentEntityType.EMPLOYEE);
   }
-
-
-  @Delete('employee')
-  deleteEmployeeAttachment(@CurrentUser() user: { id: string }) {
-    return this.attachmentService.deleteAttachment(user.id, AttachmentEntityType.EMPLOYEE);
-  }
 }
