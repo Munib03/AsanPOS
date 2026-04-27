@@ -15,6 +15,7 @@ import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
+import { MinioService } from '../shared/services/minio.service';
 
 
 
@@ -24,6 +25,8 @@ export class AuthService {
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
     private readonly queueService: QueueService,
+    private readonly minioService: MinioService,
+    
     @Inject(CACHE_MANAGER)
     private readonly cacheManager
   ) { }
@@ -248,6 +251,15 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
+    let signedImageUrl: string | null = null;
+    if (employee.imageUrl) {
+      try {
+        signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
+      } catch {
+        signedImageUrl = null;
+      }
+    }
+
     return {
       id: employee.id,
       email: employee.email,
@@ -256,11 +268,12 @@ export class AuthService {
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
       role: employee.role ?? null,
-      imageUrl: employee.imageUrl ?? null,
+      imageUrl: signedImageUrl,
       dob: employee.dob ?? null,
       gender: employee.gender ?? null,
       storeName: employee.store?.name ?? null,
       createdAt: employee.createdAt ?? null,
     };
   }
+
 }

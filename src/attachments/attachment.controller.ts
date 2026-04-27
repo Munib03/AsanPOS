@@ -31,11 +31,6 @@ export class AttachmentController {
   }
 
 
-  @Get('employee')
-  getEmployeeAttachment(@CurrentUser() user: { id: string }) {
-    return this.attachmentService.getClaimedAttachment(user.id, AttachmentEntityType.EMPLOYEE);
-  }
-
   @Delete('employee')
   deleteEmployeeAttachment(@CurrentUser() user: { id: string }) {
     return this.attachmentService.deleteAttachment(user.id, AttachmentEntityType.EMPLOYEE);

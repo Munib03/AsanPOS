@@ -50,4 +50,5 @@ export class Employee {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
   updatedAt?: Date;
+
 }
