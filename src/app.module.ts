@@ -12,6 +12,7 @@ import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
 import { AttachmentModule } from './attachments/attachment.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -22,7 +23,7 @@ import { AttachmentModule } from './attachments/attachment.module';
     AuthModule,
     SharedModule,
     CategoryModule,
-    AttachmentModule
+    AttachmentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

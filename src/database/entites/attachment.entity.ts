@@ -11,13 +11,13 @@ export class Attachment {
   @Property({ nullable: true })
   imageUrl?: string;
 
-  @Property({ type: 'uuid' })
-  entityId!: string;
+  @Property({ type: 'uuid', nullable: true })
+  entityId?: string;
 
   @Property({ type: 'string', nullable: false })
   entityType!: AttachmentEntityType;
 
-  @Property({ nullable: true })
+  @Property({ nullable: true, fieldName: "claimed_at" })
   claimedAt?: Date;
   
   @Property({ defaultRaw: 'now()', nullable: true })
