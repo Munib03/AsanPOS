@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
+
 export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()

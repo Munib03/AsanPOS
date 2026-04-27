@@ -36,7 +36,7 @@ export class Employee {
   @Property({ nullable: true })
   lastName?: string;
 
-  // @OnLoad()
+  // @OnLoad()           
   // async loadPresignedUrl(){
   //   if(this.imageUrl){
   //     this.imageUrl = await this.minioService.getSignedUrl(this.imageUrl)

@@ -73,7 +73,9 @@ export class EmployeeService {
   }
 
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
-    if (!dto) return { message: 'No changes to update' };
+    if (!dto) 
+      return { message: 'No changes to update' };
+   
     const employee = await this.em.findOne(
       Employee,
       { id },

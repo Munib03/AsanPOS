@@ -32,7 +32,6 @@ export class AttachmentService {
   }
   
   
-  
   async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
 
@@ -40,6 +39,9 @@ export class AttachmentService {
     attachment.entityId = entityId;
     attachment.claimedAt = new Date();
     await this.em.flush();
+
+
+
 
     // Remove this later for now it is ok
     if (entityType === AttachmentEntityType.EMPLOYEE) {
@@ -49,6 +51,11 @@ export class AttachmentService {
         await this.em.flush();
       }
     }
+    // -----------------------------------------------------
+
+
+
+
 
     if (attachment.imageUrl)
       attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
