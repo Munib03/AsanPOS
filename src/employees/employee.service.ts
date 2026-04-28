@@ -14,12 +14,14 @@ import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+import { AttachmentService } from '../shared/services/attachment.service';
 
 @Injectable()
 export class EmployeeService {
   constructor(
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
+    private readonly attachmentService: AttachmentService
   ) {}
 
   async findAll() {
@@ -62,6 +64,7 @@ export class EmployeeService {
     };
   }
 
+  
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -71,6 +74,7 @@ export class EmployeeService {
 
     return { message: `Employee ${id} deleted successfully` };
   }
+
 
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
     if (!dto) 

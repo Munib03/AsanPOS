@@ -56,4 +56,5 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsEnum(EmployeeGender)
   gender?: EmployeeGender;
+
 }
