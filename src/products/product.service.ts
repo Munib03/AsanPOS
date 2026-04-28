@@ -21,39 +21,8 @@ export class ProductService {
   ) {}
 
 
-  private async getSignedImageUrl(productId: string): Promise<string | null> {
-      const attachment = await this.em.findOne(Attachment, {
-        entityId: productId,
-        entityType: AttachmentEntityType.PRODUCT,
-      });
-
-      console.log("Signed url is this: " + attachment?.imageUrl);
-
-      if (!attachment?.imageUrl) 
-        return null;
-
-      console.log("Signed url is this: " + attachment.imageUrl);
-      return await this.minioService.getSignedUrl(attachment.imageUrl);
-  }
-
-
-  private async formatProduct(product: Product) {
-    const imageUrl = await this.getSignedImageUrl(product.id);
-    return {
-      id: product.id,
-      name: product.name ?? null,
-      scannerId: product.scannerId ?? null,
-      price: product.price ?? null,
-      categories: product.categories.isInitialized()
-        ? product.categories.getItems().map(c => ({ id: c.id, name: c.name }))
-        : [],
-      imageUrl,
-      createdAt: product.createdAt ?? null,
-      updatedAt: product.updatedAt ?? null,
-    };
-  }
-
-
+  
+  
   async findAll(store: Store) {
     const categories = await this.em.findAll(Category, {
       where: { store },
@@ -155,5 +124,38 @@ export class ProductService {
     await this.em.removeAndFlush(product);
     return { message: `Product ${id} deleted successfully` };
   }
+  
 
+  
+  private async getSignedImageUrl(productId: string): Promise<string | null> {
+      try {
+        const attachment = await this.em.findOne(Attachment, {
+          entityId: productId,
+          entityType: AttachmentEntityType.PRODUCT,
+          claimedAt: { $ne: null },
+        });
+        if (attachment?.imageUrl)
+          return await this.minioService.getSignedUrl(attachment.imageUrl);
+        return null;
+      } catch {
+        return null;
+      }
+  }
+
+
+  private async formatProduct(product: Product) {
+    const imageUrl = await this.getSignedImageUrl(product.id);
+    return {
+      id: product.id,
+      name: product.name ?? null,
+      scannerId: product.scannerId ?? null,
+      price: product.price ?? null,
+      categories: product.categories.isInitialized()
+        ? product.categories.getItems().map(c => ({ id: c.id, name: c.name }))
+        : [],
+      imageUrl,
+      createdAt: product.createdAt ?? null,
+      updatedAt: product.updatedAt ?? null,
+    };
+  }
 }
