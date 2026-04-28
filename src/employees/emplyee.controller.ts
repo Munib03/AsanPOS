@@ -26,7 +26,7 @@ export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
     private readonly minioService: MinioService,
-    private readonly attachmentService: AttachmentService
+    private readonly attachmentService: AttachmentService,
   ) {}
 
   @Get()
@@ -60,25 +60,34 @@ export class EmployeeController {
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
   }
+  @UseGuards(JwtAuthGuard)
+  @Post('upload')
+  @UseInterceptors(ImageUploadInterceptor)
+  uploadEmployeeImage(@UploadedFile() file: any) {
+    return this.attachmentService.createAttachment(
+      AttachmentEntityType.EMPLOYEE,
+      file,
+    );
+  }
+  @UseGuards(JwtAuthGuard)
+  @Get('check')
+  checkAttachment(@Body() body: { id: string }) {
+    return this.attachmentService.getAttachment(
+      body.id,
+      AttachmentEntityType.EMPLOYEE,
+    );
+  }
 
-    @Post('upload')
-    @UseInterceptors(ImageUploadInterceptor)
-    uploadEmployeeImage(@UploadedFile() file: any) {
-      return this.attachmentService.createAttachment(AttachmentEntityType.EMPLOYEE, file);
-    }
-  
-    @Get('check')
-    checkAttachment(@Body() body: { id: string }) {
-      return this.attachmentService.getAttachment(body.id, AttachmentEntityType.EMPLOYEE);
-    }
-  
   @Post('claim')
   @UseGuards(JwtAuthGuard)
   claimEmployeeAttachment(
     @CurrentUser() user: { id: string },
     @Body() body: { id: string },
   ) {
-    return this.attachmentService.claimAttachment(body.id, user.id, AttachmentEntityType.EMPLOYEE);
+    return this.attachmentService.claimAttachment(
+      body.id,
+      user.id,
+      AttachmentEntityType.EMPLOYEE,
+    );
   }
-
 }
