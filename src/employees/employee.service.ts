@@ -87,12 +87,11 @@ export class EmployeeService {
 
     if (dto.password) {
       if (!dto.oldPassword)
-        throw new BadRequestException(
-          'Old password is required to change password',
-        );
+        throw new BadRequestException('Old password is required to change password');
 
       const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
-      if (!isMatch) throw new BadRequestException('Old password is incorrect');
+      if (!isMatch) 
+        throw new BadRequestException('Old password is incorrect');
 
       dto.password = await bcrypt.hash(dto.password, 10);
     }

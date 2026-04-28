@@ -1,16 +1,10 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
-import { MinioService } from '../../shared/services/minio.service';
-
 
 @Entity({ tableName: 'employees' })
 export class Employee {
-
-  constructor(
-    private minioService: MinioService
-  ) {}
 
   @PrimaryKey({ type: 'uuid' })
   id: string = uuidv4();
@@ -36,13 +30,6 @@ export class Employee {
   @Property({ nullable: true })
   lastName?: string;
 
-  // @OnLoad()           
-  // async loadPresignedUrl(){
-  //   if(this.imageUrl){
-  //     this.imageUrl = await this.minioService.getSignedUrl(this.imageUrl)
-  //   }
-  // }
-
   @Property({ nullable: true })
   imageUrl?: string;
 
@@ -63,5 +50,4 @@ export class Employee {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
   updatedAt?: Date;
-
 }

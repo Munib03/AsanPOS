@@ -9,7 +9,6 @@ import { Category } from './database/entites/category.entity';
 import { Product } from './database/entites/product.entity';
 import { Attachment } from './database/entites/attachment.entity';
 
-
 const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,
   host: process.env.DB_HOST,
@@ -19,12 +18,10 @@ const config: Options<PostgreSqlDriver> = {
   dbName: process.env.DB_NAME,
   entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, Product, Attachment],
   migrations: {
-    path: './src/migrations',
+    path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',
   },
   debug: true,
 };
 
 export default config;
-
-
