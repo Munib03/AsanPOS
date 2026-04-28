@@ -20,8 +20,6 @@ export class ProductService {
     private readonly attachmentService: AttachmentService
   ) {}
 
-
-  
   
   async findAll(store: Store) {
     const categories = await this.em.findAll(Category, {
@@ -38,24 +36,8 @@ export class ProductService {
     }
 
     const products = Array.from(productSet.values());
+    
     return Promise.all(products.map(p => this.formatProduct(p)));
-  }
-
-
-  async findOne(store: Store, id: string) {
-    const product = await this.em.findOne(Product, { id }, { populate: ['categories'] });
-    if (!product)
-      throw new NotFoundException(`Product with id ${id} not found`);
-
-    const belongsToStore = product.categories.getItems().some(c => {
-      const cat = c as any;
-      return cat.store?.id === store.id || cat.store === store.id;
-    });
-
-    if (!belongsToStore)
-      throw new NotFoundException(`Product with id ${id} not found`);
-
-    return this.formatProduct(product);
   }
 
 
@@ -80,6 +62,7 @@ export class ProductService {
 
     return this.formatProduct(product);
   }
+
 
   async update(store: Store, id: string, dto: UpdateProductDto) {
     const product = await this.em.findOne(Product, { id }, { populate: ['categories'] });
@@ -109,7 +92,6 @@ export class ProductService {
     if (!product)
       throw new NotFoundException(`Product with id ${id} not found`);
 
-    // delete attachment if exists
     const attachment = await this.em.findOne(Attachment, {
       entityId: id,
       entityType: AttachmentEntityType.PRODUCT,
@@ -126,7 +108,7 @@ export class ProductService {
   }
   
 
-  
+
   private async getSignedImageUrl(productId: string): Promise<string | null> {
       try {
         const attachment = await this.em.findOne(Attachment, {

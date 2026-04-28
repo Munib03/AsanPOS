@@ -23,14 +23,7 @@ export class ProductController {
     return this.productService.findAll(store);
   }
 
-  @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
-    return this.productService.findOne(store, id);
-  }
-
+  
   @Post()
   create(
     @CurrentStore() store: Store,
@@ -62,7 +55,7 @@ export class ProductController {
   uploadProductImage(@UploadedFile() file: any) {
     return this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file);
   }
-  
+
 
   @Post('claim')
   claimProductAttachment(@Body() body: { id: string; productId: string }) {
