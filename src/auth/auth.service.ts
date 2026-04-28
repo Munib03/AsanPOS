@@ -16,6 +16,7 @@ import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 import { MinioService } from '../shared/services/minio.service';
+import { Attachment } from '../database/entites/attachment.entity';
 
 
 

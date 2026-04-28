@@ -81,4 +81,25 @@ export class AttachmentService {
   async presignedUrl(key: string): Promise<string> {
     return this.minioService.getSignedUrl(key);
   }
+
+
+  async getAttachmentByEntity(
+  entityId: string,
+  entityType: AttachmentEntityType,
+): Promise<Attachment> {
+  const attachment = await this.em.findOne(Attachment, {
+    entityId,
+    entityType,
+  });
+
+  if (!attachment) {
+    throw new UnprocessableEntityException('Attachment not found');
+  }
+
+  if (attachment.imageUrl) {
+    attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
+  }
+
+  return attachment;
+}
 }

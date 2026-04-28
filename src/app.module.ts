@@ -11,6 +11,7 @@ import { QueueModule } from './queue/queue.module';
 import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
 import { AttachmentModule } from './attachments/attachment.module';
+import { ProductModule } from './products/product.module';
 
 
 @Module({
@@ -24,6 +25,7 @@ import { AttachmentModule } from './attachments/attachment.module';
     SharedModule,
     CategoryModule,
     AttachmentModule,
+    ProductModule
   ],
   controllers: [AppController],
   providers: [AppService],

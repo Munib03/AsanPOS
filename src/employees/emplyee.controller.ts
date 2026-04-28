@@ -18,12 +18,15 @@ import { MinioService } from '../shared/services/minio.service';
 import { VerifyDto } from './dto/verify.dto';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import { use } from 'passport';
+import { AttachmentService } from '../shared/services/attachment.service';
+import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
 @Controller('employees')
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
     private readonly minioService: MinioService,
+    private readonly attachmentService: AttachmentService
   ) {}
 
   @Get()
@@ -57,4 +60,25 @@ export class EmployeeController {
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
   }
+
+    @Post('upload')
+    @UseInterceptors(ImageUploadInterceptor)
+    uploadEmployeeImage(@UploadedFile() file: any) {
+      return this.attachmentService.createAttachment(AttachmentEntityType.EMPLOYEE, file);
+    }
+  
+    @Get('check')
+    checkAttachment(@Body() body: { id: string }) {
+      return this.attachmentService.getAttachment(body.id, AttachmentEntityType.EMPLOYEE);
+    }
+  
+  @Post('claim')
+  @UseGuards(JwtAuthGuard)
+  claimEmployeeAttachment(
+    @CurrentUser() user: { id: string },
+    @Body() body: { id: string },
+  ) {
+    return this.attachmentService.claimAttachment(body.id, user.id, AttachmentEntityType.EMPLOYEE);
+  }
+
 }
