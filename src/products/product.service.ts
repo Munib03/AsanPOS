@@ -22,7 +22,7 @@ export class ProductService {
   async findAll(store: Store) {
     const categories = await this.em.findAll(Category, {
       where: { store },
-      populate: ['products'],
+      populate: ['products', 'products.categories'],
     });
 
     const productSet = new Map<string, Product>();
@@ -35,7 +35,7 @@ export class ProductService {
 
     const products = Array.from(productSet.values());
     
-    return products;
+    return Promise.all(products.map(p => this.formatProduct(p)));
   }
 
 
@@ -58,7 +58,7 @@ export class ProductService {
 
     await this.em.persistAndFlush(product);
 
-    return product;
+    return this.formatProduct(product);
   }
 
 
@@ -81,8 +81,7 @@ export class ProductService {
     }
 
     await this.em.flush();
-
-    return product;
+    return this.formatProduct(product);
   }
 
 
@@ -121,5 +120,20 @@ export class ProductService {
       } catch {
         return null;
       }
+  }
+
+
+  private async formatProduct(product: Product) {
+    const imageUrl = await this.getSignedImageUrl(product.id);
+    return {
+      id: product.id,
+      name: product.name ?? null,
+      scannerId: product.scannerId ?? null,
+      price: product.price ?? null,
+      categories: product.categories.isInitialized()
+        ? product.categories.getItems().map(c => ({ id: c.id, name: c.name }))
+        : [],
+      imageUrl,
+    };
   }
 }
