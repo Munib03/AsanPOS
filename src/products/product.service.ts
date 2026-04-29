@@ -58,7 +58,7 @@ export class ProductService {
 
     await this.em.persistAndFlush(product);
 
-    return this.formatProduct(product);
+    return product;
   }
 
 
@@ -81,7 +81,8 @@ export class ProductService {
     }
 
     await this.em.flush();
-    return this.formatProduct(product);
+
+    return product;
   }
 
 
@@ -120,22 +121,5 @@ export class ProductService {
       } catch {
         return null;
       }
-  }
-
-
-  private async formatProduct(product: Product) {
-    const imageUrl = await this.getSignedImageUrl(product.id);
-    return {
-      id: product.id,
-      name: product.name ?? null,
-      scannerId: product.scannerId ?? null,
-      price: product.price ?? null,
-      categories: product.categories.isInitialized()
-        ? product.categories.getItems().map(c => ({ id: c.id, name: c.name }))
-        : [],
-      imageUrl,
-      createdAt: product.createdAt ?? null,
-      updatedAt: product.updatedAt ?? null,
-    };
   }
 }

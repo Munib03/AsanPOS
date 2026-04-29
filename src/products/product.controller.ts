@@ -8,7 +8,7 @@ import { Store } from '../database/entites/store.entity';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { AttachmentService } from '../shared/services/attachment.service';
-import { CurrentUser } from '../shared/decorators/current-user.decorator';
+
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)

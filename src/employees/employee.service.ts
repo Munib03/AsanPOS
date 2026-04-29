@@ -16,13 +16,15 @@ import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { AttachmentService } from '../shared/services/attachment.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
+import { MinioService } from '../shared/services/minio.service';
 
 @Injectable()
 export class EmployeeService {
   constructor(
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
-    private readonly attachmentService: AttachmentService
+    private readonly attachmentService: AttachmentService,
+    private readonly minioService: MinioService
   ) {}
 
   async findAll() {
@@ -39,6 +41,38 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with id ${id} not found`);
     return employee;
   }
+
+
+  async getMe(id: string) {
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    let signedImageUrl: string | null = null;
+    if (employee.imageUrl) {
+      try {
+        signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
+      } catch {
+        signedImageUrl = null;
+      }
+    }
+
+    return {
+      id: employee.id,
+      email: employee.email,
+      name: employee.name,
+      firstName: employee.firstName ?? null,
+      lastName: employee.lastName ?? null,
+      phone: employee.phone ?? null,
+      role: employee.role ?? null,
+      imageUrl: signedImageUrl,
+      dob: employee.dob ?? null,
+      gender: employee.gender ?? null,
+      storeName: employee.store?.name ?? null,
+      createdAt: employee.createdAt ?? null,
+    };
+  }
+
 
   async create(dto: CreateEmployeeDto) {
     const store = await this.em.findOne(Store, { name: dto.storeName });

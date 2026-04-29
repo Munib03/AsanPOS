@@ -46,6 +46,14 @@ export class EmployeeController {
     return this.employeeService.remove(user.id);
   }
 
+    
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@CurrentUser() user: { id: string; email: string }) {
+    return this.employeeService.getMe(user.id);
+  }
+  
+
   @UseGuards(JwtAuthGuard)
   @Put('info')
   async updateEmployeeInfo(

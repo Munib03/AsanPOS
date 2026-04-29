@@ -1,14 +1,9 @@
 import {
   Controller,
-  Get,
   Post,
   Body,
   Delete,
   UseGuards,
-  Put,
-  UseInterceptors,
-  BadRequestException,
-  UploadedFile,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -30,12 +25,6 @@ export class AuthController {
   @Post('verify-register')
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.getMe(user.id);
   }
 
 
