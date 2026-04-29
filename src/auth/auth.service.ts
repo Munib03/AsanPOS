@@ -252,14 +252,14 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    let signedImageUrl: string | null = null;
-    if (employee.imageUrl) {
-      try {
-        signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
-      } catch {
-        signedImageUrl = null;
-      }
-    }
+    // let signedImageUrl: string | null = null;
+    // if (employee.imageUrl) {
+    //   try {
+    //     signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
+    //   } catch {
+    //     signedImageUrl = null;
+    //   }
+    // }
 
     return {
       id: employee.id,
@@ -269,7 +269,7 @@ export class AuthService {
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
       role: employee.role ?? null,
-      imageUrl: signedImageUrl,
+      imageUrl: employee.imageUrl,
       dob: employee.dob ?? null,
       gender: employee.gender ?? null,
       storeName: employee.store?.name ?? null,

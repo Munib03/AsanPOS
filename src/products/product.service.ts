@@ -125,6 +125,7 @@ export class ProductService {
 
   private async formatProduct(product: Product) {
     const imageUrl = await this.getSignedImageUrl(product.id);
+
     return {
       id: product.id,
       name: product.name ?? null,

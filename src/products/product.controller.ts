@@ -32,6 +32,7 @@ export class ProductController {
     return this.productService.create(store, dto);
   }
 
+
   @Put(':id')
   update(
     @CurrentStore() store: Store,
@@ -41,6 +42,7 @@ export class ProductController {
     return this.productService.update(store, id, dto);
   }
 
+  
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,

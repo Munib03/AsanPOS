@@ -1,7 +1,8 @@
-import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core';
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
+import { getNiceSignedUrl } from '../../shared/a';
 
 @Entity({ tableName: 'employees' })
 export class Employee {
@@ -32,6 +33,13 @@ export class Employee {
 
   @Property({ nullable: true })
   imageUrl?: string;
+
+  @OnLoad()
+  async loadImage() {
+    if (this.imageUrl) {
+      this.imageUrl = await getNiceSignedUrl(this.imageUrl);
+    }
+  }
 
   @Property({ nullable: true })
   dob?: Date;
