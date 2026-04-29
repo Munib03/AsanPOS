@@ -84,10 +84,9 @@ export class EmployeeController {
     @CurrentUser() user: { id: string },
     @Body() body: { id: string },
   ) {
-    return this.attachmentService.claimAttachment(
-      body.id,
+    return this.employeeService.claimEmployeeAttachment(
       user.id,
-      AttachmentEntityType.EMPLOYEE,
+      body.id,
     );
   }
 }

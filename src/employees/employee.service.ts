@@ -15,6 +15,7 @@ import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { AttachmentService } from '../shared/services/attachment.service';
+import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
 @Injectable()
 export class EmployeeService {
@@ -199,6 +200,29 @@ export class EmployeeService {
     return {
       message: 'Email updated successfully',
       employee_id: employee.id,
+    };
+  }
+
+
+  async claimEmployeeAttachment(employeeId: string, attachmentId: string) {
+    const attachment = await this.attachmentService.claimAttachment(
+      attachmentId,
+      employeeId,
+      AttachmentEntityType.EMPLOYEE,
+    );
+
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+
+    if (!employee)
+      throw new NotFoundException(`Employee with id ${employeeId} not found`);
+
+    employee.imageUrl = attachment.imageUrl;
+
+    await this.em.flush();
+
+    return {
+      message: 'Attachment claimed successfully',
+      attachment,
     };
   }
 }

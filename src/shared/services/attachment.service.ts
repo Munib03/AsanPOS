@@ -40,23 +40,6 @@ export class AttachmentService {
     attachment.claimedAt = new Date();
     await this.em.flush();
 
-
-
-
-    // Remove this later for now it is ok
-    if (entityType === AttachmentEntityType.EMPLOYEE) {
-      const employee = await this.em.findOne(Employee, { id: entityId });
-      if (employee) {
-        employee.imageUrl = attachment.imageUrl;
-        await this.em.flush();
-      }
-    }
-    // -----------------------------------------------------
-
-
-
-
-
     if (attachment.imageUrl)
       attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
 
@@ -82,24 +65,4 @@ export class AttachmentService {
     return this.minioService.getSignedUrl(key);
   }
 
-
-  async getAttachmentByEntity(
-  entityId: string,
-  entityType: AttachmentEntityType,
-): Promise<Attachment> {
-  const attachment = await this.em.findOne(Attachment, {
-    entityId,
-    entityType,
-  });
-
-  if (!attachment) {
-    throw new UnprocessableEntityException('Attachment not found');
-  }
-
-  if (attachment.imageUrl) {
-    attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
-  }
-
-  return attachment;
-}
 }
