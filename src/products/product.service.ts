@@ -9,7 +9,6 @@ import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enu
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { AttachmentService } from '../shared/services/attachment.service';
 
 
 @Injectable()
@@ -17,7 +16,6 @@ export class ProductService {
   constructor(
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
-    private readonly attachmentService: AttachmentService
   ) {}
 
   
@@ -37,7 +35,7 @@ export class ProductService {
 
     const products = Array.from(productSet.values());
     
-    return Promise.all(products.map(p => this.formatProduct(p)));
+    return products;
   }
 
 

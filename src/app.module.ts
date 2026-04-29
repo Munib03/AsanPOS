@@ -10,7 +10,6 @@ import { ConfigModule } from '@nestjs/config';
 import { QueueModule } from './queue/queue.module';  
 import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
-import { AttachmentModule } from './attachments/attachment.module';
 import { ProductModule } from './products/product.module';
 
 
@@ -24,7 +23,6 @@ import { ProductModule } from './products/product.module';
     AuthModule,
     SharedModule,
     CategoryModule,
-    AttachmentModule,
     ProductModule
   ],
   controllers: [AppController],

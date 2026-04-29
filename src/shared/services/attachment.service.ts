@@ -3,7 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { Attachment } from '../../database/entites/attachment.entity';
 import { MinioService } from './minio.service';
 import { AttachmentEntityType } from '../utils/attachment-entity-type.enum';
-import { Employee } from '../../database/entites/employee.entity';
+
 
 @Injectable()
 export class AttachmentService {
