@@ -34,14 +34,15 @@ export class Employee {
   @Property({ nullable: true })
   imageUrl?: string;
 
-  imageUrlSigned?: string;
 
+  imageUrlSigned?: string;
   @OnLoad()
   async loadImage() {
     if (this.imageUrl) {
       this.imageUrlSigned = await getNiceSignedUrl(this.imageUrl);
     }
   }
+
 
   @Property({ nullable: true })
   dob?: Date;
