@@ -2,7 +2,9 @@ import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
-import { getNiceSignedUrl } from '../../shared/a';
+import { getNiceSignedUrl } from '../../shared/utils/get.sgned.url';
+
+
 
 @Entity({ tableName: 'employees' })
 export class Employee {
@@ -37,7 +39,7 @@ export class Employee {
 
   @Property({ persist: false})
   imageUrlSigned?: string;
-  
+
   @OnLoad()
   async loadImage() {
     if (this.imageUrl) {

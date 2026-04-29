@@ -14,19 +14,13 @@ import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { EmployeeService } from './employee.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { MinioService } from '../shared/services/minio.service';
 import { VerifyDto } from './dto/verify.dto';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
-import { use } from 'passport';
-import { AttachmentService } from '../shared/services/attachment.service';
-import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
 @Controller('employees')
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
-    private readonly minioService: MinioService,
-    private readonly attachmentService: AttachmentService,
   ) {}
 
   @Get()
@@ -63,28 +57,32 @@ export class EmployeeController {
     return this.employeeService.updateEmployeeInfo(user.id, dto);
   }
 
+
   @UseGuards(JwtAuthGuard)
   @Post('verify-updated-email')
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
   }
+
+
   @UseGuards(JwtAuthGuard)
   @Post('upload')
   @UseInterceptors(ImageUploadInterceptor)
   uploadEmployeeImage(@UploadedFile() file: any) {
-    return this.attachmentService.createAttachment(
-      AttachmentEntityType.EMPLOYEE,
-      file,
+    return this.employeeService.createEmployeeAttachment(
+      file
     );
   }
+
+
   @UseGuards(JwtAuthGuard)
   @Get('check')
   checkAttachment(@Body() body: { id: string }) {
-    return this.attachmentService.getAttachment(
+    return this.employeeService.getEmployeeAttachment(
       body.id,
-      AttachmentEntityType.EMPLOYEE,
     );
   }
+
 
   @Post('claim')
   @UseGuards(JwtAuthGuard)

@@ -28,7 +28,7 @@ export class EmployeeService {
   ) {}
 
   async findAll() {
-    return this.em.findAll(Employee, { exclude: ['password'] });
+    return this.em.findAll(Employee, { exclude: ['password', "createdAt", "updatedAt", "store" ] });
   }
 
   async findOne(id: string) {
@@ -41,37 +41,6 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with id ${id} not found`);
     return employee;
   }
-
-
-  // async getMe(id: string) {
-  //   const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
-  //   if (!employee)
-  //     throw new NotFoundException('Employee not found');
-
-  //   let signedImageUrl: string | null = null;
-  //   if (employee.imageUrl) {
-  //     try {
-  //       signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
-  //     } catch {
-  //       signedImageUrl = null;
-  //     }
-  //   }
-
-  //   return {
-  //     id: employee.id,
-  //     email: employee.email,
-  //     name: employee.name,
-  //     firstName: employee.firstName ?? null,
-  //     lastName: employee.lastName ?? null,
-  //     phone: employee.phone ?? null,
-  //     role: employee.role ?? null,
-  //     imageUrl: signedImageUrl,
-  //     dob: employee.dob ?? null,
-  //     gender: employee.gender ?? null,
-  //     storeName: employee.store?.name ?? null,
-  //     createdAt: employee.createdAt ?? null,
-  //   };
-  // }
 
 
   async create(dto: CreateEmployeeDto) {
@@ -202,6 +171,7 @@ export class EmployeeService {
       phone: employee.phone,
     };
   }
+  
 
   async verifyUpdatedEmail(dto: VerifyDto) {
     const securityAction = await this.em.findOne(
@@ -235,6 +205,22 @@ export class EmployeeService {
       message: 'Email updated successfully',
       employee_id: employee.id,
     };
+  }
+
+
+  async createEmployeeAttachment(file: any) {
+    return this.attachmentService.createAttachment(
+      AttachmentEntityType.EMPLOYEE,
+      file,
+    );
+  }
+
+
+  async getEmployeeAttachment(id: string) {
+    return this.attachmentService.getAttachment(
+      id,
+      AttachmentEntityType.EMPLOYEE,
+    );
   }
 
 
