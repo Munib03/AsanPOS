@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { Category } from '../database/entites/category.entity';
 import { Attachment } from '../database/entites/attachment.entity';
@@ -23,19 +23,15 @@ export class ProductService {
     const categories = await this.em.findAll(Category, {
       where: { store },
       populate: ['products', 'products.categories'],
+      fields : []
     });
 
-    const productSet = new Map<string, Product>();
-    for (const category of categories) {
-      for (const product of category.products.getItems()) {
-        if (!productSet.has(product.id))
-          productSet.set(product.id, product);
-      }
-    }
+    // serialize
+    // wrap
 
-    const products = Array.from(productSet.values());
-    
-    return Promise.all(products.map(p => this.formatProduct(p)));
+    return serialize(categories,{
+      populate : ['products', 'products.categories'],
+    })
   }
 
 
@@ -58,7 +54,7 @@ export class ProductService {
 
     await this.em.persistAndFlush(product);
 
-    return this.formatProduct(product);
+    return wrap(product).toJSON
   }
 
 
@@ -123,6 +119,7 @@ export class ProductService {
   }
 
 
+  // remove this completely and use the 
   private async formatProduct(product: Product) {
     const imageUrl = await this.getSignedImageUrl(product.id);
 

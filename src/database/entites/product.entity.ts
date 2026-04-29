@@ -1,6 +1,7 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from './category.entity';
+import { Store } from './store.entity';
 
 @Entity({ tableName: 'products' })
 export class Product {
@@ -25,4 +26,7 @@ export class Product {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true, fieldName: 'updated_at' })
   updatedAt?: Date;
+
+  // @OneToMany(() => Store)
+  // store! : Store;
 }
