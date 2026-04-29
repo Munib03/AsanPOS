@@ -43,35 +43,35 @@ export class EmployeeService {
   }
 
 
-  async getMe(id: string) {
-    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+  // async getMe(id: string) {
+  //   const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
+  //   if (!employee)
+  //     throw new NotFoundException('Employee not found');
 
-    let signedImageUrl: string | null = null;
-    if (employee.imageUrl) {
-      try {
-        signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
-      } catch {
-        signedImageUrl = null;
-      }
-    }
+  //   let signedImageUrl: string | null = null;
+  //   if (employee.imageUrl) {
+  //     try {
+  //       signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
+  //     } catch {
+  //       signedImageUrl = null;
+  //     }
+  //   }
 
-    return {
-      id: employee.id,
-      email: employee.email,
-      name: employee.name,
-      firstName: employee.firstName ?? null,
-      lastName: employee.lastName ?? null,
-      phone: employee.phone ?? null,
-      role: employee.role ?? null,
-      imageUrl: signedImageUrl,
-      dob: employee.dob ?? null,
-      gender: employee.gender ?? null,
-      storeName: employee.store?.name ?? null,
-      createdAt: employee.createdAt ?? null,
-    };
-  }
+  //   return {
+  //     id: employee.id,
+  //     email: employee.email,
+  //     name: employee.name,
+  //     firstName: employee.firstName ?? null,
+  //     lastName: employee.lastName ?? null,
+  //     phone: employee.phone ?? null,
+  //     role: employee.role ?? null,
+  //     imageUrl: signedImageUrl,
+  //     dob: employee.dob ?? null,
+  //     gender: employee.gender ?? null,
+  //     storeName: employee.store?.name ?? null,
+  //     createdAt: employee.createdAt ?? null,
+  //   };
+  // }
 
 
   async create(dto: CreateEmployeeDto) {

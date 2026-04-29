@@ -47,11 +47,11 @@ export class EmployeeController {
   }
 
     
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.employeeService.getMe(user.id);
-  }
+  // @UseGuards(JwtAuthGuard)
+  // @Get('me')
+  // getMe(@CurrentUser() user: { id: string; email: string }) {
+  //   return this.employeeService.getMe(user.id);
+  // }
   
 
   @UseGuards(JwtAuthGuard)

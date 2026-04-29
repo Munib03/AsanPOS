@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   Delete,
@@ -25,6 +26,12 @@ export class AuthController {
   @Post('verify-register')
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@CurrentUser() user: { id: string; email: string }) {
+    return this.authService.getMe(user.id);
   }
 
 
