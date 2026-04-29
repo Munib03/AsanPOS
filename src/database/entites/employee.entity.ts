@@ -35,7 +35,9 @@ export class Employee {
   imageUrl?: string;
 
 
+  @Property({ persist: false})
   imageUrlSigned?: string;
+  
   @OnLoad()
   async loadImage() {
     if (this.imageUrl) {

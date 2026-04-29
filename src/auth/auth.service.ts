@@ -252,6 +252,15 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
+    // let signedImageUrl: string | null = null;
+    // if (employee.imageUrl) {
+    //   try {
+    //     signedImageUrl = await this.minioService.getSignedUrl(employee.imageUrl);
+    //   } catch {
+    //     signedImageUrl = null;
+    //   }
+    // }
+
     return {
       id: employee.id,
       email: employee.email,
