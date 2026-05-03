@@ -19,7 +19,7 @@ export class ProductController {
   }
 
 
-  @Get('search/by-name')
+  @Get('search/by-name') 
   searchByName(
     @CurrentStore() store: Store,
     @Query('name') name: string,
@@ -48,11 +48,10 @@ export class ProductController {
 
   @Put(':id')
   update(
-    @CurrentStore() store: Store,
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
   ) {
-    return this.productService.update(store, id, dto);
+    return this.productService.update(id, dto);
   }
 
 
@@ -72,21 +71,9 @@ export class ProductController {
   }
 
 
-  @Get('images/check')
-  checkProductImage(@Body() body: { id: string }) {
-    return this.productService.checkProductImage(body.id);
-  }
-
-
   @Post('images/claim')
   claimProductImage(@Body() body: { id: string; productId: string }) {
     return this.productService.claimProductImage(body.id, body.productId);
-  }
-
-
-  @Get(':id/images')
-  getProductImages(@Param('id') id: string) {
-    return this.productService.getProductImages(id);
   }
 
 

@@ -13,8 +13,8 @@ export class UpdateProductDto {
   @IsNumber()
   price?: number;
 
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  categoryIds?: string[];
+  // @IsOptional()
+  // @IsArray()
+  // @IsUUID('4', { each: true })
+  // categoryIds?: string[];
 }

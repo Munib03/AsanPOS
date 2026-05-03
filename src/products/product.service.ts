@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
+import { EntityManager, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
@@ -43,7 +43,7 @@ export class ProductService {
           name: product.name,
           price: product.price,
           images: await Promise.all(
-            product.images.getItems().map(async (img) => ({ 
+            product.images.getItems().map(async (img) => ({
               imageUrlSigned: img.imageUrl
                 ? await getNiceSignedUrl(img.imageUrl)
                 : null,
@@ -62,18 +62,20 @@ export class ProductService {
       populate: ['products', 'products.images'] as never[],
     });
 
+    const query = name.toLowerCase();
     const productSet = new Map<string, Product>();
-    for (const category of categories) {
-      for (const product of category.products.getItems()) {
+
+    categories
+      .flatMap(category => category.products.getItems())
+      .forEach(product => {
         if (
           product.name &&
-          product.name.toLowerCase().includes(name.toLowerCase()) &&
+          product.name.toLowerCase().includes(query) &&
           !productSet.has(product.id)
         ) {
           productSet.set(product.id, product);
         }
-      }
-    }
+      });
 
     return Promise.all(
       Array.from(productSet.values()).map(async (product) => ({
@@ -141,7 +143,7 @@ export class ProductService {
   }
 
 
-  async update(store: Store, id: string, dto: UpdateProductDto) {
+  async update(id: string, dto: UpdateProductDto) {
     const product = await this.em.findOne(
       Product,
       { id },
@@ -157,15 +159,9 @@ export class ProductService {
       price: dto.price,
     }));
 
-    if (dto.categoryIds) {
-      const categories = await this.em.findAll(Category, {
-        where: { id: { $in: dto.categoryIds }, store },
-      });
-      product.categories.set(categories);
-    }
-
     await this.em.flush();
-    return wrap(product).toJSON();
+
+  return { message: `Product with id [${product.id}] updated successfully.`}
   }
 
 
@@ -207,11 +203,6 @@ export class ProductService {
   }
 
 
-  async checkProductImage(id: string): Promise<Attachment> {
-    return this.attachmentService.getAttachment(id, AttachmentEntityType.PRODUCT);
-  }
-
-
   async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
     const product = await this.em.findOne(Product, { id: productId });
     if (!product)
@@ -236,20 +227,6 @@ export class ProductService {
     return productImage;
   }
 
-
-  async getProductImages(productId: string): Promise<ProductImage[]> {
-    const images = await this.em.findAll(ProductImage, {
-      where: { product: { id: productId } },
-    });
-
-    for (const image of images) {
-      if (image.imageUrl)
-        image.imageUrlSigned = await this.minioService.getSignedUrl(image.imageUrl);
-    }
-
-    return images;
-  }
-  
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });
