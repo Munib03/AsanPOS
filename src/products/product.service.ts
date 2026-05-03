@@ -11,6 +11,7 @@ import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enu
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { getNiceSignedUrl } from '../shared/utils/get.sgned.url';
 
 @Injectable()
 export class ProductService {
@@ -24,14 +25,34 @@ export class ProductService {
   async findAll(store: Store) {
     const categories = await this.em.findAll(Category, {
       where: { store },
-      populate: ["products.images"],
+      populate: ['products.images'],
+      fields: [
+        "products.id",
+        'products.name',
+        'products.price',
+        'products.images.imageUrl',
+      ],
     });
 
-    return serialize(categories, {
-      populate: ["products.images"],
-    });
+    return Promise.all(
+      categories.map(async (category) => ({
+        products: await Promise.all(
+          category.products.map(async (product) => ({
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            images: await Promise.all(
+              product.images.map(async (img) => ({
+                imageUrlSigned: img.imageUrl
+                  ? await getNiceSignedUrl(img.imageUrl)
+                  : null,
+              }))
+            ),
+          }))
+        ),
+      }))
+    );
   }
-  
 
   async findOne(store: Store, id: string) {
     const product = await this.em.findOne(
