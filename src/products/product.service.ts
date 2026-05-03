@@ -35,24 +35,24 @@ export class ProductService {
       ],
     });
 
-    return Promise.all(
-      categories.map(async (category) => ({
-        products: await Promise.all(
-          category.products.map(async (product) => ({
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            images: await Promise.all(
-              product.images.map(async (img) => ({
-                imageUrlSigned: img.imageUrl
-                  ? await getNiceSignedUrl(img.imageUrl)
-                  : null,
-              }))
-            ),
-          }))
-        ),
-      }))
+    const products = await Promise.all(
+      categories
+        .flatMap((category) => category.products.getItems())
+        .map(async (product) => ({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          images: await Promise.all(
+            product.images.getItems().map(async (img) => ({ 
+              imageUrlSigned: img.imageUrl
+                ? await getNiceSignedUrl(img.imageUrl)
+                : null,
+            }))
+          ),
+        }))
     );
+
+    return products;
   }
 
 
