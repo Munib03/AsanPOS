@@ -91,7 +91,7 @@ export class ProductService {
     );
   }
 
-  
+
   async searchByCategory(store: Store, categoryName: string) {
     const category = await this.em.findOne(Category, {
       name: { $ilike: `%${categoryName}%` },
@@ -115,27 +115,6 @@ export class ProductService {
         ),
       }))
     );
-  }
-
-
-  async findOne(store: Store, id: string) {
-    const product = await this.em.findOne(
-      Product,
-      { id },
-      { populate: ['categories', 'images'] },
-    );
-
-    if (!product)
-      throw new NotFoundException(`Product with id ${id} not found`);
-
-    const belongsToStore = product.categories.getItems().some(
-      c => (c as any).store?.id === store.id,
-    );
-
-    if (!belongsToStore)
-      throw new NotFoundException(`Product with id ${id} not found`);
-
-    return wrap(product).toJSON();
   }
 
 

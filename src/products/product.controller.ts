@@ -7,6 +7,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 
+
 @Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductController {
@@ -17,6 +18,7 @@ export class ProductController {
     return this.productService.findAll(store);
   }
 
+
   @Get('search/by-name')
   searchByName(
     @CurrentStore() store: Store,
@@ -24,6 +26,7 @@ export class ProductController {
   ) {
     return this.productService.searchByName(store, name);
   }
+
 
   @Get('search/by-category')
   searchByCategory(
@@ -33,13 +36,6 @@ export class ProductController {
     return this.productService.searchByCategory(store, category);
   }
 
-  @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
-    return this.productService.findOne(store, id);
-  }
 
   @Post()
   create(
@@ -48,6 +44,7 @@ export class ProductController {
   ) {
     return this.productService.create(store, dto);
   }
+
 
   @Put(':id')
   update(
@@ -58,6 +55,7 @@ export class ProductController {
     return this.productService.update(store, id, dto);
   }
 
+
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,
@@ -66,26 +64,31 @@ export class ProductController {
     return this.productService.remove(store, id);
   }
 
+
   @Post('images/upload')
   @UseInterceptors(ImageUploadInterceptor)
   uploadProductImage(@UploadedFile() file: any) {
     return this.productService.uploadProductImage(file);
   }
 
+
   @Get('images/check')
   checkProductImage(@Body() body: { id: string }) {
     return this.productService.checkProductImage(body.id);
   }
+
 
   @Post('images/claim')
   claimProductImage(@Body() body: { id: string; productId: string }) {
     return this.productService.claimProductImage(body.id, body.productId);
   }
 
+
   @Get(':id/images')
   getProductImages(@Param('id') id: string) {
     return this.productService.getProductImages(id);
   }
+
 
   @Delete('images/:imageId')
   deleteProductImage(@Param('imageId') imageId: string) {
