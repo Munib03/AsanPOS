@@ -3,32 +3,35 @@ import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
+import { Attachment } from '../database/entites/attachment.entity';
 import { Store } from '../database/entites/store.entity';
 import { MinioService } from '../shared/services/minio.service';
+import { AttachmentService } from '../shared/services/attachment.service';
+import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 
 @Injectable()
 export class ProductService {
   constructor(
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
+    private readonly attachmentService: AttachmentService,
   ) {}
 
 
   async findAll(store: Store) {
     const categories = await this.em.findAll(Category, {
       where: { store },
-      populate: ['products', 'products.images'],
+      populate: ["products.images"],
     });
 
     return serialize(categories, {
-      populate: ['products', 'products.categories', 'products.images'],
+      populate: ["products.images"],
     });
   }
-
+  
 
   async findOne(store: Store, id: string) {
     const product = await this.em.findOne(
@@ -112,10 +115,22 @@ export class ProductService {
     if (!product)
       throw new NotFoundException(`Product with id ${id} not found`);
 
-    // delete all product images from MinIO
     for (const image of product.images.getItems()) {
       if (image.imageUrl)
         await this.minioService.deleteFile(image.imageUrl);
+    }
+
+
+    const attachments = await this.em.findAll(Attachment, {
+      where: {
+        entityId: id,
+        entityType: AttachmentEntityType.PRODUCT,
+      },
+    });
+
+    for (const attachment of attachments) {
+      if (attachment.imageUrl)
+        await this.minioService.deleteFile(attachment.imageUrl);
     }
 
     await this.em.removeAndFlush(product);
@@ -123,53 +138,73 @@ export class ProductService {
   }
 
 
-  // Upload image for a product
-  async uploadProductImage(productId: string, file: any) {
-    if (!file)
-      throw new NotFoundException('No image file provided');
+  async uploadProductImage(file: any): Promise<{ id: string }> {
+    return this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file);
+  }
 
+
+  async checkProductImage(id: string): Promise<Attachment> {
+    return this.attachmentService.getAttachment(id, AttachmentEntityType.PRODUCT);
+  }
+
+
+  async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
     const product = await this.em.findOne(Product, { id: productId });
     if (!product)
       throw new NotFoundException(`Product with id ${productId} not found`);
 
-    const key = await this.minioService.uploadFile(file);
+    const attachment = await this.attachmentService.claimAttachment(
+      attachmentId,
+      productId,
+      AttachmentEntityType.PRODUCT,
+    );
 
     const productImage = this.em.create(ProductImage, {
       product,
-      imageUrl: key,
+      imageUrl: attachment.imageUrl,
     });
 
     await this.em.persistAndFlush(productImage);
 
-    return wrap(productImage).toJSON();
-  }
-
-
-  // Delete a specific product image
-  async deleteProductImage(productId: string, imageId: string) {
-    const productImage = await this.em.findOne(ProductImage, {
-      id: imageId,
-      product: { id: productId },
-    });
-
-    if (!productImage)
-      throw new NotFoundException(`Image not found`);
-
     if (productImage.imageUrl)
-      await this.minioService.deleteFile(productImage.imageUrl);
+      productImage.imageUrlSigned = await this.minioService.getSignedUrl(productImage.imageUrl);
 
-    await this.em.removeAndFlush(productImage);
-
-    return { message: 'Image deleted successfully' };
+    return productImage;
   }
 
-  
-  // Get all images for a product
-  async getProductImages(productId: string) {
+
+  async getProductImages(productId: string): Promise<ProductImage[]> {
     const images = await this.em.findAll(ProductImage, {
       where: { product: { id: productId } },
     });
 
+    for (const image of images) {
+      if (image.imageUrl)
+        image.imageUrlSigned = await this.minioService.getSignedUrl(image.imageUrl);
+    }
+
     return images;
+  }
+  
+
+  async deleteProductImage(imageId: string): Promise<{ message: string }> {
+    const image = await this.em.findOne(ProductImage, { id: imageId });
+    if (!image)
+      throw new NotFoundException('Image not found');
+
+    const attachment = await this.em.findOne(Attachment, {
+      imageUrl: image.imageUrl,
+      entityType: AttachmentEntityType.PRODUCT,
+    });
+
+    if (attachment)
+      await this.em.removeAndFlush(attachment);
+
+    if (image.imageUrl)
+      await this.minioService.deleteFile(image.imageUrl);
+
+    await this.em.removeAndFlush(image);
+
+    return { message: 'Image deleted successfully' };
   }
 }

@@ -12,10 +12,12 @@ import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.inte
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
+
   @Get()
   findAll(@CurrentStore() store: Store) {
     return this.productService.findAll(store);
   }
+
 
   @Get(':id')
   findOne(
@@ -43,7 +45,7 @@ export class ProductController {
   ) {
     return this.productService.update(store, id, dto);
   }
-
+  
 
   @Delete(':id')
   remove(
@@ -54,30 +56,33 @@ export class ProductController {
   }
 
 
-  // Upload image for a product
-  @Post(':id/images')
+  @Post('images/upload')
   @UseInterceptors(ImageUploadInterceptor)
-  uploadProductImage(
-    @Param('id') id: string,
-    @UploadedFile() file: any,
-  ) {
-    return this.productService.uploadProductImage(id, file);
+  uploadProductImage(@UploadedFile() file: any) {
+    return this.productService.uploadProductImage(file);
   }
 
 
-  // Get all images for a product
+  @Get('images/check')
+  checkProductImage(@Body() body: { id: string }) {
+    return this.productService.checkProductImage(body.id);
+  }
+
+
+  @Post('images/claim')
+  claimProductImage(@Body() body: { id: string; productId: string }) {
+    return this.productService.claimProductImage(body.id, body.productId);
+  }
+
+
   @Get(':id/images')
   getProductImages(@Param('id') id: string) {
     return this.productService.getProductImages(id);
   }
 
-  
-  // Delete a specific product image
-  @Delete(':id/images/:imageId')
-  deleteProductImage(
-    @Param('id') id: string,
-    @Param('imageId') imageId: string,
-  ) {
-    return this.productService.deleteProductImage(id, imageId);
+
+  @Delete('images/:imageId')
+  deleteProductImage(@Param('imageId') imageId: string) {
+    return this.productService.deleteProductImage(imageId);
   }
 }
