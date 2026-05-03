@@ -23,7 +23,9 @@ export class ProductService {
   ) {}
 
 
+  
   async findAll(store: Store) {
+    // fix this, dont use the category, use the product directly
     const categories = await this.em.findAll(Category, {
       where: { store },
       populate: ['products.images'],
@@ -35,6 +37,15 @@ export class ProductService {
       ],
     });
 
+    // const productsa = await this.em.findAll(Product,{
+    //   where : {
+    //     store
+    //   },
+    //   populate : ['categories']
+    // })
+
+
+    // Here use the serilize
     const products = await Promise.all(
       categories
         .flatMap((category) => category.products.getItems())
@@ -56,6 +67,7 @@ export class ProductService {
   }
 
 
+  // Here use (pagination and updates that needed for entity, comment in plane)
   async searchByName(store: Store, name: string) {
     const categories = await this.em.findAll(Category, {
       where: { store },
@@ -77,6 +89,7 @@ export class ProductService {
         }
       });
 
+    // Here use the serilize for 1+ and wrap for 1
     return Promise.all(
       Array.from(productSet.values()).map(async (product) => ({
         id: product.id,
@@ -94,6 +107,7 @@ export class ProductService {
   }
 
 
+  // Here use (pagination and updates that needed for entity, comment in plane)
   async searchByCategory(store: Store, categoryName: string) {
     const category = await this.em.findOne(Category, {
       name: { $ilike: `%${categoryName}%` },
@@ -119,6 +133,7 @@ export class ProductService {
     );
   }
 
+  
 
   async create(store: Store, dto: CreateProductDto) {
     const product = this.em.create(Product, stripUndefined({
