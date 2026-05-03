@@ -13,6 +13,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { getNiceSignedUrl } from '../shared/utils/get.sgned.url';
 
+
 @Injectable()
 export class ProductService {
   constructor(
@@ -53,6 +54,69 @@ export class ProductService {
       }))
     );
   }
+
+
+  async searchByName(store: Store, name: string) {
+    const categories = await this.em.findAll(Category, {
+      where: { store },
+      populate: ['products', 'products.images'] as never[],
+    });
+
+    const productSet = new Map<string, Product>();
+    for (const category of categories) {
+      for (const product of category.products.getItems()) {
+        if (
+          product.name &&
+          product.name.toLowerCase().includes(name.toLowerCase()) &&
+          !productSet.has(product.id)
+        ) {
+          productSet.set(product.id, product);
+        }
+      }
+    }
+
+    return Promise.all(
+      Array.from(productSet.values()).map(async (product) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        images: await Promise.all(
+          product.images.getItems().map(async (img) => ({
+            imageUrlSigned: img.imageUrl
+              ? await getNiceSignedUrl(img.imageUrl)
+              : null,
+          }))
+        ),
+      }))
+    );
+  }
+
+  
+  async searchByCategory(store: Store, categoryName: string) {
+    const category = await this.em.findOne(Category, {
+      name: { $ilike: `%${categoryName}%` },
+      store,
+    }, { populate: ['products', 'products.images'] as never[] });
+
+    if (!category)
+      return [];
+
+    return Promise.all(
+      category.products.getItems().map(async (product) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        images: await Promise.all(
+          product.images.getItems().map(async (img) => ({
+            imageUrlSigned: img.imageUrl
+              ? await getNiceSignedUrl(img.imageUrl)
+              : null,
+          }))
+        ),
+      }))
+    );
+  }
+
 
   async findOne(store: Store, id: string) {
     const product = await this.em.findOne(
