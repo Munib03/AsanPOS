@@ -12,7 +12,7 @@ export async function getNiceSignedUrl(
     secretKey: process.env.MINIO_SECRET_KEY!,
   });
 
-  const bucket = process.env.MINIO_BUCKET!;
+  const bucket = process.env.MINIO_BUCKET_NAME!;
 
   const result = await client.presignedGetObject(bucket, key, expiry);
 
