@@ -87,10 +87,12 @@ export class ProductService {
       price: dto.price,
     }));
 
+
     await this.em.flush();
 
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
+
 
 
   async remove(store: Store, id: string) {

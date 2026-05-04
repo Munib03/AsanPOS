@@ -16,7 +16,7 @@ export class Product {
   @Property({ nullable: true, fieldName: 'scanner_id' })
   scannerId?: string;
 
-  @Property({ nullable: true, type: 'decimal' })
+  @Property({ nullable: true, columnType: 'decimal(10,2)'})
   price?: number;
 
   @ManyToMany(() => Category, category => category.products, { owner: true, pivotTable: 'category_product' })
