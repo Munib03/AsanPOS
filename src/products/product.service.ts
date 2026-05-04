@@ -24,6 +24,7 @@ export class ProductService {
     private readonly productRepository: ProductRepository,
   ) {}
 
+
   async findAll(store: Store, query: PaginateQuery = {}) {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
@@ -68,6 +69,7 @@ export class ProductService {
     return wrap(product).toJSON();
   }
 
+
   async update(id: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
       { id },
@@ -88,6 +90,7 @@ export class ProductService {
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
 
+
   async remove(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
@@ -97,10 +100,10 @@ export class ProductService {
       },
     );
 
-    for (const image of product.images.getItems()) {
+    for (const image of product.images.getItems()) 
       if (image.imageUrl)
         await this.minioService.deleteFile(image.imageUrl);
-    }
+    
 
     const attachments = await this.em.findAll(Attachment, {
       where: {
@@ -109,18 +112,20 @@ export class ProductService {
       },
     });
 
-    for (const attachment of attachments) {
+    for (const attachment of attachments) 
       if (attachment.imageUrl)
         await this.minioService.deleteFile(attachment.imageUrl);
-    }
+    
 
     await this.em.removeAndFlush(product);
     return { message: `Product ${id} deleted successfully` };
   }
 
+
   async uploadProductImage(file: any): Promise<{ id: string }> {
     return this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file);
   }
+
 
   async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
     const product = await this.productRepository.findOneOrFail(
@@ -146,6 +151,7 @@ export class ProductService {
 
     return productImage;
   }
+
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });
