@@ -1,7 +1,8 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from './category.entity';
 import { ProductImage } from './product-image.entity';
+import { Store } from './store.entity';
 
 @Entity({ tableName: 'products' })
 export class Product {
@@ -23,6 +24,9 @@ export class Product {
 
   @OneToMany(() => ProductImage, image => image.product)
   images = new Collection<ProductImage>(this);
+
+  @ManyToOne(() => Store, { nullable: true })
+  store?: Store;
 
   @Property({ defaultRaw: 'now()', nullable: true, fieldName: 'created_at' })
   createdAt?: Date;

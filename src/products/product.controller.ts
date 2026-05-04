@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
+import * as paginateQueryTypes from '../shared/types/paginate-query.types'; 
 
 
 @Controller('products')
@@ -14,17 +15,21 @@ export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.productService.findAll(store);
+  findAll(
+    @CurrentStore() store: Store,
+    @Query() query: paginateQueryTypes.PaginateQuery,
+  ) {
+    return this.productService.findAll(store, query);
   }
 
 
-  @Get('search/by-name') 
+  @Get('search/by-name')
   searchByName(
     @CurrentStore() store: Store,
     @Query('name') name: string,
+    @Query() query: paginateQueryTypes.PaginateQuery,
   ) {
-    return this.productService.searchByName(store, name);
+    return this.productService.searchByName(store, name, query);
   }
 
 
@@ -32,8 +37,9 @@ export class ProductController {
   searchByCategory(
     @CurrentStore() store: Store,
     @Query('category') category: string,
+    @Query() query: paginateQueryTypes.PaginateQuery,
   ) {
-    return this.productService.searchByCategory(store, category);
+    return this.productService.searchByCategory(store, category, query);
   }
 
 
@@ -76,7 +82,7 @@ export class ProductController {
     return this.productService.claimProductImage(body.id, body.productId);
   }
 
-
+  
   @Delete('images/:imageId')
   deleteProductImage(@Param('imageId') imageId: string) {
     return this.productService.deleteProductImage(imageId);

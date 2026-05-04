@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager, wrap } from '@mikro-orm/postgresql';
+import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
@@ -11,7 +11,7 @@ import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enu
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { getNiceSignedUrl } from '../shared/utils/get.sgned.url';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 
 @Injectable()
@@ -23,125 +23,73 @@ export class ProductService {
   ) {}
 
 
-  
-  async findAll(store: Store) {
-    // fix this, dont use the category, use the product directly
-    const categories = await this.em.findAll(Category, {
-      where: { store },
-      populate: ['products.images'],
-      fields: [
-        "products.id",
-        'products.name',
-        'products.price',
-        'products.images.imageUrl',
-      ],
-    });
+  async findAll(store: Store, query: PaginateQuery = {}) {
+    const { page, limit, offset } = this.resolvePagination(query);
 
-    // const productsa = await this.em.findAll(Product,{
-    //   where : {
-    //     store
-    //   },
-    //   populate : ['categories']
-    // })
-
-
-    // Here use the serilize
-    const products = await Promise.all(
-      categories
-        .flatMap((category) => category.products.getItems())
-        .map(async (product) => ({
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          images: await Promise.all(
-            product.images.getItems().map(async (img) => ({
-              imageUrlSigned: img.imageUrl
-                ? await getNiceSignedUrl(img.imageUrl)
-                : null,
-            }))
-          ),
-        }))
+    const [products, total] = await this.em.findAndCount(Product,
+      { store },
+      {
+        populate: ['images'],
+        fields: ['id', 'name', 'price'],
+        limit,
+        offset,
+      },
     );
 
-    return products;
+    return {
+      data: serialize(products, { populate: ['images'] }),
+      meta: this.buildMeta(page, limit, total),
+    };
   }
 
 
-  // Here use (pagination and updates that needed for entity, comment in plane)
-  async searchByName(store: Store, name: string) {
-    const categories = await this.em.findAll(Category, {
-      where: { store },
-      populate: ['products', 'products.images'] as never[],
-    });
+  async searchByName(store: Store, name: string, query: PaginateQuery = {}) {
+    const { page, limit, offset } = this.resolvePagination(query);
 
-    const query = name.toLowerCase();
-    const productSet = new Map<string, Product>();
-
-    categories
-      .flatMap(category => category.products.getItems())
-      .forEach(product => {
-        if (
-          product.name &&
-          product.name.toLowerCase().includes(query) &&
-          !productSet.has(product.id)
-        ) {
-          productSet.set(product.id, product);
-        }
-      });
-
-    // Here use the serilize for 1+ and wrap for 1
-    return Promise.all(
-      Array.from(productSet.values()).map(async (product) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        images: await Promise.all(
-          product.images.getItems().map(async (img) => ({
-            imageUrlSigned: img.imageUrl
-              ? await getNiceSignedUrl(img.imageUrl)
-              : null,
-          }))
-        ),
-      }))
+    const [products, total] = await this.em.findAndCount(Product,
+      {
+        store,
+        name: { $ilike: `%${name}%` },
+      },
+      {
+        populate: ['images'],
+        limit,
+        offset,
+      },
     );
+
+    return {
+      data: serialize(products, { populate: ['images'] }),
+      meta: this.buildMeta(page, limit, total),
+    };
   }
 
 
-  // Here use (pagination and updates that needed for entity, comment in plane)
-  async searchByCategory(store: Store, categoryName: string) {
-    const category = await this.em.findOne(Category, {
-      name: { $ilike: `%${categoryName}%` },
-      store,
-    }, { populate: ['products', 'products.images'] as never[] });
+  async searchByCategory(store: Store, categoryName: string, query: PaginateQuery = {}) {
+    const { page, limit, offset } = this.resolvePagination(query);
 
-    if (!category)
-      return [];
-
-    return Promise.all(
-      category.products.getItems().map(async (product) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        images: await Promise.all(
-          product.images.getItems().map(async (img) => ({
-            imageUrlSigned: img.imageUrl
-              ? await getNiceSignedUrl(img.imageUrl)
-              : null,
-          }))
-        ),
-      }))
+    const [products, total] = await this.em.findAndCount(Product,
+      {
+        store,
+        categories: {
+          name: { $ilike: `%${categoryName}%` },
+        },
+      },
+      {
+        populate: ['images', 'categories'],
+        limit,
+        offset,
+      },
     );
+
+    return {
+      data: serialize(products, { populate: ['categories', 'images'] }),
+      meta: this.buildMeta(page, limit, total),
+    };
   }
 
-  
 
   async create(store: Store, dto: CreateProductDto) {
-    const product = this.em.create(Product, stripUndefined({
-      name: dto.name,
-      scannerId: dto.scannerId,
-      price: dto.price,
-    }));
-
     const category = await this.em.findOne(Category, {
       name: dto.categoryName,
       store,
@@ -149,6 +97,13 @@ export class ProductService {
 
     if (!category)
       throw new NotFoundException(`Category not found: ${dto.categoryName}`);
+
+    const product = this.em.create(Product, stripUndefined({
+      name: dto.name,
+      scannerId: dto.scannerId,
+      price: dto.price,
+      store,
+    }));
 
     product.categories.add(category);
 
@@ -176,14 +131,14 @@ export class ProductService {
 
     await this.em.flush();
 
-  return { message: `Product with id [${product.id}] updated successfully.`}
+    return { message: `Product with id [${product.id}] updated successfully.` };
   }
 
-
+  
   async remove(store: Store, id: string) {
     const product = await this.em.findOne(
       Product,
-      { id },
+      { id, store },
       { populate: ['categories', 'images'] },
     );
 
@@ -194,7 +149,6 @@ export class ProductService {
       if (image.imageUrl)
         await this.minioService.deleteFile(image.imageUrl);
     }
-
 
     const attachments = await this.em.findAll(Attachment, {
       where: {
@@ -212,11 +166,9 @@ export class ProductService {
     return { message: `Product ${id} deleted successfully` };
   }
 
-
   async uploadProductImage(file: any): Promise<{ id: string }> {
     return this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file);
   }
-
 
   async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
     const product = await this.em.findOne(Product, { id: productId });
@@ -242,7 +194,6 @@ export class ProductService {
     return productImage;
   }
 
-
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });
     if (!image)
@@ -262,5 +213,25 @@ export class ProductService {
     await this.em.removeAndFlush(image);
 
     return { message: 'Image deleted successfully' };
+  }
+
+
+
+
+  private resolvePagination(query: PaginateQuery) {
+    const page = Math.max(1, Number(query.page ?? 1));
+    const itemsPerPage = Math.min(Math.max(1, Number(query.itemsPerPage ?? 20)), 100);
+    const offset = (page - 1) * itemsPerPage;
+    
+    return { page, limit: itemsPerPage, offset };
+  }
+
+  private buildMeta(page: number, limit: number, total: number) {
+    return {
+      currentPage: page,
+      itemsPerPage: limit,
+      totalItems: total,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }
