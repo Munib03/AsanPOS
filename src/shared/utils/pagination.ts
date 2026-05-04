@@ -1,3 +1,16 @@
+export type FilterOperator = {
+  $eq?: any;
+  $ne?: any;
+  $gt?: any;
+  $gte?: any;
+  $lt?: any;
+  $lte?: any;
+  $like?: string;
+  $ilike?: string;
+  $in?: any[];
+  $nin?: any[];
+};
+
 export function transformFilterQueryParams(filter: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(filter)) {
@@ -59,16 +72,3 @@ export function mergeSortObjects(
 ): Record<string, any> {
   return { ...base, ...override };
 }
-
-export type FilterOperator = {
-  $eq?: any;
-  $ne?: any;
-  $gt?: any;
-  $gte?: any;
-  $lt?: any;
-  $lte?: any;
-  $like?: string;
-  $ilike?: string;
-  $in?: any[];
-  $nin?: any[];
-};

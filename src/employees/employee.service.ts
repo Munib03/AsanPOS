@@ -183,10 +183,12 @@ export class EmployeeService {
       { populate: ['employee'] },
     );
 
-    if (!securityAction) throw new BadRequestException('Invalid OTP code');
+    if (!securityAction) 
+      throw new BadRequestException('Invalid OTP code');
 
     const employee = securityAction.employee;
-    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee) 
+      throw new NotFoundException('Employee not found');
 
     const now = new Date();
     if (securityAction.expiresAt && securityAction.expiresAt < now)
@@ -194,7 +196,9 @@ export class EmployeeService {
 
     if (securityAction.metadata?.email)
       employee.email = securityAction.metadata.email;
-    else throw new BadRequestException('No email found in metadata');
+
+    else 
+      throw new BadRequestException('No email found in metadata');
 
     employee.verifiedAt = new Date();
 

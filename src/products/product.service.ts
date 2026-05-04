@@ -25,22 +25,24 @@ export class ProductService {
   ) {}
 
 
-  async findAll(store: Store, query: PaginateQuery = {}) {
+  async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
-      { populate: ['images', 'categories'] },
-      ['name', 'categories.name'],
+      {
+        populate: ['images'],
+        fields: ['id', 'name', 'price', 'images.imageUrl']
+      },
+      {
+        searchable: ['name', 'categories.name'],
+        sortable: ['name', 'price'],
+      },
       query,
     );
 
-    const data = serialize(products, { populate: ['images'] }).map(({ id, name, price, images }) => ({
-      id,
-      name,
-      price,
-      signedUrls: images?.map((image: any) => image.imageUrlSigned ?? null) ?? [],
-    }));
-
-    return { data, meta };
+    return {
+      data: serialize(products, { populate: ['images'] }),
+      meta,
+    };
   }
 
 

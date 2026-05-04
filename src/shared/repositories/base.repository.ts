@@ -9,6 +9,14 @@ import {
   Loaded,
 } from '@mikro-orm/core';
 import { Meta, PaginateQuery } from '../types/paginate-query.types';
+import {
+  sanitizeFilterQuery,
+  mergeFilterOperators,
+  unFlattenObject,
+  sanitizeSortObject,
+  mergeSortObjects,
+  transformFilterQueryParams,
+} from '../utils/pagination';
 
 type NotFoundErrorFactory<Entity extends object> = (context: {
   id: string;
@@ -16,7 +24,15 @@ type NotFoundErrorFactory<Entity extends object> = (context: {
   where: FilterQuery<Entity>;
 }) => Error;
 
+export type Filterable<Entity> = Partial<Record<keyof Entity, any>>;
+export type Sortable<Entity> = (keyof Entity & string)[];
 export type Searchable<Entity> = (keyof Entity & string | string)[];
+
+export type FilterOptions<Entity> = {
+  filterable?: Filterable<Entity>;
+  searchable?: Searchable<Entity>;
+  sortable?: Sortable<Entity>;
+};
 
 function buildNestedCondition(path: string, operator: any) {
   const parts = path.split('.');
@@ -70,22 +86,31 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
   async findAndPaginate<Hint extends string = never, Fields extends string = '*', Excludes extends string = never>(
     where: FilterQuery<Entity>,
     options?: Omit<FindOptions<Entity, Hint, Fields, Excludes>, 'offset' | 'limit'>,
-    searchable?: Searchable<Entity>,
+    filterOptions?: FilterOptions<Entity>,
     query?: PaginateQuery,
   ): Promise<[Loaded<Entity, Hint, Fields, Excludes>[], Meta]> {
-    const { page = 1, itemsPerPage = 20, search } = query || {};
+    const { page = 1, itemsPerPage = 20, search, filter = {}, sort = {} } = query || {};
 
     const currentPage = Math.max(1, Number(page));
     const limit = Math.min(Math.max(1, Number(itemsPerPage)), 100);
     const offset = (currentPage - 1) * limit;
 
-    let finalWhere: Record<string, any> = { ...(where as Record<string, any>) };
+    const transformedFilters = transformFilterQueryParams(filter);
+    const sanitizedFilters = sanitizeFilterQuery(
+      filterOptions?.filterable ?? {},
+      transformedFilters,
+    );
 
-    if (searchable?.length && search) {
+    let finalWhere: Record<string, any> = mergeFilterOperators(
+      where as Record<string, any>,
+      sanitizedFilters,
+    );
+
+    if (filterOptions?.searchable?.length && search) {
       const directFields: string[] = [];
       const relationFields: string[] = [];
 
-      for (const field of searchable) {
+      for (const field of filterOptions.searchable) {
         if ((field as string).includes('.')) {
           relationFields.push(field as string);
         } else {
@@ -106,10 +131,21 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       }
     }
 
+    const sortQuery = unFlattenObject(sort);
+    const sanitizedSort = sanitizeSortObject(
+      sortQuery,
+      filterOptions?.sortable ?? [],
+    );
+    const mergedSort = mergeSortObjects(
+      (options?.orderBy as Record<string, any>) ?? {},
+      sanitizedSort,
+    );
+
     const [data, count] = await this.findAndCount(
       finalWhere as FilterQuery<Entity>,
       {
         ...options,
+        ...(Object.keys(mergedSort).length > 0 ? { orderBy: mergedSort as FindOptions<Entity>['orderBy'] } : {}),
         offset,
         limit,
       },
@@ -121,6 +157,8 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       totalItems: count,
       totalPages: Math.ceil(count / limit),
       search,
+      filters: sanitizedFilters,
+      sorts: sanitizedSort,
     };
 
     return [data, meta];
