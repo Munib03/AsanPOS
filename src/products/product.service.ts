@@ -72,9 +72,9 @@ export class ProductService {
   }
 
 
-  async update(id: string, dto: UpdateProductDto) {
+  async update(store: Store, id: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
-      { id },
+      { id, store },
       {
         populate: ['categories', 'images'],
         notFoundMessage: `Product with id ${id} not found`,
@@ -94,32 +94,33 @@ export class ProductService {
 
 
   async remove(store: Store, id: string) {
-    const product = await this.productRepository.findOneOrFail(
-      { id, store },
-      {
-        populate: ['categories', 'images'],
-        notFoundMessage: `Product with id ${id} not found`,
-      },
-    );
+    await this.em.transactional(async (em) => {
+      const product = await this.productRepository.findOneOrFail(
+        { id, store },
+        {
+          populate: ['categories', 'images'],
+          notFoundMessage: `Product with id ${id} not found`,
+        },
+      );
 
-    for (const image of product.images.getItems()) 
-      if (image.imageUrl)
-        await this.minioService.deleteFile(image.imageUrl);
-    
+      for (const image of product.images.getItems())
+        if (image.imageUrl)
+          await this.minioService.deleteFile(image.imageUrl);
 
-    const attachments = await this.em.findAll(Attachment, {
-      where: {
-        entityId: id,
-        entityType: AttachmentEntityType.PRODUCT,
-      },
+      const attachments = await em.findAll(Attachment, {
+        where: {
+          entityId: id,
+          entityType: AttachmentEntityType.PRODUCT,
+        },
+      });
+
+      for (const attachment of attachments)
+        if (attachment.imageUrl)
+          await this.minioService.deleteFile(attachment.imageUrl);
+
+      await em.removeAndFlush(product);
     });
 
-    for (const attachment of attachments) 
-      if (attachment.imageUrl)
-        await this.minioService.deleteFile(attachment.imageUrl);
-    
-
-    await this.em.removeAndFlush(product);
     return { message: `Product ${id} deleted successfully` };
   }
 
