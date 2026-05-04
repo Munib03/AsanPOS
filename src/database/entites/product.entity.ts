@@ -26,7 +26,7 @@ export class Product {
   images = new Collection<ProductImage>(this);
 
   @ManyToOne(() => Store, { nullable: true })
-  store?: Store;
+  store!: Store;
 
   @Property({ defaultRaw: 'now()', nullable: true, fieldName: 'created_at' })
   createdAt?: Date;

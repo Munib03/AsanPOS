@@ -16,7 +16,7 @@ type NotFoundErrorFactory<Entity extends object> = (context: {
   where: FilterQuery<Entity>;
 }) => Error;
 
-export type Searchable<Entity> = (keyof Entity & string)[];
+export type Searchable<Entity> = (keyof Entity & string | string)[];
 
 function buildNestedCondition(path: string, operator: any) {
   const parts = path.split('.');
@@ -82,13 +82,28 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
     let finalWhere: Record<string, any> = { ...(where as Record<string, any>) };
 
     if (searchable?.length && search) {
-      const searchConditions = searchable.map((field) =>
-        buildNestedCondition(field as string, { $ilike: `%${search}%` }),
-      );
-      finalWhere.$or = [
-        ...(Array.isArray(finalWhere.$or) ? finalWhere.$or : []),
-        ...searchConditions,
+      const directFields: string[] = [];
+      const relationFields: string[] = [];
+
+      for (const field of searchable) {
+        if ((field as string).includes('.')) {
+          relationFields.push(field as string);
+        } else {
+          directFields.push(field as string);
+        }
+      }
+
+      const searchConditions = [
+        ...directFields.map((field) => ({ [field]: { $ilike: `%${search}%` } })),
+        ...relationFields.map((field) => buildNestedCondition(field, { $ilike: `%${search}%` })),
       ];
+
+      if (searchConditions.length > 0) {
+        finalWhere.$or = [
+          ...(Array.isArray(finalWhere.$or) ? finalWhere.$or : []),
+          ...searchConditions,
+        ];
+      }
     }
 
     const [data, count] = await this.findAndCount(

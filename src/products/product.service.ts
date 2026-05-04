@@ -27,8 +27,8 @@ export class ProductService {
   async findAll(store: Store, query: PaginateQuery = {}) {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
-      { populate: ['images'] },
-      ['name'],
+      { populate: ['images', 'categories'] },
+      ['name', 'categories.name'],
       query,
     );
 
@@ -36,13 +36,12 @@ export class ProductService {
       id,
       name,
       price,
-      images: images?.map((image: any) => ({
-        signedUrl: image.imageUrlSigned ?? null,
-      })),
+      signedUrls: images?.map((image: any) => image.imageUrlSigned ?? null) ?? [],
     }));
 
     return { data, meta };
   }
+
 
   async create(store: Store, dto: CreateProductDto) {
     const category = await this.em.findOne(Category, {
@@ -53,12 +52,14 @@ export class ProductService {
     if (!category)
       throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
-    const product = this.em.create(Product, stripUndefined({
-      name: dto.name,
-      scannerId: dto.scannerId,
-      price: dto.price,
+    const product = this.em.create(Product, {
+      ...stripUndefined({
+        name: dto.name,
+        scannerId: dto.scannerId,
+        price: dto.price,
+      }),
       store,
-    }));
+    });
 
     product.categories.add(category);
 
