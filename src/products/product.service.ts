@@ -12,6 +12,7 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { ProductRepository } from './product.repository';
 
 
 @Injectable()
@@ -20,74 +21,28 @@ export class ProductService {
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
     private readonly attachmentService: AttachmentService,
+    private readonly productRepository: ProductRepository,
   ) {}
 
-
   async findAll(store: Store, query: PaginateQuery = {}) {
-    const { page, limit, offset } = this.resolvePagination(query);
-
-    const [products, total] = await this.em.findAndCount(Product,
+    const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
-      {
-        populate: ['images'],
-        fields: ['id', 'name', 'price'],
-        limit,
-        offset,
-      },
+      { populate: ['images'] },
+      ['name'],
+      query,
     );
 
-    return {
-      data: serialize(products, { populate: ['images'] }),
-      meta: this.buildMeta(page, limit, total),
-    };
+    const data = serialize(products, { populate: ['images'] }).map(({ id, name, price, images }) => ({
+      id,
+      name,
+      price,
+      images: images?.map((image: any) => ({
+        signedUrl: image.imageUrlSigned ?? null,
+      })),
+    }));
+
+    return { data, meta };
   }
-
-
-  async searchByName(store: Store, name: string, query: PaginateQuery = {}) {
-    const { page, limit, offset } = this.resolvePagination(query);
-
-    const [products, total] = await this.em.findAndCount(Product,
-      {
-        store,
-        name: { $ilike: `%${name}%` },
-      },
-      {
-        populate: ['images'],
-        limit,
-        offset,
-      },
-    );
-
-    return {
-      data: serialize(products, { populate: ['images'] }),
-      meta: this.buildMeta(page, limit, total),
-    };
-  }
-
-
-  async searchByCategory(store: Store, categoryName: string, query: PaginateQuery = {}) {
-    const { page, limit, offset } = this.resolvePagination(query);
-
-    const [products, total] = await this.em.findAndCount(Product,
-      {
-        store,
-        categories: {
-          name: { $ilike: `%${categoryName}%` },
-        },
-      },
-      {
-        populate: ['images', 'categories'],
-        limit,
-        offset,
-      },
-    );
-
-    return {
-      data: serialize(products, { populate: ['categories', 'images'] }),
-      meta: this.buildMeta(page, limit, total),
-    };
-  }
-
 
   async create(store: Store, dto: CreateProductDto) {
     const category = await this.em.findOne(Category, {
@@ -112,16 +67,14 @@ export class ProductService {
     return wrap(product).toJSON();
   }
 
-
   async update(id: string, dto: UpdateProductDto) {
-    const product = await this.em.findOne(
-      Product,
+    const product = await this.productRepository.findOneOrFail(
       { id },
-      { populate: ['categories', 'images'] },
+      {
+        populate: ['categories', 'images'],
+        notFoundMessage: `Product with id ${id} not found`,
+      },
     );
-
-    if (!product)
-      throw new NotFoundException(`Product with id ${id} not found`);
 
     this.em.assign(product, stripUndefined({
       name: dto.name,
@@ -134,16 +87,14 @@ export class ProductService {
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
 
-  
   async remove(store: Store, id: string) {
-    const product = await this.em.findOne(
-      Product,
+    const product = await this.productRepository.findOneOrFail(
       { id, store },
-      { populate: ['categories', 'images'] },
+      {
+        populate: ['categories', 'images'],
+        notFoundMessage: `Product with id ${id} not found`,
+      },
     );
-
-    if (!product)
-      throw new NotFoundException(`Product with id ${id} not found`);
 
     for (const image of product.images.getItems()) {
       if (image.imageUrl)
@@ -171,9 +122,10 @@ export class ProductService {
   }
 
   async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
-    const product = await this.em.findOne(Product, { id: productId });
-    if (!product)
-      throw new NotFoundException(`Product with id ${productId} not found`);
+    const product = await this.productRepository.findOneOrFail(
+      { id: productId },
+      { notFoundMessage: `Product with id ${productId} not found` },
+    );
 
     const attachment = await this.attachmentService.claimAttachment(
       attachmentId,
@@ -213,25 +165,5 @@ export class ProductService {
     await this.em.removeAndFlush(image);
 
     return { message: 'Image deleted successfully' };
-  }
-
-
-
-
-  private resolvePagination(query: PaginateQuery) {
-    const page = Math.max(1, Number(query.page ?? 1));
-    const itemsPerPage = Math.min(Math.max(1, Number(query.itemsPerPage ?? 20)), 100);
-    const offset = (page - 1) * itemsPerPage;
-    
-    return { page, limit: itemsPerPage, offset };
-  }
-
-  private buildMeta(page: number, limit: number, total: number) {
-    return {
-      currentPage: page,
-      itemsPerPage: limit,
-      totalItems: total,
-      totalPages: Math.ceil(total / limit),
-    };
   }
 }

@@ -1,9 +1,7 @@
 import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from './product.entity';
-import { getNiceSignedUrl
-  
- } from '../../shared/utils/get.sgned.url';
+import { getNiceSignedUrl } from '../../shared/utils/get.sgned.url';
 
 @Entity({ tableName: 'product_image' })
 export class ProductImage {
