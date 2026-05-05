@@ -48,4 +48,15 @@ export class InventoryService {
 
     return { message: `Inventory with id ${id} updated successfully.`}
   }
+
+
+  async delete(id: string) {
+    const inventory = await this.em.findOne(Inventory, { id: id });
+    if (!inventory)
+      throw new BadRequestException(`Inventory with id ${id} does not exist!`);
+
+    await this.em.removeAndFlush(inventory);
+
+    return { message: `Inventory with id ${id} deleted successfully.` };
+  }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { InventoryService } from "./inventory.service";
 import { CreateInventoryDto } from "./dto/create-inventory.dto";
@@ -33,5 +33,11 @@ export class InventoryController {
     @Put(":id")
     update(@Param("id") id: string, @Body() dto: UpdateInventoryDto) {
         return this.inventoryService.update(id, dto);
+    }
+
+
+    @Delete(":id")
+    remove(@Param("id") id: string) {
+        return this.inventoryService.delete(id);
     }
 }
