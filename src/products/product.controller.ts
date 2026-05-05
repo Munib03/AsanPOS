@@ -50,7 +50,7 @@ export class ProductController {
   }
 
   @Post('images/upload')
-  @UseInterceptors(FilesInterceptor('images', Infinity))
+  @UseInterceptors(FilesInterceptor('images', Infinity /* This is for user can upload any amount pics he want to add. */))
   uploadProductImages(@UploadedFiles() files: any[]) {
     return this.productService.uploadProductImages(files);
   }
