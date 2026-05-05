@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors, Query, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors, Query, UploadedFiles, BadRequestException } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -50,7 +50,7 @@ export class ProductController {
   }
 
   @Post('images/upload')
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(FilesInterceptor('images', Infinity))
   uploadProductImages(@UploadedFiles() files: any[]) {
     return this.productService.uploadProductImages(files);
   }

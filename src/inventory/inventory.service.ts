@@ -5,6 +5,7 @@ import { Inventory } from '../database/entites/inventory.entity';
 import { UpdateCategoryDto } from '../categories/dto/update-category.dto';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 
+
 @Injectable()
 export class InventoryService {
   constructor(private readonly em: EntityManager) {}
@@ -59,4 +60,5 @@ export class InventoryService {
 
     return { message: `Inventory with id ${id} deleted successfully.` };
   }
+
 }
