@@ -11,6 +11,7 @@ import { QueueModule } from './queue/queue.module';
 import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
 import { ProductModule } from './products/product.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 
 @Module({
@@ -23,7 +24,8 @@ import { ProductModule } from './products/product.module';
     AuthModule,
     SharedModule,
     CategoryModule,
-    ProductModule
+    ProductModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

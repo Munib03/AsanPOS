@@ -138,34 +138,44 @@ export class ProductService {
   }
 
 
-  async uploadProductImage(file: any): Promise<{ id: string }> {
-    return this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file);
+  async uploadProductImages(files: any[]): Promise<{ ids: string[] }> {
+    const results = await Promise.all(
+      files.map(file => this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file))
+    );
+    
+    return { ids: results.map(r => r.id) };
   }
 
 
-  async claimProductImage(attachmentId: string, productId: string): Promise<ProductImage> {
+  async claimProductImages(attachmentIds: string[], productId: string): Promise<ProductImage[]> {
     const product = await this.productRepository.findOneOrFail(
       { id: productId },
       { notFoundMessage: `Product with id ${productId} not found` },
     );
 
-    const attachment = await this.attachmentService.claimAttachment(
-      attachmentId,
-      productId,
-      AttachmentEntityType.PRODUCT,
+    const productImages = await Promise.all(
+      attachmentIds.map(async (attachmentId) => {
+        const attachment = await this.attachmentService.claimAttachment(
+          attachmentId,
+          productId,
+          AttachmentEntityType.PRODUCT,
+        );
+
+        const productImage = this.em.create(ProductImage, {
+          product,
+          imageUrl: attachment.imageUrl,
+        });
+
+        await this.em.persistAndFlush(productImage);
+
+        if (productImage.imageUrl)
+          productImage.imageUrlSigned = await this.minioService.getSignedUrl(productImage.imageUrl);
+
+        return productImage;
+      }),
     );
 
-    const productImage = this.em.create(ProductImage, {
-      product,
-      imageUrl: attachment.imageUrl,
-    });
-
-    await this.em.persistAndFlush(productImage);
-
-    if (productImage.imageUrl)
-      productImage.imageUrlSigned = await this.minioService.getSignedUrl(productImage.imageUrl);
-
-    return productImage;
+    return productImages;
   }
 
 

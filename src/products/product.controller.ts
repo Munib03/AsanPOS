@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors, Query, UploadedFiles } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -7,6 +7,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
 
 @Controller('products')
@@ -49,14 +50,15 @@ export class ProductController {
   }
 
   @Post('images/upload')
-  @UseInterceptors(ImageUploadInterceptor)
-  uploadProductImage(@UploadedFile() file: any) {
-    return this.productService.uploadProductImage(file);
+  @UseInterceptors(FilesInterceptor('images', 10))
+  uploadProductImages(@UploadedFiles() files: any[]) {
+    return this.productService.uploadProductImages(files);
   }
 
   @Post('images/claim')
-  claimProductImage(@Body() body: { id: string; productId: string }) {
-    return this.productService.claimProductImage(body.id, body.productId);
+  claimProductImages(@Body() body: { ids: string | string[]; productId: string }) {
+    const ids = Array.isArray(body.ids) ? body.ids : [body.ids];
+    return this.productService.claimProductImages(ids, body.productId);
   }
 
   @Delete('images/:imageId')
