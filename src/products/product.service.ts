@@ -87,6 +87,17 @@ export class ProductService {
       price: dto.price,
     }));
 
+    if (dto.categoryName) {
+      const category = await this.em.findOne(Category, {
+        name: dto.categoryName,
+        store,
+      });
+
+      if (!category)
+        throw new NotFoundException(`Category not found: ${dto.categoryName}`);
+
+      product.categories.set([category]);
+    }
 
     await this.em.flush();
 

@@ -21,6 +21,7 @@ export class Category {
   @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
 
-  @Property({ fieldName: 'updated_at', onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
+  @Property({ fieldName: 'updated_at', onUpdate: () => new Date(), 
+              defaultRaw: 'now()', nullable: true })
   updatedAt?: Date;
 }
