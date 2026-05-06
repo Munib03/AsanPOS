@@ -31,6 +31,9 @@ export class AttachmentService {
   }
 
   async createAttachments(entityType: AttachmentEntityType, files: any[]): Promise<{ ids: string[] }> {
+    if (!Object.values(AttachmentEntityType).includes(entityType))
+      throw new BadRequestException(`Invalid entityType. Valid values: ${Object.values(AttachmentEntityType).join(', ')}`);
+
     if (!files?.length)
       throw new BadRequestException('No image files provided');
 
