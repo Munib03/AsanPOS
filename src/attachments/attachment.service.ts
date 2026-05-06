@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Attachment } from '../database/entites/attachment.entity';
 import { MinioService } from '../shared/services/minio.service';
@@ -105,6 +105,39 @@ export class AttachmentService {
     return attachments;
   }
   
+
+  async deleteAttachment(id: string): Promise<{ message: string }> {
+    const attachment = await this.em.findOne(Attachment, { id });
+    if (!attachment)
+      throw new NotFoundException('Attachment not found');
+
+    if (attachment.imageUrl)
+      await this.minioService.deleteFile(attachment.imageUrl);
+
+    await this.em.removeAndFlush(attachment);
+
+    return { message: 'Attachment deleted successfully' };
+  }
+
+
+  async deleteAttachments(ids: string[]): Promise<{ message: string }> {
+      const attachments = await this.em.findAll(Attachment, {
+        where: { id: { $in: ids } },
+      });
+
+      if (!attachments.length)
+        throw new NotFoundException('No attachments found');
+
+      await Promise.all(
+        attachments
+          .filter(a => a.imageUrl)
+          .map(a => this.minioService.deleteFile(a.imageUrl!))
+      );
+
+      await this.em.removeAndFlush(attachments);
+
+      return { message: 'Attachments deleted successfully' };
+  }
 
   async presignedUrl(key: string): Promise<string> {
     return this.minioService.getSignedUrl(key);

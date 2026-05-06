@@ -45,9 +45,4 @@ export class ProductController {
   ) {
     return this.productService.remove(store, id);
   }
-
-  @Delete('images/:imageId')
-  deleteProductImage(@Param('imageId') imageId: string) {
-    return this.productService.deleteProductImage(imageId);
-  }
 }

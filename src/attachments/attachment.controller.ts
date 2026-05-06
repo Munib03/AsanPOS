@@ -1,25 +1,31 @@
-import { Controller, Post, Delete, Param, UseGuards, UploadedFiles, UseInterceptors, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Delete, UseGuards, UploadedFile, UploadedFiles, UseInterceptors, Body, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { AttachmentService } from './attachment.service';
+import { ImagesUploadInterceptor, ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
-import { ImagesUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
-import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
-
 
 @Controller('attachments')
 @UseGuards(JwtAuthGuard)
 export class AttachmentController {
-  constructor(private readonly attachmentService: AttachmentService) {}
+    constructor(private readonly attachmentService: AttachmentService) {}
 
 
-//   @Post('upload/single/:entityType')
+                // This two for single photos (uploading, deleting single photos)
+
+//   @Post('upload/single')
 //   @UseInterceptors(ImageUploadInterceptor)
 //   uploadSingle(
-//     @UploadedFiles() file: any,
-//     @Param('entityType') entityType: AttachmentEntityType,
+//     @UploadedFile() file: any,
+//     @Body('entityType') entityType: AttachmentEntityType,
 //   ) {
 //     return this.attachmentService.createAttachment(entityType, file);
 //   }
+
+    // @Delete('delete')
+    // deleteOne(@Body() body: { id: string }) {
+    //     return this.attachmentService.deleteAttachment(body.id);
+    // }
+
 
   @Post('upload')
   @UseInterceptors(ImagesUploadInterceptor)
@@ -29,5 +35,9 @@ export class AttachmentController {
   ) {
     return this.attachmentService.createAttachments(entityType, files);
   }
-  
+
+  @Delete('delete')
+  deleteMultiple(@Body() body: { ids: string[] }) {
+    return this.attachmentService.deleteAttachments(body.ids);
+  }
 }
