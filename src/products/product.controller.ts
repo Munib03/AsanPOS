@@ -1,14 +1,12 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors, Query, UploadedFiles, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query, BadRequestException, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
-import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
-import { FilesInterceptor } from '@nestjs/platform-express';
-
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)
@@ -31,6 +29,17 @@ export class ProductController {
     return this.productService.create(store, dto);
   }
 
+
+  @Post('images/upload')
+  @UseInterceptors(FilesInterceptor('images', 100))
+  uploadProductImages(@UploadedFiles() files: any[]) {
+    if (files.length > 10)
+      throw new BadRequestException('You can upload a maximum of 10 images at once');
+
+    return this.productService.uploadProductImages(files);
+  }
+
+  
   @Put(':id')
   update(
     @CurrentStore() store: Store,
@@ -40,25 +49,12 @@ export class ProductController {
     return this.productService.update(store, id, dto);
   }
 
-
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,
     @Param('id') id: string,
   ) {
     return this.productService.remove(store, id);
-  }
-
-  @Post('images/upload')
-  @UseInterceptors(FilesInterceptor('images', Infinity /* This is for user can upload any amount pics he want to add. */))
-  uploadProductImages(@UploadedFiles() files: any[]) {
-    return this.productService.uploadProductImages(files);
-  }
-
-  @Post('images/claim')
-  claimProductImages(@Body() body: { ids: string | string[]; productId: string }) {
-    const ids = Array.isArray(body.ids) ? body.ids : [body.ids];
-    return this.productService.claimProductImages(ids, body.productId);
   }
 
   @Delete('images/:imageId')

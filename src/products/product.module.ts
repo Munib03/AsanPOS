@@ -6,7 +6,7 @@ import { ProductService } from './product.service';
 import { MinioService } from '../shared/services/minio.service';
 import { AttachmentService } from '../shared/services/attachment.service';
 import { Product } from '../database/entites/product.entity';
-import { ProductRepository } from './product.repository';
+import { BaseRepository } from '../shared/repositories/base.repository';
 
 @Module({
   imports: [MikroOrmModule.forFeature([Product])],
@@ -16,8 +16,8 @@ import { ProductRepository } from './product.repository';
     MinioService,
     AttachmentService,
     {
-      provide: ProductRepository,
-      useFactory: (em: EntityManager) => new ProductRepository(em),
+      provide: BaseRepository,
+      useFactory: (em: EntityManager) => new BaseRepository(em, Product),
       inject: [EntityManager],
     },
   ],

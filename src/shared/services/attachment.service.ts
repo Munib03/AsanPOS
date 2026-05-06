@@ -4,15 +4,14 @@ import { Attachment } from '../../database/entites/attachment.entity';
 import { MinioService } from './minio.service';
 import { AttachmentEntityType } from '../utils/attachment-entity-type.enum';
 
-
 @Injectable()
 export class AttachmentService {
   constructor(
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
   ) {}
-
   
+
   async createAttachment(entityType: AttachmentEntityType, file: any): Promise<{ id: string }> {
     if (!file)
       throw new BadRequestException('No image file provided');
@@ -27,14 +26,13 @@ export class AttachmentService {
     });
 
     await this.em.persistAndFlush(attachment);
-    
+
     return { id: attachment.id };
   }
-  
-  
+
+
   async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
-
 
     attachment.entityId = entityId;
     attachment.claimedAt = new Date();
@@ -60,9 +58,23 @@ export class AttachmentService {
     return attachment;
   }
 
-  
+
+  async getAttachments(ids: string[], entityType: AttachmentEntityType): Promise<Attachment[]> {
+    const attachments = await this.em.findAll(Attachment, {
+      where: {
+        id: { $in: ids },
+        entityType,
+        claimedAt: null,
+      },
+    });
+
+    if (attachments.length !== ids.length)
+      throw new UnprocessableEntityException('One or more attachments not found or already claimed');
+
+    return attachments;
+  }
+
   async presignedUrl(key: string): Promise<string> {
     return this.minioService.getSignedUrl(key);
   }
-
 }

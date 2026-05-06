@@ -12,7 +12,7 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
-import { ProductRepository } from './product.repository';
+import { BaseRepository } from '../shared/repositories/base.repository';
 
 
 @Injectable()
@@ -21,7 +21,7 @@ export class ProductService {
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
     private readonly attachmentService: AttachmentService,
-    private readonly productRepository: ProductRepository,
+    private readonly productRepository: BaseRepository<Product>,
   ) {}
 
 
@@ -67,6 +67,29 @@ export class ProductService {
     product.categories.add(category);
 
     await this.em.persistAndFlush(product);
+
+    if (dto.attachmentIds?.length) {
+      const attachments = await this.attachmentService.getAttachments(
+        dto.attachmentIds,
+        AttachmentEntityType.PRODUCT,
+      );
+
+      await Promise.all(
+        attachments.map(async (attachment) => {
+          attachment.entityId = product.id;
+          attachment.claimedAt = new Date();
+
+          const productImage = this.em.create(ProductImage, {
+            product,
+            imageUrl: attachment.imageUrl,
+          });
+
+          await this.em.persistAndFlush(productImage);
+        }),
+      );
+
+      await this.em.flush();
+    }
 
     return wrap(product).toJSON();
   }
@@ -142,42 +165,8 @@ export class ProductService {
     const results = await Promise.all(
       files.map(file => this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file))
     );
-
     return { ids: results.map(r => r.id) };
   }
-
-
-  async claimProductImages(attachmentIds: string[], productId: string): Promise<ProductImage[]> {
-    const product = await this.productRepository.findOneOrFail(
-      { id: productId },
-      { notFoundMessage: `Product with id ${productId} not found` },
-    );
-
-    const productImages = await Promise.all(
-      attachmentIds.map(async (attachmentId) => {
-        const attachment = await this.attachmentService.claimAttachment(
-          attachmentId,
-          productId,
-          AttachmentEntityType.PRODUCT,
-        );
-
-        const productImage = this.em.create(ProductImage, {
-          product,
-          imageUrl: attachment.imageUrl,
-        });
-
-        await this.em.persistAndFlush(productImage);
-
-        if (productImage.imageUrl)
-          productImage.imageUrlSigned = await this.minioService.getSignedUrl(productImage.imageUrl);
-
-        return productImage;
-      }),
-    );
-
-    return productImages;
-  }
-
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });
