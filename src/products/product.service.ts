@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
@@ -44,48 +44,52 @@ export class ProductService {
   }
 
 
-async create(store: Store, dto: CreateProductDto) {
-  return this.em.transactional(async (em) => {
-    const category = await em.findOne(Category, {
-      name: dto.categoryName,
-      store,
-    });
-
-    if (!category)
-      throw new NotFoundException(`Category not found: ${dto.categoryName}`);
-
-    const product = em.create(Product, {
-      ...stripUndefined({
-        name: dto.name,
-        scannerId: dto.scannerId,
-        price: dto.price,
-      }),
-      store,
-    });
-
-    product.categories.add(category);
-
-    if (dto.attachmentIds?.length) {
-      await this.attachmentService.claimAttachments(
-        dto.attachmentIds,
-        product.id,
-        AttachmentEntityType.PRODUCT,
-      );
-
-      const attachments = await em.findAll(Attachment, {
-        where: { id: { $in: dto.attachmentIds } },
+  async create(store: Store, dto: CreateProductDto) {
+    return this.em.transactional(async (em) => {
+      const category = await em.findOne(Category, {
+        name: dto.categoryName,
+        store,
       });
 
-      attachments.map((attachment) =>
-        em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
-      );
-    }
+      if (!category)
+        throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
-    await em.persistAndFlush(product);
+      const product = em.create(Product, {
+        ...stripUndefined({
+          name: dto.name,
+          scannerId: dto.scannerId,
+          price: dto.price,
+        }),
+        store,
+      });
 
-    return wrap(product).toJSON();
-  });
-}
+      product.categories.add(category);
+
+      if (dto.attachmentIds?.length) {
+        const attachments = await em.findAll(Attachment, {
+          where: {
+            id: { $in: dto.attachmentIds },
+            entityType: AttachmentEntityType.PRODUCT,
+            claimedAt: null,
+          },
+        });
+
+        if (attachments.length !== dto.attachmentIds.length)
+          throw new UnprocessableEntityException('One or more attachments not found or already claimed');
+
+        const now = new Date();
+        attachments.map((attachment) => {
+          attachment.entityId = product.id;
+          attachment.claimedAt = now;
+          em.create(ProductImage, { product, imageUrl: attachment.imageUrl });
+        });
+      }
+
+      await em.persistAndFlush(product);
+
+      return wrap(product).toJSON();
+    });
+  }
 
 
 async update(store: Store, id: string, dto: UpdateProductDto) {
