@@ -122,11 +122,31 @@ export class ProductService {
       product.categories.set([category]);
     }
 
+    if (dto.attachmentIds?.length) {
+      const attachments = await this.attachmentService.getAttachments(
+        dto.attachmentIds,
+        AttachmentEntityType.PRODUCT,
+      );
+
+      await Promise.all(
+        attachments.map(async (attachment) => {
+          attachment.entityId = product.id;
+          attachment.claimedAt = new Date();
+
+          const productImage = this.em.create(ProductImage, {
+            product,
+            imageUrl: attachment.imageUrl,
+          });
+
+          await this.em.persistAndFlush(productImage);
+        }),
+      );
+    }
+
     await this.em.flush();
 
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
-
 
 
   async remove(store: Store, id: string) {
@@ -167,6 +187,7 @@ export class ProductService {
     );
     return { ids: results.map(r => r.id) };
   }
+
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });

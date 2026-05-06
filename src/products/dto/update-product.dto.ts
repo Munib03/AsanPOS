@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -16,4 +16,8 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   categoryName?: string;
+
+  @IsOptional()
+  @IsArray()
+  attachmentIds?: string[];
 }

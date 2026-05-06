@@ -8,6 +8,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 
+
 @Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductController {
@@ -39,7 +40,7 @@ export class ProductController {
     return this.productService.uploadProductImages(files);
   }
 
-  
+
   @Put(':id')
   update(
     @CurrentStore() store: Store,
