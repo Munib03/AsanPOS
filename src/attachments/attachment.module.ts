@@ -1,0 +1,11 @@
+import { Module } from '@nestjs/common';
+import { AttachmentController } from './attachment.controller';
+import { AttachmentService } from './attachment.service';
+import { MinioService } from '../shared/services/minio.service';
+
+@Module({
+  controllers: [AttachmentController],
+  providers: [AttachmentService, MinioService],
+  exports: [AttachmentService],
+})
+export class AttachmentModule {}

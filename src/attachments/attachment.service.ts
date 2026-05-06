@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Attachment } from '../../database/entites/attachment.entity';
-import { MinioService } from './minio.service';
-import { AttachmentEntityType } from '../utils/attachment-entity-type.enum';
+import { Attachment } from '../database/entites/attachment.entity';
+import { MinioService } from '../shared/services/minio.service';
+import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
+
 
 @Injectable()
 export class AttachmentService {
@@ -10,7 +11,6 @@ export class AttachmentService {
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
   ) {}
-  
 
   async createAttachment(entityType: AttachmentEntityType, file: any): Promise<{ id: string }> {
     if (!file)
@@ -30,6 +30,17 @@ export class AttachmentService {
     return { id: attachment.id };
   }
 
+  async createAttachments(entityType: AttachmentEntityType, files: any[]): Promise<{ ids: string[] }> {
+    if (!files?.length)
+      throw new BadRequestException('No image files provided');
+
+    const results = await Promise.all(
+      files.map(file => this.createAttachment(entityType, file))
+    );
+
+    return { ids: results.map(r => r.id) };
+  }
+
 
   async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
@@ -42,6 +53,23 @@ export class AttachmentService {
       attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
 
     return attachment;
+  }
+
+
+  async claimAttachments(ids: string[], entityId: string, entityType: AttachmentEntityType): Promise<void> {
+    console.log('claiming ids:', ids);
+    console.log('entityType:', entityType);
+    
+    const attachments = await this.getAttachments(ids, entityType);
+    console.log('found attachments:', attachments.length);
+    
+    const now = new Date();
+    attachments.map((attachment) => {
+      attachment.entityId = entityId;
+      attachment.claimedAt = now;
+    });
+
+    await this.em.persistAndFlush(attachments);
   }
 
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
@@ -6,14 +6,13 @@ import { Category } from '../database/entites/category.entity';
 import { Attachment } from '../database/entites/attachment.entity';
 import { Store } from '../database/entites/store.entity';
 import { MinioService } from '../shared/services/minio.service';
-import { AttachmentService } from '../shared/services/attachment.service';
+import { AttachmentService } from '../attachments/attachment.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
-
 
 @Injectable()
 export class ProductService {
@@ -24,13 +23,12 @@ export class ProductService {
     private readonly productRepository: BaseRepository<Product>,
   ) {}
 
-
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
       {
         populate: ['images'],
-        fields: ['id', 'name', 'price', 'images.imageUrl']
+        fields: ['id', 'name', 'price', 'images.imageUrl'],
       },
       {
         searchable: ['name', 'categories.name'],
@@ -46,8 +44,9 @@ export class ProductService {
   }
 
 
-  async create(store: Store, dto: CreateProductDto) {
-    const category = await this.em.findOne(Category, {
+async create(store: Store, dto: CreateProductDto) {
+  return this.em.transactional(async (em) => {
+    const category = await em.findOne(Category, {
       name: dto.categoryName,
       store,
     });
@@ -55,7 +54,7 @@ export class ProductService {
     if (!category)
       throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
-    const product = this.em.create(Product, {
+    const product = em.create(Product, {
       ...stripUndefined({
         name: dto.name,
         scannerId: dto.scannerId,
@@ -66,36 +65,31 @@ export class ProductService {
 
     product.categories.add(category);
 
-    await this.em.persistAndFlush(product);
-
     if (dto.attachmentIds?.length) {
-      const attachments = await this.attachmentService.getAttachments(
+      await this.attachmentService.claimAttachments(
         dto.attachmentIds,
+        product.id,
         AttachmentEntityType.PRODUCT,
       );
 
-      await Promise.all(
-        attachments.map(async (attachment) => {
-          attachment.entityId = product.id;
-          attachment.claimedAt = new Date();
+      const attachments = await em.findAll(Attachment, {
+        where: { id: { $in: dto.attachmentIds } },
+      });
 
-          const productImage = this.em.create(ProductImage, {
-            product,
-            imageUrl: attachment.imageUrl,
-          });
-          
-          await this.em.persistAndFlush(productImage);
-        }),
+      attachments.map((attachment) =>
+        em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
       );
-
-      await this.em.flush();
     }
 
+    await em.persistAndFlush(product);
+
     return wrap(product).toJSON();
-  }
+  });
+}
 
 
-  async update(store: Store, id: string, dto: UpdateProductDto) {
+async update(store: Store, id: string, dto: UpdateProductDto) {
+  return this.em.transactional(async (em) => {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
       {
@@ -104,14 +98,14 @@ export class ProductService {
       },
     );
 
-    this.em.assign(product, stripUndefined({
+    em.assign(product, stripUndefined({
       name: dto.name,
       scannerId: dto.scannerId,
       price: dto.price,
     }));
 
     if (dto.categoryName) {
-      const category = await this.em.findOne(Category, {
+      const category = await em.findOne(Category, {
         name: dto.categoryName,
         store,
       });
@@ -123,38 +117,26 @@ export class ProductService {
     }
 
     if (dto.attachmentIds?.length) {
-      const attachments = await this.attachmentService.getAttachments(
+      await this.attachmentService.claimAttachments(
         dto.attachmentIds,
+        product.id,
         AttachmentEntityType.PRODUCT,
       );
 
-      await Promise.all(
-        attachments.map(async (attachment) => {
-          attachment.entityId = product.id;
-          attachment.claimedAt = new Date();
+      const attachments = await em.findAll(Attachment, {
+        where: { id: { $in: dto.attachmentIds } },
+      });
 
-          const productImage = this.em.create(ProductImage, {
-            product,
-            imageUrl: attachment.imageUrl,
-          });
-
-          await this.em.persistAndFlush(productImage);
-        }),
+      attachments.map((attachment) =>
+        em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
       );
     }
 
-    await this.em.flush();
+    await em.flush();
 
     return { message: `Product with id [${product.id}] updated successfully.` };
-  }
-
-
-  async uploadProductImages(files: any[]): Promise<{ ids: string[] }> {
-    const results = await Promise.all(
-      files.map(file => this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file))
-    );
-    return { ids: results.map(r => r.id) };
-  }
+  });
+}
 
 
   async remove(store: Store, id: string) {
@@ -187,7 +169,6 @@ export class ProductService {
 
     return { message: `Product ${id} deleted successfully` };
   }
-
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });

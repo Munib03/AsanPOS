@@ -1,5 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query, BadRequestException, UploadedFiles, UseInterceptors } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -7,7 +6,6 @@ import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
-import { ImagesUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 
 
 @Controller('products')
@@ -23,7 +21,6 @@ export class ProductController {
     return this.productService.findAll(store, query);
   }
 
-
   @Post()
   create(
     @CurrentStore() store: Store,
@@ -31,14 +28,6 @@ export class ProductController {
   ) {
     return this.productService.create(store, dto);
   }
-
-
-  @Post('images/upload')
-  @UseInterceptors(ImagesUploadInterceptor)
-  uploadProductImages(@UploadedFiles() files: any[]) {
-    return this.productService.uploadProductImages(files);
-  }
-  
 
   @Put(':id')
   update(
@@ -49,7 +38,6 @@ export class ProductController {
     return this.productService.update(store, id, dto);
   }
 
-
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,
@@ -57,7 +45,6 @@ export class ProductController {
   ) {
     return this.productService.remove(store, id);
   }
-
 
   @Delete('images/:imageId')
   deleteProductImage(@Param('imageId') imageId: string) {

@@ -14,9 +14,10 @@ import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
-import { AttachmentService } from '../shared/services/attachment.service';
+import { AttachmentService } from '../attachments/attachment.service'; 
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { MinioService } from '../shared/services/minio.service';
+
 
 @Injectable()
 export class EmployeeService {
