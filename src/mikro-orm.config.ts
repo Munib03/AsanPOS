@@ -10,6 +10,8 @@ import { Product } from './database/entites/product.entity';
 import { ProductImage } from './database/entites/product-image.entity';
 import { Attachment } from './database/entites/attachment.entity';
 import { Inventory } from './database/entites/inventory.entity';
+import { Customer } from './database/entites/customer.entity';
+
 
 const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,
@@ -18,7 +20,8 @@ const config: Options<PostgreSqlDriver> = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   dbName: process.env.DB_NAME,
-  entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, Product, ProductImage, Attachment, Inventory],
+  entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
+             Product, ProductImage, Attachment, Inventory, Customer],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',

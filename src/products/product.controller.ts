@@ -36,9 +36,6 @@ export class ProductController {
   @Post('images/upload')
   @UseInterceptors(ImagesUploadInterceptor)
   uploadProductImages(@UploadedFiles() files: any[]) {
-    if (files.length > 10)
-      throw new BadRequestException('You can upload a maximum of 10 images at once');
-
     return this.productService.uploadProductImages(files);
   }
   

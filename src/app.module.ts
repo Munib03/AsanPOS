@@ -12,6 +12,7 @@ import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
 import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { CustomerModule } from './customer/customoer.module';
 
 
 @Module({
@@ -26,6 +27,7 @@ import { InventoryModule } from './inventory/inventory.module';
     CategoryModule,
     ProductModule,
     InventoryModule,
+    CustomerModule
   ],
   controllers: [AppController],
   providers: [AppService],
