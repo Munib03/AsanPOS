@@ -21,11 +21,6 @@ export class AttachmentController {
 //     return this.attachmentService.createAttachment(entityType, file);
 //   }
 
-    // @Delete('delete')
-    // deleteOne(@Body() body: { id: string }) {
-    //     return this.attachmentService.deleteAttachment(body.id);
-    // }
-
 
   @Post('upload')
   @UseInterceptors(ImagesUploadInterceptor)
@@ -34,10 +29,5 @@ export class AttachmentController {
     @Body('entityType') entityType: AttachmentEntityType,
   ) {
     return this.attachmentService.createAttachments(entityType, files);
-  }
-
-  @Delete('delete')
-  deleteMultiple(@Body() body: { ids: string[] }) {
-    return this.attachmentService.deleteAttachments(body.ids);
   }
 }

@@ -169,4 +169,25 @@ async update(store: Store, id: string, dto: UpdateProductDto) {
 
     return { message: `Product ${id} deleted successfully` };
   }
+
+  async deleteProductImage(imageId: string): Promise<{ message: string }> {
+    const image = await this.em.findOne(ProductImage, { id: imageId });
+    if (!image)
+      throw new NotFoundException('Image not found');
+
+    const attachment = await this.em.findOne(Attachment, {
+      imageUrl: image.imageUrl,
+      entityType: AttachmentEntityType.PRODUCT,
+    });
+
+    if (attachment)
+      await this.em.removeAndFlush(attachment);
+
+    if (image.imageUrl)
+      await this.minioService.deleteFile(image.imageUrl);
+
+    await this.em.removeAndFlush(image);
+
+    return { message: 'Image deleted successfully' };
+  }
 }
