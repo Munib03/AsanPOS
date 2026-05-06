@@ -83,7 +83,7 @@ export class ProductService {
             product,
             imageUrl: attachment.imageUrl,
           });
-
+          
           await this.em.persistAndFlush(productImage);
         }),
       );
@@ -149,6 +149,14 @@ export class ProductService {
   }
 
 
+  async uploadProductImages(files: any[]): Promise<{ ids: string[] }> {
+    const results = await Promise.all(
+      files.map(file => this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file))
+    );
+    return { ids: results.map(r => r.id) };
+  }
+
+
   async remove(store: Store, id: string) {
     await this.em.transactional(async (em) => {
       const product = await this.productRepository.findOneOrFail(
@@ -178,14 +186,6 @@ export class ProductService {
     });
 
     return { message: `Product ${id} deleted successfully` };
-  }
-
-
-  async uploadProductImages(files: any[]): Promise<{ ids: string[] }> {
-    const results = await Promise.all(
-      files.map(file => this.attachmentService.createAttachment(AttachmentEntityType.PRODUCT, file))
-    );
-    return { ids: results.map(r => r.id) };
   }
 
 
