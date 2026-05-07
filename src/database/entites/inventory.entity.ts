@@ -1,6 +1,7 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from "./product.entity";
+import { Store } from "./store.entity";
 
 @Entity({ tableName: "inventory" })
 export class Inventory {
@@ -14,9 +15,11 @@ export class Inventory {
   @Property()
   address!: string;
 
+  @ManyToOne(() => Store, { fieldName: 'store_id' })
+  store!: Store;
+
   @ManyToMany(() => Product, product => product.inventories, { owner: true, pivotTable: 'inventory_product' })
   products = new Collection<Product>(this);
-  
 
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;

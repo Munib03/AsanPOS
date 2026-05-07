@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager, serialize } from '@mikro-orm/postgresql';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
@@ -11,50 +11,70 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 export class InventoryService {
   constructor(private readonly em: EntityManager) {}
 
-async findAll(store: Store) {
-  return this.em.findAll(Inventory, {
-    fields: ['id', 'name', 'address'],
-  });
-}
 
-async findOne(store: Store, id: string) {
-  const inventory = await this.em.findOne(Inventory, { id });
-  if (!inventory)
-    throw new NotFoundException(`Inventory with id ${id} not found`);
+  async findAll(store: Store) {
+    const inventories = await this.em.findAll(Inventory, {
+      where: { store },
+      populate: ['products'],
+      fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
+    });
 
-  return inventory;
-}
+    return serialize(inventories, { populate: ['products'] });
+  }
+  
 
-async create(store: Store, dto: CreateInventoryDto) {
-  const existingInventory = await this.em.findOne(Inventory, { name: dto.name });
-  if (existingInventory)
-    throw new BadRequestException(`Inventory with name ${dto.name} already exists.`);
+  async findOne(store: Store, id: string) {
+    const inventory = await this.em.findOne(Inventory, 
+      { id, store },
+      {
+        populate: ['products'],
+        fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
+      }
+    );
 
-  const inventory = this.em.create(Inventory, {
-    name: dto.name,
-    address: dto.address,
-  });
+    if (!inventory)
+      throw new NotFoundException(`Inventory with id ${id} not found`);
 
-  await this.em.persistAndFlush(inventory);
-  return { message: 'Inventory created successfully.' };
-}
+    return serialize(inventory, { populate: ['products'] });
+  }
 
-async update(store: Store, id: string, dto: UpdateInventoryDto) {
-  const inventory = await this.em.findOne(Inventory, { id });
-  if (!inventory)
-    throw new NotFoundException(`Inventory with id ${id} not found`);
 
-  this.em.assign(inventory, stripUndefined(dto));
-  await this.em.flush();
-  return { message: `Inventory with id ${id} updated successfully.` };
-}
+  async create(store: Store, dto: CreateInventoryDto) {
+    const existingInventory = await this.em.findOne(Inventory, { name: dto.name, store });
+    if (existingInventory)
+      throw new BadRequestException(`Inventory with name ${dto.name} already exists.`);
 
-async delete(store: Store, id: string) {
-  const inventory = await this.em.findOne(Inventory, { id });
-  if (!inventory)
-    throw new NotFoundException(`Inventory with id ${id} not found`);
+    const inventory = this.em.create(Inventory, {
+      name: dto.name,
+      address: dto.address,
+      store,
+    });
 
-  await this.em.removeAndFlush(inventory);
-  return { message: `Inventory with id ${id} deleted successfully.` };
-}
+    await this.em.persistAndFlush(inventory);
+
+    return { message: 'Inventory created successfully.' };
+  }
+
+
+  async update(store: Store, id: string, dto: UpdateInventoryDto) {
+    const inventory = await this.em.findOne(Inventory, { id, store });
+    if (!inventory)
+      throw new NotFoundException(`Inventory with id ${id} not found`);
+
+    this.em.assign(inventory, stripUndefined(dto));
+    await this.em.flush();
+
+    return { message: `Inventory with id ${id} updated successfully.` };
+  }
+
+
+  async delete(store: Store, id: string) {
+    const inventory = await this.em.findOne(Inventory, { id, store });
+    if (!inventory)
+      throw new NotFoundException(`Inventory with id ${id} not found`);
+
+    await this.em.removeAndFlush(inventory);
+
+    return { message: `Inventory with id ${id} deleted successfully.` };
+  }
 }

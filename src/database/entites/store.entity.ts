@@ -1,6 +1,7 @@
 import { Entity, PrimaryKey, Property, OneToMany, Collection } from '@mikro-orm/core';
 import { Employee } from './employee.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { Inventory } from './inventory.entity';
 
 @Entity({ tableName: 'stores' })
 export class Store {
@@ -16,6 +17,9 @@ export class Store {
 
   @OneToMany(() => Employee, e => e.store)
   employees = new Collection<Employee>(this);
+
+  @OneToMany(() => Inventory, inventory => inventory.store)
+  inventories = new Collection<Inventory>(this);
 
   @Property({ defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
