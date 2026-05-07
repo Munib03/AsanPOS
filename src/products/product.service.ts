@@ -29,8 +29,8 @@ export class ProductService {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
       {
-        populate: ['images', "categories"],
-        fields: ['id', 'name', 'price', 'images.imageUrl'],
+        populate: ['images', 'categories'],
+        fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
       },
       {
         searchable: ['name', 'categories.name'],
@@ -40,7 +40,7 @@ export class ProductService {
     );
 
     return {
-      data: serialize(products, { populate: ['images'] }),
+      data: serialize(products, { populate: ['images', 'categories'] }),
       meta,
     };
   }
