@@ -10,7 +10,6 @@ export class AttachmentController {
     constructor(private readonly attachmentService: AttachmentService) {}
 
 
-                // This two for single photos (uploading, deleting single photos)
 
 //   @Post('upload/single')
 //   @UseInterceptors(ImageUploadInterceptor)

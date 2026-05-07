@@ -14,6 +14,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
 
+
 @Injectable()
 export class ProductService {
   constructor(
@@ -22,6 +23,7 @@ export class ProductService {
     private readonly attachmentService: AttachmentService,
     private readonly productRepository: BaseRepository<Product>,
   ) {}
+
 
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
@@ -87,6 +89,7 @@ export class ProductService {
 
     return { message: "Product created Successfully!"}
   }
+
 
   async update(store: Store, id: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
@@ -177,6 +180,7 @@ export class ProductService {
 
     return { message: `Product ${id} deleted successfully` };
   }
+
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });
