@@ -44,116 +44,107 @@ export class ProductService {
   }
 
 
-async create(store: Store, dto: CreateProductDto) {
-  const category = await this.em.findOne(Category, {
-    name: dto.categoryName,
-    store,
-  });
-
-  if (!category)
-    throw new NotFoundException(`Category not found: ${dto.categoryName}`);
-
-  const product = this.em.create(Product, {
-    ...stripUndefined({
-      name: dto.name,
-      scannerId: dto.scannerId,
-      price: dto.price,
-    }),
-    store,
-  });
-
-  product.categories.add(category);
-
-  if (dto.attachmentIds?.length) {
-    const attachments = await this.em.findAll(Attachment, {
-      where: {
-        id: { $in: dto.attachmentIds },
-        entityType: AttachmentEntityType.PRODUCT,
-        claimedAt: null,
-      },
-    });
-
-    if (attachments.length !== dto.attachmentIds.length)
-      throw new UnprocessableEntityException(
-        'One or more attachments not found or already claimed',
-      );
-
-    const now = new Date();
-
-    attachments.map((attachment) => {
-      attachment.entityId = product.id;
-      attachment.claimedAt = now;
-
-      this.em.create(ProductImage, {
-        product,
-        imageUrl: attachment.imageUrl,
-      });
-    });
-  }
-
-  await this.em.persistAndFlush(product);
-
-  return wrap(product).toJSON();
-}
-
-
-async update(store: Store, id: string, dto: UpdateProductDto) {
-  const product = await this.productRepository.findOneOrFail(
-    { id, store },
-    {
-      populate: ['categories', 'images'],
-      notFoundMessage: `Product with id ${id} not found`,
-    },
-  );
-
-  this.em.assign(
-    product,
-    stripUndefined({
-      name: dto.name,
-      scannerId: dto.scannerId,
-      price: dto.price,
-    }),
-  );
-
-  if (dto.categoryName) {
+  async create(store: Store, dto: CreateProductDto) {
     const category = await this.em.findOne(Category, {
       name: dto.categoryName,
       store,
     });
 
     if (!category)
-      throw new NotFoundException(
-        `Category not found: ${dto.categoryName}`,
-      );
+      throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
-    product.categories.set([category]);
-  }
-
-  if (dto.attachmentIds?.length) {
-    await this.attachmentService.claimAttachments(
-      dto.attachmentIds,
-      product.id,
-      AttachmentEntityType.PRODUCT,
-    );
-
-    const attachments = await this.em.findAll(Attachment, {
-      where: { id: { $in: dto.attachmentIds } },
+    const product = this.em.create(Product, {
+      ...stripUndefined({
+        name: dto.name,
+        scannerId: dto.scannerId,
+        price: dto.price,
+      }),
+      store,
     });
 
-    attachments.map((attachment) =>
-      this.em.create(ProductImage, {
-        product,
-        imageUrl: attachment.imageUrl,
-      }),
-    );
+    product.categories.add(category);
+
+    if (dto.attachmentIds?.length) {
+      await this.attachmentService.claimAttachments(
+        dto.attachmentIds,
+        product.id,
+        AttachmentEntityType.PRODUCT,
+      );
+
+      const attachments = await this.em.findAll(Attachment, {
+        where: { id: { $in: dto.attachmentIds } },
+      });
+
+      attachments.map((attachment) =>
+        this.em.create(ProductImage, {
+          product,
+          imageUrl: attachment.imageUrl,
+        }),
+      );
+    }
+
+    await this.em.persistAndFlush(product);
+
+    return { message: "Product created Successfully!"}
   }
 
-  await this.em.flush();
+  async update(store: Store, id: string, dto: UpdateProductDto) {
+    const product = await this.productRepository.findOneOrFail(
+      { id, store },
+      {
+        populate: ['categories', 'images'],
+        notFoundMessage: `Product with id ${id} not found`,
+      },
+    );
 
-  return {
-    message: `Product with id [${product.id}] updated successfully.`,
-  };
-}
+    this.em.assign(
+      product,
+      stripUndefined({
+        name: dto.name,
+        scannerId: dto.scannerId,
+        price: dto.price,
+      }),
+    );
+
+    if (dto.categoryName) {
+      const category = await this.em.findOne(Category, {
+        name: dto.categoryName,
+        store,
+      });
+
+      if (!category)
+        throw new NotFoundException(
+          `Category not found: ${dto.categoryName}`,
+        );
+
+      product.categories.set([category]);
+    }
+
+    if (dto.attachmentIds?.length) {
+      await this.attachmentService.claimAttachments(
+        dto.attachmentIds,
+        product.id,
+        AttachmentEntityType.PRODUCT,
+      );
+
+      const attachments = await this.em.findAll(Attachment, {
+        where: { id: { $in: dto.attachmentIds } },
+      });
+
+      attachments.map((attachment) =>
+        this.em.create(ProductImage, {
+          product,
+          imageUrl: attachment.imageUrl,
+        }),
+      );
+    }
+
+    await this.em.flush();
+
+    return {
+      message: `Product with id [${product.id}] updated successfully.`,
+    };
+  }
 
 
   async remove(store: Store, id: string) {
