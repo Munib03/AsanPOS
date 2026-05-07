@@ -2,7 +2,7 @@ import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
-import { getNiceSignedUrl } from '../../shared/utils/get.sgned.url';
+import { getSignedUrl } from '../../shared/utils/get.sgned.url';
 
 
 
@@ -43,10 +43,12 @@ export class Employee {
   @OnLoad()
   async loadImage() {
     if (this.imageUrl) {
-      this.imageUrlSigned = await getNiceSignedUrl(this.imageUrl);
+      this.imageUrlSigned = await getSignedUrl(this.imageUrl);
     }
   }
 
+  @ManyToOne(() => Store)
+  store!: Store;
 
   @Property({ nullable: true })
   dob?: Date;
@@ -56,9 +58,6 @@ export class Employee {
 
   @Property({ nullable: true })
   verifiedAt?: Date;
-
-  @ManyToOne(() => Store)
-  store!: Store;
 
   @Property({ defaultRaw: 'now()', nullable: true })
   createdAt?: Date;

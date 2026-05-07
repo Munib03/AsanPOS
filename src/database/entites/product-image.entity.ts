@@ -1,7 +1,7 @@
 import { Entity, PrimaryKey, Property, ManyToOne, OnLoad } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from './product.entity';
-import { getNiceSignedUrl } from '../../shared/utils/get.sgned.url';
+import { getSignedUrl } from '../../shared/utils/get.sgned.url';
 
 @Entity({ tableName: 'product_image' })
 export class ProductImage {
@@ -21,7 +21,7 @@ export class ProductImage {
   @OnLoad()
   async loadImage() {
     if (this.imageUrl)
-      this.imageUrlSigned = await getNiceSignedUrl(this.imageUrl);
+      this.imageUrlSigned = await getSignedUrl(this.imageUrl);
   }
 
   @Property({ defaultRaw: 'now()', nullable: true, fieldName: 'created_at' })

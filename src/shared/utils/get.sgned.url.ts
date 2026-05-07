@@ -1,6 +1,6 @@
 import * as Minio from 'minio';
 
-export async function getNiceSignedUrl(
+export async function getSignedUrl(
   key: string,
   expiry: number = 300,
 ): Promise<string> {
