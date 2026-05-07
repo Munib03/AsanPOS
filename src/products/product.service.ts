@@ -29,7 +29,7 @@ export class ProductService {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
       {
-        populate: ['images'],
+        populate: ['images', "categories"],
         fields: ['id', 'name', 'price', 'images.imageUrl'],
       },
       {

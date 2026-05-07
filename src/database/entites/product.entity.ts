@@ -25,14 +25,14 @@ export class Product {
   @ManyToMany(() => Category, category => category.products, { owner: true, pivotTable: 'category_product' })
   categories = new Collection<Category>(this);
 
+  @ManyToMany(() => Inventory, inventory => inventory.products)
+  inventories = new Collection<Inventory>(this);
+
   @OneToMany(() => ProductImage, image => image.product)
   images = new Collection<ProductImage>(this);
 
   @ManyToOne(() => Store)
   store!: Store;
-
-  @ManyToMany(() => Inventory, inventory => inventory.products)
-  inventories = new Collection<Inventory>(this);
 
   @Property({ defaultRaw: 'now()', nullable: true, fieldName: 'created_at' })
   createdAt?: Date;

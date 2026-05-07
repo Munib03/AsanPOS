@@ -14,11 +14,9 @@ export class Inventory {
   @Property()
   address!: string;
 
-  @Property({ fieldName: 'store_id' })
-  storeId!: string;
-
   @ManyToMany(() => Product, product => product.inventories, { owner: true, pivotTable: 'inventory_product' })
   products = new Collection<Product>(this);
+  
 
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;
