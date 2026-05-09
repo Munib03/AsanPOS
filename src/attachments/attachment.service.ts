@@ -5,6 +5,15 @@ import { MinioService } from '../shared/services/minio.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
 
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+}
+
 @Injectable()
 export class AttachmentService {
   constructor(
@@ -12,7 +21,7 @@ export class AttachmentService {
     private readonly minioService: MinioService,
   ) {}
 
-  async createAttachment(entityType: AttachmentEntityType, file: any): Promise<{ id: string }> {
+  async createAttachment(entityType: AttachmentEntityType, file: MulterFile): Promise<{ id: string }> {
     if (!file)
       throw new BadRequestException('No image file provided');
 
@@ -30,7 +39,7 @@ export class AttachmentService {
     return { id: attachment.id };
   }
 
-  async createAttachments(entityType: AttachmentEntityType, files: any[]): Promise<{ ids: string[] }> {
+  async createAttachments(entityType: AttachmentEntityType, files: MulterFile[]): Promise<{ ids: string[] }> {
     if (!Object.values(AttachmentEntityType).includes(entityType))
       throw new BadRequestException(`Invalid entityType. Valid values: ${Object.values(AttachmentEntityType).join(', ')}`);
 

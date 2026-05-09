@@ -14,6 +14,7 @@ import { generateOTP } from '../shared/utils/auth.utils';
 import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+import { serialize } from '@mikro-orm/postgresql';
 import { AttachmentService } from '../attachments/attachment.service'; 
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { MinioService } from '../shared/services/minio.service';
@@ -25,11 +26,17 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
-    private readonly minioService: MinioService
   ) {}
 
+
   async findAll() {
-    return this.em.findAll(Employee, { exclude: ['password', "createdAt", "updatedAt", "store" ] });
+    const employees = await this.em.findAll(Employee, {
+      fields: ['id', 'email', 'name', 'phone', 'role', 'firstName', 'lastName', 'imageUrl', 'dob', 'gender', 'verifiedAt'],
+    });
+
+    return serialize(employees, {
+      forceObject: true,
+    });
   }
 
   async findOne(id: string) {
