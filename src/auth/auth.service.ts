@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as bcrypt from 'bcrypt';
 import { Employee } from '../database/entites/employee.entity';
 import { TwoFactorAuth } from '../database/entites/twoFactorAuth.entity';
@@ -15,9 +14,7 @@ import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
-import { MinioService } from '../shared/services/minio.service';
-import { Attachment } from '../database/entites/attachment.entity';
-
+import Redis from 'ioredis';
 
 
 @Injectable()
@@ -26,9 +23,9 @@ export class AuthService {
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
     private readonly queueService: QueueService,
-    
-    @Inject(CACHE_MANAGER)
-    private readonly cacheManager
+
+    @Inject('REDIS_CLIENT')
+    private readonly redis: Redis,
   ) { }
 
   private generateJWT(employee: Employee): string {
@@ -58,7 +55,7 @@ export class AuthService {
 
     const secret = totp.secret.base32;
 
-    await this.cacheManager.set(`2fa_secret_${employeeId}`, secret, 300000);
+    await this.redis.set(`2fa_secret_${employeeId}`, secret, 'EX', 300);
 
     const otpAuthUrl = totp.toString();
     const qrCode = await QRCode.toDataURL(otpAuthUrl);
@@ -72,7 +69,7 @@ export class AuthService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const secret = await this.cacheManager.get(`2fa_secret_${employeeId}`) as string;
+    const secret = await this.redis.get(`2fa_secret_${employeeId}`);
     if (!secret)
       throw new BadRequestException('2FA setup expired. Please try enabling 2FA again');
 
@@ -96,8 +93,6 @@ export class AuthService {
     });
 
     await this.em.persistAndFlush(twoFactor);
-
-    await this.cacheManager.del(`2fa_secret_${employeeId}`);
 
     return { message: '2FA enabled successfully' };
   }
@@ -138,7 +133,7 @@ export class AuthService {
 
       if (existingEmployee)
         throw new BadRequestException('This store already has an owner. Please create a new store.');
-    } 
+    }
     else {
       store = this.em.create(Store, {
         name: dto.storeName,
@@ -164,7 +159,6 @@ export class AuthService {
       store,
     });
 
-  
     const code = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -266,5 +260,4 @@ export class AuthService {
       createdAt: employee.createdAt ?? null,
     };
   }
-
 }
