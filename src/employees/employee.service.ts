@@ -82,9 +82,9 @@ export class EmployeeService {
 
 
   async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
-    if (!dto) 
+    if (!dto)
       return { message: 'No changes to update' };
-   
+
     const employee = await this.em.findOne(
       Employee,
       { id },
@@ -94,12 +94,22 @@ export class EmployeeService {
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
+    if (dto.attachmentId) {
+      const attachment = await this.attachmentService.claimAttachment(
+        dto.attachmentId,
+        employee.id,
+        AttachmentEntityType.EMPLOYEE,
+      );
+
+      employee.imageUrl = attachment.imageUrl;
+    }
+
     if (dto.password) {
       if (!dto.oldPassword)
         throw new BadRequestException('Old password is required to change password');
 
       const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
-      if (!isMatch) 
+      if (!isMatch)
         throw new BadRequestException('Old password is incorrect');
 
       dto.password = await bcrypt.hash(dto.password, 10);
@@ -107,18 +117,11 @@ export class EmployeeService {
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
-      const existingStore = await this.em.findOne(Store, {
-        name: dto.storeName,
-      });
-
+      const existingStore = await this.em.findOne(Store, { name: dto.storeName });
       if (existingStore)
-        throw new BadRequestException(
-          `Store with name ${dto.storeName} already exists`,
-        );
+        throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
 
       employee.store.name = dto.storeName;
     }
@@ -126,12 +129,11 @@ export class EmployeeService {
     let emailChange = false;
     if (dto.email) {
       if (dto.email === employee.email)
-        throw new BadRequestException(
-          'New email is the same as the current one',
-        );
+        throw new BadRequestException('New email is the same as the current one');
 
       const existing = await this.em.findOne(Employee, { email: dto.email });
-      if (existing) throw new BadRequestException('Email already in use');
+      if (existing)
+        throw new BadRequestException('Email already in use');
 
       emailChange = true;
 
@@ -151,7 +153,7 @@ export class EmployeeService {
       await this.queueService.sendVerificationEmail(dto.email, code);
     }
 
-    const { storeName, email, oldPassword, ...rest } = dto;
+    const { storeName, email, oldPassword, attachmentId, ...rest } = dto;
     this.em.assign(employee, stripUndefined(rest));
     await this.em.flush();
 
@@ -209,45 +211,6 @@ export class EmployeeService {
     return {
       message: 'Email updated successfully',
       employee_id: employee.id,
-    };
-  }
-
-
-  async createEmployeeAttachment(file: any) {
-    return this.attachmentService.createAttachment(
-      AttachmentEntityType.EMPLOYEE,
-      file,
-    );
-  }
-
-
-  async getEmployeeAttachment(id: string) {
-    return this.attachmentService.getAttachment(
-      id,
-      AttachmentEntityType.EMPLOYEE,
-    );
-  }
-
-
-  async claimEmployeeAttachment(employeeId: string, attachmentId: string) {
-    const attachment = await this.attachmentService.claimAttachment(
-      attachmentId,
-      employeeId,
-      AttachmentEntityType.EMPLOYEE,
-    );
-
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${employeeId} not found`);
-
-    employee.imageUrl = attachment.imageUrl;
-
-    await this.em.flush();
-
-    return {
-      message: 'Attachment claimed successfully',
-      attachment,
     };
   }
 }

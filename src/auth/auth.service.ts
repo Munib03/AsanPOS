@@ -26,7 +26,6 @@ export class AuthService {
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
     private readonly queueService: QueueService,
-    private readonly minioService: MinioService,
     
     @Inject(CACHE_MANAGER)
     private readonly cacheManager
