@@ -11,14 +11,14 @@ export class AttachmentController {
 
 
 
-//   @Post('upload/single')
-//   @UseInterceptors(ImageUploadInterceptor)
-//   uploadSingle(
-//     @UploadedFile() file: any,
-//     @Body('entityType') entityType: AttachmentEntityType,
-//   ) {
-//     return this.attachmentService.createAttachment(entityType, file);
-//   }
+  @Post('upload/single')
+  @UseInterceptors(ImageUploadInterceptor)
+  uploadSingle(
+    @UploadedFile() file: any,
+    @Body('entityType') entityType: AttachmentEntityType,
+  ) {
+    return this.attachmentService.createAttachment(entityType, file);
+  }
 
 
   @Post('upload')
