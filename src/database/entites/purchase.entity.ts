@@ -1,0 +1,37 @@
+import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from "@mikro-orm/core";
+import { v4 as uuidv4 } from "uuid";
+import { Customer } from "./customer.entity";
+import { Inventory } from "./inventory.entity";
+import { PurchasedItem } from "./purchased_item.entity";
+
+
+@Entity({ tableName: "purchase" })
+export class Purchase {
+
+  @PrimaryKey({ type: "uuid" })
+  id: string = uuidv4();
+
+  @Property({ autoincrement: true, fieldName: "sequence_id", nullable: true })
+  sequenceId?: number;
+
+  @ManyToOne(() => Customer, { fieldName: "customer_id" })
+  customer!: Customer;
+
+  @ManyToOne(() => Inventory, { fieldName: "inventory_id" })
+  inventory!: Inventory;
+
+  @Property({ fieldName: "custom_date", nullable: true })
+  customDate?: Date;
+
+  @Property({ default: "draft" })
+  status!: string;
+
+  @OneToMany(() => PurchasedItem, item => item.purchase)
+  items = new Collection<PurchasedItem>(this);
+
+  @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
+  createdAt?: Date;
+
+  @Property({ fieldName: "updated_at", defaultRaw: "now()", onUpdate: () => new Date(), nullable: true })
+  updatedAt?: Date;
+}

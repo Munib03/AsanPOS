@@ -13,6 +13,7 @@ import config from './mikro-orm.config';
 import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CustomerModule } from './customer/customoer.module';
+import { PurchaseModule } from './purchase/purchase.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { CustomerModule } from './customer/customoer.module';
     ProductModule,
     InventoryModule,
     CustomerModule,
+    PurchaseModule
   ],
   controllers: [AppController],
   providers: [AppService],

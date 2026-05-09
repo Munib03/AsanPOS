@@ -5,6 +5,7 @@ import { ProductImage } from './product-image.entity';
 import { Store } from './store.entity';
 import { Inventory } from './inventory.entity';
 import { BaseRepository } from '../../shared/repositories/base.repository';
+import { PurchasedItem } from './purchased_item.entity';
 
 
 @Entity({ tableName: 'products', repository: () => BaseRepository })
@@ -33,6 +34,9 @@ export class Product {
 
   @ManyToOne(() => Store)
   store!: Store;
+
+  @OneToMany(() => PurchasedItem, item => item.product)
+  purchasedItems = new Collection<PurchasedItem>(this);
 
   @Property({ defaultRaw: 'now()', nullable: true, fieldName: 'created_at' })
   createdAt?: Date;
