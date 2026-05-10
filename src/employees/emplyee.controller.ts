@@ -39,7 +39,7 @@ export class EmployeeController {
 
 
   @Put('info')
-  async updateEmployeeInfo(
+  updateEmployeeInfo(
     @CurrentUser() user: { id: string },
     @Body() dto: UpdateEmployeeDto,
   ) {

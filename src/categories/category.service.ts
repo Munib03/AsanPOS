@@ -16,10 +16,10 @@ export class CategoryService {
   }
 
 
-  async findOne(store: Store, id: string) {
-    const category = await this.em.findOne(Category, { id, store });
+  async findOne(store: Store, name: string) {
+    const category = await this.em.findOne(Category, {name, store });
     if (!category)
-      throw new NotFoundException(`Category with id ${id} not found`);
+      throw new NotFoundException(`Category with name ${name} not found`);
 
     return category;
   }
@@ -40,10 +40,10 @@ export class CategoryService {
   }
 
 
-  async update(store: Store, id: string, dto: UpdateCategoryDto) {
-    const category = await this.em.findOne(Category, { id, store });
+  async update(store: Store, name: string, dto: UpdateCategoryDto) {
+    const category = await this.em.findOne(Category, { name, store });
     if (!category)
-      throw new NotFoundException(`Category with id ${id} not found`);
+      throw new NotFoundException(`Category with name ${name} not found`);
 
     if (dto.name)
       category.name = dto.name;

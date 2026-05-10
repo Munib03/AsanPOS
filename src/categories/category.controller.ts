@@ -20,12 +20,12 @@ export class CategoryController {
   }
 
   
-  @Get(":id")
+  @Get(":name")
   findOne(
     @CurrentStore() store: Store,
-    @Param("id") id: string,
+    @Body("name") name: string,
   ) {
-    return this.categoryService.findOne(store, id);
+    return this.categoryService.findOne(store, name);
   }
 
 
