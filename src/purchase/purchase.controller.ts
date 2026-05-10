@@ -1,8 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
 import { PurchaseService } from "./purchase.service";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
 import { UpdatePurchaseDto } from "./dto/update-purchase.dto";
+import { CurrentStore } from "../shared/decorators/store.decorator";
+import { Store } from "../database/entites/store.entity";
+import * as paginateQueryTypes from "../shared/types/paginate-query.types";
 
 @Controller("purchase")
 @UseGuards(JwtAuthGuard)
@@ -10,13 +13,13 @@ export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
 
   @Get()
-  findAll() {
-    return this.purchaseService.findAll();
+  findAll(@CurrentStore() store: Store, @Query() query: paginateQueryTypes.PaginateQuery) {
+    return this.purchaseService.findAll(store, query);
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.purchaseService.findOne(id);
+  findOne(@CurrentStore() store: Store, @Param("id") id: string) {
+    return this.purchaseService.findOne(store, id);
   }
 
   @Post()

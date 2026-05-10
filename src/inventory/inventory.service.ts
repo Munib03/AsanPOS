@@ -5,6 +5,7 @@ import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
 import { Store } from '../database/entites/store.entity';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+import { Product } from '../database/entites/product.entity';
 
 
 @Injectable()

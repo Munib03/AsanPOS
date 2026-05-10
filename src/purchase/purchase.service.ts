@@ -1,5 +1,5 @@
 import { EntityManager, serialize } from "@mikro-orm/postgresql";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
 import { Purchase } from "../database/entites/purchase.entity";
 import { Customer } from "../database/entites/customer.entity";
 import { Product } from "../database/entites/product.entity";
@@ -7,32 +7,50 @@ import { Inventory } from "../database/entites/inventory.entity";
 import { UpdatePurchaseDto } from "./dto/update-purchase.dto";
 import { PurchasedItem } from "../database/entites/purchased_item.entity";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
+import { Store } from "../database/entites/store.entity";
+import { BaseRepository } from "../shared/repositories/base.repository";
+import { PaginateQuery } from "../shared/types/paginate-query.types";
+import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
 
 
 @Injectable()
 export class PurchaseService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+  private readonly em: EntityManager,
+  private readonly purchaseRepository: BaseRepository<Purchase>,
+  ) {}
 
 
-  async findAll() {
-    const purchases = await this.em.findAll(Purchase, {
-      populate: ["customer", "inventory", "items", "items.product"],
-      fields: [
-        "id", "sequenceId", "status", "customDate", "createdAt",
-        "customer.id", "customer.name",
-        "inventory.id", "inventory.name",
-        "items.id", "items.quantity", "items.unitPrice", "items.status",
-        "items.product.id", "items.product.name", "items.product.price",
-      ],
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
+      { inventory: { store } },
+      {
+        populate: ["customer", "inventory", "items", "items.product"],
+        fields: [
+          "id", "sequenceId", "status", "customDate", "createdAt",
+          "customer.id", "customer.name",
+          "inventory.id", "inventory.name",
+          "items.id", "items.quantity", "items.unitPrice", "items.status",
+          "items.product.id", "items.product.name", "items.product.price",
+        ],
+      },
+      {
+        searchable: ["customer.name", "status"],
+        sortable: ["customDate", "status", "sequenceId"],
+      },
+      query,
+    );
 
-    return serialize(purchases, { populate: ["customer", "inventory", "items", "items.product"] });
+    return {
+      data: serialize(purchases, { populate: ["customer", "inventory", "items", "items.product"] }),
+      meta,
+    };
   }
 
 
-  async findOne(id: string) {
+  async findOne(store: Store, id: string) {
     const purchase = await this.em.findOne(Purchase,
-      { id },
+      { id, inventory: { store } },
       { populate: ["customer", "inventory", "items", "items.product"] }
     );
 
@@ -57,26 +75,34 @@ export class PurchaseService {
         customer,
         inventory,
         customDate: dto.customDate,
-        status: "pending",
+        status: PurchaseStatus.PENDING,
       });
 
       await em.persistAndFlush(purchase);
 
-      const purchasedItems = await Promise.all(
-        dto.items.map(async (item) => {
-          const product = await em.findOne(Product, { id: item.productId });
-          if (!product)
-            throw new NotFoundException(`Product with id ${item.productId} not found`);
 
-          return em.create(PurchasedItem, {
-            purchase,
-            product,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            status: "pending",
-          });
-        })
-      );
+      const products = await em.findAll(Product, {
+        where: { id: { $in: dto.items.map(item => item.productId) } },
+      });
+
+      if (products.length !== dto.items.length)
+        throw new NotFoundException(`One or more products not found`);
+
+      const productMap = new Map(products.map(product => [product.id, product]));
+
+      const purchasedItems = dto.items.map((item) => {
+        const product = productMap.get(item.productId);
+        if (!product)
+          throw new NotFoundException(`Product with id ${item.productId} not found`);
+
+        return em.create(PurchasedItem, {
+          purchase,
+          product,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          status: PurchaseStatus.PENDING, 
+        });
+      });
 
       await em.persistAndFlush(purchasedItems);
       return { message: "Purchase created successfully." };
@@ -101,10 +127,10 @@ export class PurchaseService {
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    purchase.status = dto.status ?? purchase.status;
-    await this.em.flush();
+    if (dto.status)
+      purchase.status = dto.status;
 
+    await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
   }
-
 }

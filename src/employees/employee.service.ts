@@ -17,7 +17,6 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { serialize } from '@mikro-orm/postgresql';
 import { AttachmentService } from '../attachments/attachment.service'; 
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
-import { MinioService } from '../shared/services/minio.service';
 
 
 @Injectable()

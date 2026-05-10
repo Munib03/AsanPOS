@@ -1,7 +1,8 @@
-import { IsString, IsOptional } from "class-validator";
+import { IsOptional, IsEnum } from "class-validator";
+import { PurchaseStatus } from "../../shared/utils/purchase-status-enum";
 
 export class UpdatePurchaseDto {
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(PurchaseStatus)
+  status?: PurchaseStatus;
 }
