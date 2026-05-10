@@ -5,6 +5,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { Store } from '../database/entites/store.entity';
 
 @Injectable()
 export class CustomerService {
@@ -14,8 +15,16 @@ export class CustomerService {
   ) {}
 
   
-  async findAll() {
-    return this.em.findAll(Customer, {});
+  async findAll(store: Store) {
+    const customers = await this.em.findAll(Customer, {
+      where: {
+        purchases: {
+          inventory: { store },
+        },
+      },
+    });
+
+    return customers;
   }
 
 

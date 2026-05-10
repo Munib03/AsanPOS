@@ -1,27 +1,22 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
-import { v4 as uuidv4 } from 'uuid';
+import { Entity, PrimaryKey, Property, OneToMany, Collection } from "@mikro-orm/core";
+import { v4 as uuidv4 } from "uuid";
+import { Purchase } from "./purchase.entity";
 
-@Entity({ tableName: 'customer' })
+@Entity({ tableName: "customer" })
 export class Customer {
 
-  @PrimaryKey({ type: 'uuid' })
+  @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
   @Property({ nullable: true })
   name?: string;
 
   @Property({ nullable: true })
-  address?: string;
-
-  @Property({ nullable: true })
   phone?: string;
 
-  // @Property({ fieldName: 'store_id' })
-  // storeId!: string;
+  @Property({ nullable: true })
+  address?: string;
 
-  // @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
-  // createdAt?: Date;
-
-  // @Property({ fieldName: 'updated_at', defaultRaw: 'now()', onUpdate: () => new Date(), nullable: true })
-  // updatedAt?: Date;
+  @OneToMany(() => Purchase, purchase => purchase.customer)
+  purchases = new Collection<Purchase>(this);
 }

@@ -3,6 +3,8 @@ import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CurrentStore } from '../shared/decorators/store.decorator';
+import { Store } from '../database/entites/store.entity';
 
 @Controller('customer')
 @UseGuards(JwtAuthGuard)
@@ -10,8 +12,8 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get()
-  findAll() {
-    return this.customerService.findAll();
+  findAll(@CurrentStore() store: Store) {
+    return this.customerService.findAll(store);
   }
 
   
