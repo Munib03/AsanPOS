@@ -175,6 +175,7 @@ export class ProductService {
         if (attachment.imageUrl)
           await this.minioService.deleteFile(attachment.imageUrl);
 
+      await em.removeAndFlush(attachments);
       await em.removeAndFlush(product);
     });
 

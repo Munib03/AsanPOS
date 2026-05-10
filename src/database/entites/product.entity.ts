@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne, Cascade } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from './category.entity';
 import { ProductImage } from './product-image.entity';
@@ -29,8 +29,9 @@ export class Product {
   @ManyToMany(() => Inventory, inventory => inventory.products)
   inventories = new Collection<Inventory>(this);
 
-  @OneToMany(() => ProductImage, image => image.product)
+  @OneToMany(() => ProductImage, image => image.product, { cascade: [Cascade.REMOVE] })
   images = new Collection<ProductImage>(this);
+
 
   @ManyToOne(() => Store)
   store!: Store;

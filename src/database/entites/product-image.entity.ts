@@ -29,4 +29,5 @@ export class ProductImage {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true, fieldName: 'updated_at' })
   updatedAt?: Date;
+
 }
