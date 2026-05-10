@@ -51,9 +51,4 @@ export class EmployeeController {
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
   }
-
-  @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.employeeService.getMe(user.id);
-  }
 }
