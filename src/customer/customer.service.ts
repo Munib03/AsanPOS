@@ -6,6 +6,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Store } from '../database/entites/store.entity';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Injectable()
 export class CustomerService {
@@ -14,17 +15,21 @@ export class CustomerService {
     private readonly customerRepository: BaseRepository<Customer>,
   ) {}
 
-  
-  async findAll(store: Store) {
-    const customers = await this.em.findAll(Customer, {
-      where: {
-        purchases: {
-          inventory: { store },
-        },
-      },
-    });
 
-    return customers;
+  async findAll(store: Store, query: PaginateQuery) {
+    const [customers, meta] = await this.customerRepository.findAndPaginate(
+      { store },
+      {
+        fields: ['id', 'name', 'phone', 'address'],
+      },
+      {
+        searchable: ['name', 'phone', 'address'],
+        sortable: ['name'],
+      },
+      query,
+    );
+
+    return { data: customers, meta };
   }
 
 
@@ -36,15 +41,15 @@ export class CustomerService {
   }
 
 
-  async create(dto: CreateCustomerDto) {
+  async create(store: Store, dto: CreateCustomerDto) {
     const customer = this.em.create(Customer, stripUndefined({
       name: dto.name,
       address: dto.address,
-      phone: dto.phone
+      phone: dto.phone,
+      store,
     }));
 
     await this.em.persistAndFlush(customer);
-
     return customer;
   }
 
@@ -60,6 +65,7 @@ export class CustomerService {
 
     return { message: `Customer with id ${id} updated successfully.` };
   }
+
 
   async remove(id: string) {
     const customer = await this.customerRepository.findOneOrFail(
