@@ -75,7 +75,7 @@ export class PurchaseService {
         customer,
         inventory,
         customDate: dto.customDate,
-        status: PurchaseStatus.PENDING,
+        status: PurchaseStatus.DRAFT,
       });
 
       await em.persistAndFlush(purchase);

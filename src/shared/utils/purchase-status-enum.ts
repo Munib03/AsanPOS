@@ -1,5 +1,5 @@
 export enum PurchaseStatus {
-  PENDING = "pending",
-  COMPLETED = "completed",
-  CANCELLED = "cancelled",
+  DRAFT = "Draft",
+  CANCELLED = "Cancelled",
+  DONE = "Done",
 }
