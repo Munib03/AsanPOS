@@ -21,9 +21,6 @@ export class PurchasedItem {
   @Property({ columnType: "decimal(10,2)", runtimeType: "number", fieldName: "unit_price" })
   unitPrice!: number;
 
-  @Property({ default: "pending" })
-  status!: string;
-
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;
 }

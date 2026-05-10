@@ -1,5 +1,5 @@
 import { EntityManager, serialize } from "@mikro-orm/postgresql";
-import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Purchase } from "../database/entites/purchase.entity";
 import { Customer } from "../database/entites/customer.entity";
 import { Product } from "../database/entites/product.entity";
@@ -30,7 +30,7 @@ export class PurchaseService {
           "id", "sequenceId", "status", "customDate", "createdAt",
           "customer.id", "customer.name",
           "inventory.id", "inventory.name",
-          "items.id", "items.quantity", "items.unitPrice", "items.status",
+          "items.id", "items.quantity", "items.unitPrice",
           "items.product.id", "items.product.name", "items.product.price",
         ],
       },
@@ -100,7 +100,6 @@ export class PurchaseService {
           product,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          status: PurchaseStatus.PENDING, 
         });
       });
 
