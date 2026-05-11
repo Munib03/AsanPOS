@@ -130,14 +130,16 @@ export class PurchaseService {
     if (dto.status) {
       const allowedTransitions = this.getAllowedTransitions().get(purchase.status as PurchaseStatus) ?? [];
       if (!allowedTransitions.includes(dto.status))
-        throw new BadRequestException(`Cannot transition from '${purchase.status}' to '${dto.status}'. Allowed: ${allowedTransitions.length ? allowedTransitions.join(', ') : 'none'}`);
+        throw new BadRequestException(`Cannot transition from '${purchase.status}' to '${dto.status}'.`);
 
       purchase.status = dto.status;
     }
     
     await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
- }
+  }
+
+
 
   private getAllowedTransitions(): Map<PurchaseStatus, PurchaseStatus[]> {
     return new Map([
