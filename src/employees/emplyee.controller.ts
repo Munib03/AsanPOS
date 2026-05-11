@@ -14,6 +14,7 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { VerifyDto } from './dto/verify.dto';
 import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
+import { Employee } from '../database/entites/employee.entity';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard)
@@ -50,5 +51,11 @@ export class EmployeeController {
   @Post('verify-updated-email')
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
+  }
+
+
+  @Delete('profile-pic')
+  deleteEmployeeImage(@CurrentUser() user: Employee) {
+    return this.employeeService.deleteEmployeeImage(user.id);
   }
 }

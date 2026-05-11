@@ -34,11 +34,11 @@ export class Employee {
   lastName?: string;
 
   @Property({ nullable: true })
-  imageUrl?: string;
+  imageUrl?: string | null;
 
 
   @Property({ persist: false})
-  imageUrlSigned?: string;
+  imageUrlSigned?: string | null;
 
   @OnLoad()
   async loadImage() {

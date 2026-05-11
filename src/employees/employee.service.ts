@@ -17,6 +17,8 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { serialize } from '@mikro-orm/postgresql';
 import { AttachmentService } from '../attachments/attachment.service'; 
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
+import { MinioService } from '../shared/services/minio.service';
+import { Attachment } from '../database/entites/attachment.entity';
 
 
 @Injectable()
@@ -25,6 +27,7 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
+    private readonly minioService: MinioService,
   ) {}
 
 
@@ -220,4 +223,29 @@ export class EmployeeService {
     };
   }
   
+
+  async deleteEmployeeImage(id: string) {
+    const employee = await this.em.findOne(Employee, { id });
+    if (!employee)
+      throw new NotFoundException(`Employee with id ${id} not found`);
+
+    if (!employee.imageUrl)
+      throw new NotFoundException(`Employee has no profile picture`);
+
+    const attachment = await this.em.findOne(Attachment, {
+      imageUrl: employee.imageUrl,
+      entityType: AttachmentEntityType.EMPLOYEE,
+    });
+
+    await this.minioService.deleteFile(employee.imageUrl);
+
+    if (attachment)
+      await this.em.removeAndFlush(attachment);
+
+    employee.imageUrl = null;
+    employee.imageUrlSigned = null;
+    await this.em.flush();
+
+    return { message: 'Employee profile picture deleted successfully' };
+  }
 }
