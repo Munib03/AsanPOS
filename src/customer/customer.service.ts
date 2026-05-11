@@ -23,8 +23,7 @@ export class CustomerService {
         fields: ['id', 'name', 'phone', 'address'],
       },
       {
-        searchable: ['name', 'phone', 'address'],
-        sortable: ['name'],
+        searchable: ['name', 'phone', 'address']
       },
       query,
     );
