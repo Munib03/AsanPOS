@@ -9,7 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { QueueModule } from './queue/queue.module';
 import { SharedModule } from './shared/services/shared.module';
-import config from '../mikro-orm.config';
+import config from './mikro-orm.config';
 import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CustomerModule } from './customer/customoer.module';
