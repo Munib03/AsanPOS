@@ -120,7 +120,6 @@ export class PurchaseService {
     });
   }
 
-
   
   async update(id: string, dto: UpdatePurchaseDto) {
     const purchase = await this.em.findOne(Purchase, { id });
