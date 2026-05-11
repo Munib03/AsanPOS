@@ -1,5 +1,5 @@
 import { EntityManager, serialize } from "@mikro-orm/postgresql";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Purchase } from "../database/entites/purchase.entity";
 import { Customer } from "../database/entites/customer.entity";
 import { Product } from "../database/entites/product.entity";
@@ -121,15 +121,29 @@ export class PurchaseService {
   }
 
 
+  
   async update(id: string, dto: UpdatePurchaseDto) {
     const purchase = await this.em.findOne(Purchase, { id });
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    if (dto.status)
-      purchase.status = dto.status;
+    if (dto.status) {
+      const allowedTransitions = this.getAllowedTransitions().get(purchase.status as PurchaseStatus) ?? [];
+      if (!allowedTransitions.includes(dto.status))
+        throw new BadRequestException(`Cannot transition from '${purchase.status}' to '${dto.status}'. Allowed: ${allowedTransitions.length ? allowedTransitions.join(', ') : 'none'}`);
 
+      purchase.status = dto.status;
+    }
+    
     await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
+ }
+
+  private getAllowedTransitions(): Map<PurchaseStatus, PurchaseStatus[]> {
+    return new Map([
+      [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DONE, []],
+      [PurchaseStatus.CANCELLED, []],
+    ]);
   }
 }
