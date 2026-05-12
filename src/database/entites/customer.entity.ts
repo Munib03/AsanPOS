@@ -18,6 +18,12 @@ export class Customer {
   @Property({ nullable: false })
   address!: string;
 
+@Property({ onCreate: () => new Date(), nullable: true })
+  createdAt?: Date;
+
+  @Property({ onUpdate: () => new Date(), nullable: true })
+  updatedAt?: Date;
+
   @ManyToOne(() => Store, { fieldName: 'store_id', nullable: true })
   store?: Store;
 

@@ -41,9 +41,9 @@ export class CustomerService {
 
 
   async create(store: Store, dto: CreateCustomerDto) {
-      if (!dto.phone) {
-          throw new BadRequestException("Phone is required");
-      }
+    const phone = await this.em.findOne(Customer, { phone: dto.phone, store });
+    if (phone)
+      throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
 
       const customer = this.em.create(Customer, {
           name: dto.name,
@@ -61,6 +61,10 @@ export class CustomerService {
       { id },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
+
+    const phone = await this.em.findOne(Customer, { phone: dto.phone, store: customer.store });
+    if (phone && phone.id !== id)
+      throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
 
     this.em.assign(customer, stripUndefined(dto));
     await this.em.flush();
