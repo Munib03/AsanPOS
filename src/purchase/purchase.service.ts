@@ -133,10 +133,10 @@ async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListI
       if (!purchase)
         throw new NotFoundException(`Purchase with id ${id} not found`);
 
-      if (purchase.status === PurchaseStatus.CANCELLED)
+      else if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot update purchase with id ${id} as it is already cancelled.`);
 
-      if (dto.status) {
+      else if (dto.status) {
         this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
         purchase.status = dto.status;
       }
