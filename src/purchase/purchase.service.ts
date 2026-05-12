@@ -103,7 +103,12 @@ export class PurchaseService {
       });
 
       await em.persistAndFlush(purchasedItems);
-      return { message: "Purchase created successfully." };
+
+      const totalPrice = dto.items.reduce((sum, item) => {
+        return sum + item.unitPrice * item.quantity;
+      }, 0);
+
+      return { "Total Cost": totalPrice };
     });
   }
 
