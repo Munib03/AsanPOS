@@ -111,7 +111,7 @@ async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListI
 
       await em.persistAndFlush(purchasedItems);
 
-      return { message: `Purchase created successfully with id ${purchase.id}.` };
+      return { message: `Purchase created successfully with id {${purchase.id}}.` };
     });
   }
 

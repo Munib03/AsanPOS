@@ -1,28 +1,15 @@
 import { NotFoundException } from '@nestjs/common';
-import {
-  EntityManager,
-  EntityName,
-  EntityRepository,
-  FilterQuery,
-  FindOneOrFailOptions,
-  FindOptions,
-  Loaded,
-} from '@mikro-orm/core';
+import { EntityManager, EntityName, EntityRepository, FilterQuery, FindOneOrFailOptions, FindOptions, Loaded } from '@mikro-orm/core';
 import { Meta, PaginateQuery } from '../types/paginate-query.types';
-import {
-  sanitizeFilterQuery,
-  mergeFilterOperators,
-  unFlattenObject,
-  sanitizeSortObject,
-  mergeSortObjects,
-  transformFilterQueryParams,
-} from '../utils/pagination';
+import { sanitizeFilterQuery, mergeFilterOperators, unFlattenObject, sanitizeSortObject, mergeSortObjects, transformFilterQueryParams } from '../utils/pagination';
+
 
 type NotFoundErrorFactory<Entity extends object> = (context: {
   id: string;
   entityName: string;
   where: FilterQuery<Entity>;
 }) => Error;
+
 
 export type Filterable<Entity> = Partial<Record<keyof Entity, any>>;
 export type Sortable<Entity> = (keyof Entity & string)[];
@@ -34,15 +21,22 @@ export type FilterOptions<Entity> = {
   sortable?: Sortable<Entity>;
 };
 
+
+
+
 function buildNestedCondition(path: string, operator: any) {
   const parts = path.split('.');
   return parts.reverse().reduce((acc, part) => ({ [part]: acc }), operator);
 }
 
+
+
 export class BaseRepository<Entity extends object> extends EntityRepository<Entity> {
+
   constructor(em: EntityManager, entityName: EntityName<Entity>) {
     super(em, entityName);
   }
+
 
   async findOneOrFail<Hint extends string = never, Fields extends string = '*', Excludes extends string = never>(
     where: FilterQuery<Entity>,
@@ -83,6 +77,7 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
     });
   }
 
+  
   async findAndPaginate<Hint extends string = never, Fields extends string = '*', Excludes extends string = never>(
     where: FilterQuery<Entity>,
     options?: Omit<FindOptions<Entity, Hint, Fields, Excludes>, 'offset' | 'limit'>,
