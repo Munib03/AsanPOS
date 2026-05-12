@@ -21,7 +21,7 @@ export class PurchaseService {
   ) {}
 
 
-  async findAll(store: Store, query: PaginateQuery) {
+  async findAll(store: Store, query: PaginateQuery): Promise<{ data: any[]; meta: any }> {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
       { inventory: { store } },
       {
@@ -40,10 +40,16 @@ export class PurchaseService {
       query,
     );
 
-    return {
-      data: serialize(purchases, { populate: ["customer", "inventory", "items", "items.product"] }),
-      meta,
-    };
+    const serialized = serialize(purchases, { populate: ["customer", "inventory", "items", "items.product"] });
+
+    const data = serialized.map(purchase => ({
+      ...purchase,
+      totalPrice: purchase.items.reduce((sum, item) => {
+        return sum + item.unitPrice * item.quantity;
+      }, 0),
+    }));
+
+    return { data, meta };
   }
 
 
@@ -108,7 +114,7 @@ export class PurchaseService {
         return sum + item.unitPrice * item.quantity;
       }, 0);
 
-      return { "Total Cost": totalPrice };
+      return { "Total Price": totalPrice };
     });
   }
 
