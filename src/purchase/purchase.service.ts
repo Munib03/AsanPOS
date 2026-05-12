@@ -9,8 +9,9 @@ import { PurchasedItem } from "../database/entites/purchased_item.entity";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
 import { Store } from "../database/entites/store.entity";
 import { BaseRepository } from "../shared/repositories/base.repository";
-import { PaginateQuery } from "../shared/types/paginate-query.types";
 import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
+import { PaginateQuery, Meta } from "../shared/types/paginate-query.types";
+import { PurchaseListItem } from "../shared/types/purchase.types";
 
 
 @Injectable()
@@ -21,7 +22,7 @@ export class PurchaseService {
   ) {}
 
 
-async findAll(store: Store, query: PaginateQuery): Promise<{ data: any[]; meta: any }> {
+async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListItem[]; meta: Meta }> {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
       { inventory: { store } },
       {
