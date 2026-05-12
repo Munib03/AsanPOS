@@ -11,6 +11,7 @@ export type Meta = {
   itemsPerPage: number;
   totalItems: number;
   totalPages: number;
+  totalCount: number;  
   search?: string;
   filters?: Record<string, any>;
   sorts?: Record<string, any>;

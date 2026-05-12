@@ -151,11 +151,14 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       },
     );
 
+    const totalCount = await this.count(where as FilterQuery<Entity>);  
+
     const meta: Meta = {
       currentPage,
       itemsPerPage: limit,
       totalItems: count,
       totalPages: Math.ceil(count / limit),
+      totalCount: totalCount,
       search,
       filters: sanitizedFilters,
       sorts: sanitizedSort,
