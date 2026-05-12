@@ -129,32 +129,52 @@ async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListI
 
   
   async update(id: string, dto: UpdatePurchaseDto) {
-      const purchase = await this.em.findOne(Purchase, { id });
-      if (!purchase)
-        throw new NotFoundException(`Purchase with id ${id} not found`);
+    const purchase = await this.em.findOne(Purchase, { id }, { 
+      populate: ['items', 'items.product', 'inventory', 'inventory.products'] // populate these
+    });
+    if (!purchase)
+      throw new NotFoundException(`Purchase with id ${id} not found`);
 
-      if (purchase.status === PurchaseStatus.CANCELLED)
-        throw new BadRequestException(`Cannot update purchase with id ${id} as it is already cancelled.`);
+    if (purchase.status === PurchaseStatus.CANCELLED)
+      throw new BadRequestException(`Cannot update purchase with id ${id} as it is already cancelled.`);
 
-      if (dto.status) {
-        this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
-        purchase.status = dto.status;
-      }
+    if (dto.status) {
+      this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
+      purchase.status = dto.status;
+
+      // When purchase is DONE, add products to inventory
+      if (dto.status === PurchaseStatus.DONE) 
+        await this.syncProductsToInventory(purchase);
       
-      await this.em.flush();
-      return { message: `Purchase with id ${id} updated successfully.` };
     }
+    
+    await this.em.flush();
+    return { message: `Purchase with id ${id} updated successfully.` };
+  }
 
 
-    private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
-      const transitions = new Map([
-        [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
-        [PurchaseStatus.DONE, []],
-        [PurchaseStatus.CANCELLED, []],
-      ]);
+  // This is not confirmed
+  private async syncProductsToInventory(purchase: Purchase): Promise<void> {
+    const inventory = purchase.inventory;
+    const purchasedProducts = purchase.items.getItems().map(item => item.product);
 
-      const allowedTransitions = transitions.get(currentStatus) ?? [];
-      if (!allowedTransitions.includes(newStatus))
-        throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
-    }
+    const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
+
+    for (const product of purchasedProducts)
+      if (!existingProductIds.has(product.id))
+        inventory.products.add(product);
+  }
+
+
+  private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
+    const transitions = new Map([
+      [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DONE, []],
+      [PurchaseStatus.CANCELLED, []],
+    ]);
+
+    const allowedTransitions = transitions.get(currentStatus) ?? [];
+    if (!allowedTransitions.includes(newStatus))
+      throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
+  }
 }

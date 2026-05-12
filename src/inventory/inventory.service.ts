@@ -7,6 +7,7 @@ import { Store } from '../database/entites/store.entity';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { Product } from '../database/entites/product.entity';
 
 
 @Injectable()
@@ -91,4 +92,26 @@ export class InventoryService {
 
     return { message: `Inventory with id ${id} deleted successfully.` };
   }
+
+
+
+//   // In InventoryService, when you want to link products:
+// async addProductsToInventory(store: Store, inventoryId: string, productIds: string[]) {
+//   const inventory = await this.inventoryRepository.findOneOrFail(
+//     { id: inventoryId, store },
+//     { populate: ['products'] }
+//   );
+
+//   const products = await this.em.findAll(Product, {
+//     where: { id: { $in: productIds }, store }
+//   });
+
+//   if (!products.length)
+//     throw new NotFoundException('No matching products found');
+
+//   inventory.products.add(...products);  
+//   await this.em.flush();
+
+//   return { message: 'Products added to inventory successfully.' };
+// }
 }

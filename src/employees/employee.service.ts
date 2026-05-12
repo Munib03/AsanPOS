@@ -232,15 +232,10 @@ export class EmployeeService {
     if (!employee.imageUrl)
       throw new NotFoundException(`Employee has no profile picture`);
 
-    const attachment = await this.em.findOne(Attachment, {
-      imageUrl: employee.imageUrl,
-      entityType: AttachmentEntityType.EMPLOYEE,
-    });
-
-    await this.minioService.deleteFile(employee.imageUrl);
-
-    if (attachment)
-      await this.em.removeAndFlush(attachment);
+    await this.attachmentService.deleteAttachmentByEntityId(
+      employee.id,
+      AttachmentEntityType.EMPLOYEE,
+    );
 
     employee.imageUrl = null;
     employee.imageUrlSigned = null;

@@ -188,16 +188,10 @@ export class ProductService {
     if (!image)
       throw new NotFoundException('Image not found');
 
-    const attachment = await this.em.findOne(Attachment, {
-      imageUrl: image.imageUrl,
-      entityType: AttachmentEntityType.PRODUCT,
-    });
-
-    if (attachment)
-      await this.em.removeAndFlush(attachment);
-
-    if (image.imageUrl)
-      await this.minioService.deleteFile(image.imageUrl);
+    await this.attachmentService.deleteAttachmentByEntityId(
+      image.product.id,
+      AttachmentEntityType.PRODUCT,
+    );
 
     await this.em.removeAndFlush(image);
 

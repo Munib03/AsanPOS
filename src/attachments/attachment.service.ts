@@ -114,6 +114,16 @@ export class AttachmentService {
     return attachments;
   }
   
+
+  async deleteAttachmentByEntityId(entityId: string, entityType: AttachmentEntityType): Promise<void> {
+    const attachment = await this.em.findOne(Attachment, { entityId, entityType });
+
+    if (attachment?.imageUrl) {
+      await this.minioService.deleteFile(attachment.imageUrl);
+      await this.em.removeAndFlush(attachment);
+    }
+  }
+
   
   async presignedUrl(key: string): Promise<string> {
     return this.minioService.getSignedUrl(key);

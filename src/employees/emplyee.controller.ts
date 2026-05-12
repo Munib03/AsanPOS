@@ -33,11 +33,6 @@ export class EmployeeController {
     return this.employeeService.findOne(id);
   }
 
-  @Delete()
-  remove(@CurrentUser() user: { id: string }) {
-    return this.employeeService.remove(user.id);
-  }
-
 
   @Put('info')
   updateEmployeeInfo(
