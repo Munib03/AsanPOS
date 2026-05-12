@@ -122,29 +122,29 @@ export class PurchaseService {
 
   
   async update(id: string, dto: UpdatePurchaseDto) {
-    const purchase = await this.em.findOne(Purchase, { id });
-    if (!purchase)
-      throw new NotFoundException(`Purchase with id ${id} not found`);
+      const purchase = await this.em.findOne(Purchase, { id });
+      if (!purchase)
+        throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    if (dto.status) {
-      const allowedTransitions = this.getAllowedTransitions().get(purchase.status as PurchaseStatus) ?? [];
-      if (!allowedTransitions.includes(dto.status))
-        throw new BadRequestException(`Cannot transition from '${purchase.status}' to '${dto.status}'.`);
-
-      purchase.status = dto.status;
+      if (dto.status) {
+        this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
+        purchase.status = dto.status;
+      }
+      
+      await this.em.flush();
+      return { message: `Purchase with id ${id} updated successfully.` };
     }
     
-    await this.em.flush();
-    return { message: `Purchase with id ${id} updated successfully.` };
-  }
 
+    private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
+      const transitions = new Map([
+        [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+        [PurchaseStatus.DONE, []],
+        [PurchaseStatus.CANCELLED, []],
+      ]);
 
-
-  private getAllowedTransitions(): Map<PurchaseStatus, PurchaseStatus[]> {
-    return new Map([
-      [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
-      [PurchaseStatus.DONE, []],
-      [PurchaseStatus.CANCELLED, []],
-    ]);
-  }
+      const allowedTransitions = transitions.get(currentStatus) ?? [];
+      if (!allowedTransitions.includes(newStatus))
+        throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
+    }
 }
