@@ -5,23 +5,37 @@ import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
 import { Store } from '../database/entites/store.entity';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+import { BaseRepository } from '../shared/repositories/base.repository';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    private readonly em: EntityManager,
+    private readonly inventoryRepository: BaseRepository<Inventory>,
+  ) {}
 
 
-  async findAll(store: Store) {
-    const inventories = await this.em.findAll(Inventory, {
-      where: { store },
-      populate: ['products'],
-      fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    const [inventories, meta] = await this.inventoryRepository.findAndPaginate(
+      { store },
+      {
+        populate: ['products'],
+        fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
+      },
+      {
+        searchable: ['name'],
+      },
+      query,
+    );
 
-    return serialize(inventories, { populate: ['products'] });
+    return {
+      data: serialize(inventories, { populate: ['products'] }),
+      meta,
+    };
   }
-  
+
 
   async findOne(store: Store, id: string) {
     const inventory = await this.em.findOne(Inventory, 

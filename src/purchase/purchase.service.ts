@@ -35,8 +35,7 @@ export class PurchaseService {
         ],
       },
       {
-        searchable: ["customer.name", "status"],
-        sortable: ["customDate", "status", "sequenceId"],
+        searchable: ["customer.name", "status"]
       },
       query,
     );
@@ -134,7 +133,7 @@ export class PurchaseService {
       await this.em.flush();
       return { message: `Purchase with id ${id} updated successfully.` };
     }
-    
+
 
     private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
       const transitions = new Map([
