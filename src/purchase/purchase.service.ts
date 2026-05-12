@@ -21,7 +21,7 @@ export class PurchaseService {
   ) {}
 
 
-  async findAll(store: Store, query: PaginateQuery): Promise<{ data: any[]; meta: any }> {
+async findAll(store: Store, query: PaginateQuery): Promise<{ data: any[]; meta: any }> {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
       { inventory: { store } },
       {
@@ -110,11 +110,7 @@ export class PurchaseService {
 
       await em.persistAndFlush(purchasedItems);
 
-      const totalPrice = dto.items.reduce((sum, item) => {
-        return sum + item.unitPrice * item.quantity;
-      }, 0);
-
-      return { "Total Price": totalPrice };
+      return { message: `Purchase created successfully with id ${purchase.id}.` };
     });
   }
 
