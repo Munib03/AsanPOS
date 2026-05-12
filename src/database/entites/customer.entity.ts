@@ -9,14 +9,14 @@ export class Customer {
   @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
-  @Property({ nullable: true })
-  name?: string;
+  @Property({ nullable: false})
+  name!: string;
 
-  @Property({ nullable: true })
-  phone?: string;
+  @Property({ nullable: false, unique: true })
+  phone!: string;
 
-  @Property({ nullable: true })
-  address?: string;
+  @Property({ nullable: false })
+  address!: string;
 
   @ManyToOne(() => Store, { fieldName: 'store_id', nullable: true })
   store?: Store;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Customer } from '../database/entites/customer.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -41,17 +41,20 @@ export class CustomerService {
 
 
   async create(store: Store, dto: CreateCustomerDto) {
-    const customer = this.em.create(Customer, stripUndefined({
-      name: dto.name,
-      address: dto.address,
-      phone: dto.phone,
-      store,
-    }));
+      if (!dto.phone) {
+          throw new BadRequestException("Phone is required");
+      }
 
-    await this.em.persistAndFlush(customer);
-    return customer;
+      const customer = this.em.create(Customer, {
+          name: dto.name,
+          address: dto.address,
+          phone: dto.phone,
+          store,
+      });
+
+      await this.em.persistAndFlush(customer);
+      return customer;
   }
-
 
   async update(id: string, dto: UpdateCustomerDto) {
     const customer = await this.customerRepository.findOneOrFail(
