@@ -22,7 +22,7 @@ export class PurchaseService {
   ) {}
 
 
-async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListItem[]; meta: Meta }> {
+  async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListItem[]; meta: Meta }> {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
       { inventory: { store } },
       {
@@ -54,16 +54,23 @@ async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListI
   }
 
 
-  async findOne(store: Store, id: string) {
+  async findOne(store: Store, id: string): Promise<PurchaseListItem> {    
     const purchase = await this.em.findOne(Purchase,
-      { id, inventory: { store } },
-      { populate: ["customer", "inventory", "items", "items.product"] }
-    );
+        { id, inventory: { store } },
+        { populate: ["customer", "inventory", "items", "items.product"] }
+      );
 
-    if (!purchase)
-      throw new NotFoundException(`Purchase with id ${id} not found`);
+      if (!purchase)
+        throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    return serialize(purchase, { populate: ["customer", "inventory", "items", "items.product"] });
+      const serialized = serialize(purchase, { populate: ["customer", "inventory", "items", "items.product"] });
+
+      return {
+        ...serialized,
+        totalPrice: serialized.items.reduce((sum, item) => {
+          return sum + item.unitPrice * item.quantity;
+        }, 0),
+      };
   }
 
 
