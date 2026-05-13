@@ -29,13 +29,7 @@ export class AuthController {
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
   }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.getMe(user.id);
-  }
-
+  
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

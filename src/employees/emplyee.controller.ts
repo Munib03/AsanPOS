@@ -28,6 +28,12 @@ export class EmployeeController {
     return this.employeeService.findAll();
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@CurrentUser() user: { id: string; email: string }) {
+    return this.employeeService.findOne(user.id);
+  }
+
 
   @Put('info')
   updateEmployeeInfo(
