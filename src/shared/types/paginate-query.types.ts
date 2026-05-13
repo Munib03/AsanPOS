@@ -14,5 +14,5 @@ export type Meta = {
   totalCount: number;
   search?: string;
   filters?: Record<string, string | string[]>;
-  sorts?: Record<string, 'asc' | 'desc'>;
+  // sorts?: Record<string, 'asc' | 'desc'>;
 };

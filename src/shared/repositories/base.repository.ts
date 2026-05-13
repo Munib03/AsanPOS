@@ -155,7 +155,7 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       totalCount: totalCount,
       search,
       filters: sanitizedFilters,
-      sorts: sanitizedSort,
+      // sorts: sanitizedSort,
     };
 
     return [data, meta];

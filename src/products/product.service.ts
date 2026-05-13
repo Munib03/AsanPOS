@@ -34,7 +34,6 @@ export class ProductService {
       },
       {
         searchable: ['name', 'categories.name'],
-        sortable: ['name', 'price'],
       },
       query,
     );
