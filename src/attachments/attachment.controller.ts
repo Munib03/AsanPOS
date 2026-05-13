@@ -7,8 +7,10 @@ import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enu
 @Controller('attachments')
 @UseGuards(JwtAuthGuard)
 export class AttachmentController {
-    constructor(private readonly attachmentService: AttachmentService) {}
-
+  
+  constructor(
+    private readonly attachmentService: AttachmentService
+  ) {}
 
 
   @Post('upload/single')

@@ -142,30 +142,11 @@ async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListI
       this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
       purchase.status = dto.status;
 
-      // When purchase is DONE, add products to inventory /////////////////////////
-      // if (dto.status === PurchaseStatus.DONE) 
-      //   await this.syncProductsToInventory(purchase);
-      ///////////////////////////////////////////////////////////////////////////////
-      
     }
     
     await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
   }
-
-
-  // This is not confirmed/////////////////////////////////////////////////
-  // private async syncProductsToInventory(purchase: Purchase): Promise<void> {
-  //   const inventory = purchase.inventory;
-  //   const purchasedProducts = purchase.items.getItems().map(item => item.product);
-
-  //   const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
-
-  //   for (const product of purchasedProducts)
-  //     if (!existingProductIds.has(product.id))
-  //       inventory.products.add(product);
-  // }
-  /////////////////////////////////////////////////////////////////////
 
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {

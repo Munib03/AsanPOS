@@ -23,7 +23,6 @@ export type FilterOptions<Entity> = {
 
 
 
-
 function buildNestedCondition(path: string, operator: any) {
   const parts = path.split('.');
   return parts.reverse().reduce((acc, part) => ({ [part]: acc }), operator);

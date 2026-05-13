@@ -11,6 +11,7 @@ export class StoresService {
     private readonly em: EntityManager,
   ) {}
 
+  
   async findAll() {
     return this.em.findAll(Store, {});
   }
@@ -23,6 +24,7 @@ export class StoresService {
     
     return store;
   }
+
 
   async update(id: string, dto: UpdateStoreDto) {
     const store = await this.em.findOne(Store, { id });
