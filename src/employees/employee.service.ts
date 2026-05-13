@@ -41,18 +41,6 @@ export class EmployeeService {
     });
   }
 
-  async findOne(id: string) {
-    const employee = await this.em.findOne(
-      Employee,
-      { id },
-      { exclude: ['password'] },
-    );
-    if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
-    return employee;
-  }
-
-
   async create(dto: CreateEmployeeDto) {
     const store = await this.em.findOne(Store, { name: dto.storeName });
     if (!store)
