@@ -155,6 +155,7 @@ export class PurchaseService {
     return { message: `Purchase with id ${id} updated successfully.` };
   }
 
+  
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([

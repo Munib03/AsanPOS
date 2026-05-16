@@ -115,13 +115,13 @@ export class AttachmentService {
   }
   
 
-  async deleteAttachmentByEntityId(entityId: string, entityType: AttachmentEntityType): Promise<void> {
-    const attachment = await this.em.findOne(Attachment, { entityId, entityType });
+  async deleteAttachmentByUrl(imageUrl: string, entityType: AttachmentEntityType): Promise<void> {
+    const attachment = await this.em.findOne(Attachment, { imageUrl, entityType });
 
-    if (attachment?.imageUrl) {
-      await this.minioService.deleteFile(attachment.imageUrl);
+    if (attachment)
       await this.em.removeAndFlush(attachment);
-    }
+
+    await this.minioService.deleteFile(imageUrl);
   }
 
   

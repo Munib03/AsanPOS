@@ -187,10 +187,11 @@ export class ProductService {
     if (!image)
       throw new NotFoundException('Image not found');
 
-    await this.attachmentService.deleteAttachmentByEntityId(
-      image.product.id,
-      AttachmentEntityType.PRODUCT,
-    );
+    if (image.imageUrl)
+      await this.attachmentService.deleteAttachmentByUrl(
+        image.imageUrl,
+        AttachmentEntityType.PRODUCT,
+      );
 
     await this.em.removeAndFlush(image);
 

@@ -238,8 +238,8 @@ export class EmployeeService {
     if (!employee.imageUrl)
       throw new NotFoundException(`Employee has no profile picture`);
 
-    await this.attachmentService.deleteAttachmentByEntityId(
-      employee.id,
+    await this.attachmentService.deleteAttachmentByUrl(
+      employee.imageUrl,
       AttachmentEntityType.EMPLOYEE,
     );
 
