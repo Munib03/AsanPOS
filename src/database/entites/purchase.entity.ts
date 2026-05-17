@@ -11,8 +11,8 @@ export class Purchase {
   @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
-  @Property({ autoincrement: true, fieldName: "sequence_id", nullable: true })
-  sequenceId?: number;
+  @Property({ fieldName: "sequence_id", nullable: true })
+  sequenceId?: string;
 
   @ManyToOne(() => Customer, { fieldName: "customer_id" })
   customer!: Customer;

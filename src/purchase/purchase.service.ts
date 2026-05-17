@@ -13,6 +13,7 @@ import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
 import { PaginateQuery, Meta } from "../shared/types/paginate-query.types";
 import { PurchaseListItem } from "../shared/types/purchase.types";
 import { StockInService } from "../StockIn/stock-in.service";
+import { SequenceService } from "../sequence/sequence.service";
 
 
 @Injectable()
@@ -21,6 +22,8 @@ export class PurchaseService {
   private readonly em: EntityManager,
   private readonly purchaseRepository: BaseRepository<Purchase>,
   private readonly stockInService: StockInService,
+  private readonly sequenceService: SequenceService,
+
   ) {}
 
 
@@ -86,15 +89,18 @@ export class PurchaseService {
       if (!inventory)
         throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
 
+      const sequence = await this.sequenceService.generateSequence(em, 'Purchase', 'PUR');
+      const sequenceFormatted = this.sequenceService.formatSequence(sequence);
+
       const purchase = em.create(Purchase, {
         customer,
         inventory,
         customDate: dto.customDate,
         status: PurchaseStatus.DRAFT,
+        sequenceId: sequenceFormatted,
       });
 
       await em.persistAndFlush(purchase);
-
 
       const products = await em.findAll(Product, {
         where: { id: { $in: dto.items.map(item => item.productId) } },
@@ -120,7 +126,7 @@ export class PurchaseService {
 
       await em.persistAndFlush(purchasedItems);
 
-      return { message: `Purchase created successfully with id {${purchase.id}}.` };
+      return { message: `Purchase created successfully with sequence ${sequenceFormatted}.` };
     });
   }
 
@@ -145,14 +151,28 @@ export class PurchaseService {
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
     if (purchase.status === PurchaseStatus.CANCELLED)
-      throw new BadRequestException(`Cannot update purchase with id ${id} as it is already cancelled.`);
+      throw new BadRequestException(`Cannot update a cancelled purchase.`);
 
-    if (dto.status) {
-      this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
+    if (purchase.status === PurchaseStatus.DONE)
+      throw new BadRequestException(`Cannot update a completed purchase.`);
+
+    if (dto.status === PurchaseStatus.CANCELLED) {
+      this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
       purchase.status = dto.status;
+      await this.em.flush();
+      return { message: `Purchase with id ${id} cancelled successfully.` };
+    }
 
-      if (dto.status === PurchaseStatus.DONE)
-        await this.stockInService.createFromPurchase(id);
+    if (dto.distributions?.length) {
+      await this.stockInService.createFromPurchase(id, dto.distributions);
+
+      await this.em.refresh(purchase, { populate: ['items'] });
+
+      const isPartial = purchase.items.getItems().some(
+        item => (item.received ?? 0) < item.quantity
+      );
+
+      purchase.status = isPartial ? PurchaseStatus.PARTIAL : PurchaseStatus.DONE;
     }
 
     await this.em.flush();
@@ -163,7 +183,8 @@ export class PurchaseService {
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([
-      [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DRAFT, [PurchaseStatus.PARTIAL, PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.PARTIAL, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
       [PurchaseStatus.DONE, []],
       [PurchaseStatus.CANCELLED, []],
     ]);
