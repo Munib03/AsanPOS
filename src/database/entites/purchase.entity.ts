@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { Customer } from "./customer.entity";
 import { Inventory } from "./inventory.entity";
 import { PurchasedItem } from "./purchased_item.entity";
-
+import { Sequence } from "./sequence.entity";
+import { Store } from "./store.entity";
 
 @Entity({ tableName: "purchase" })
 export class Purchase {
@@ -11,14 +12,17 @@ export class Purchase {
   @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
-  @Property({ fieldName: "sequence_id", nullable: true })
-  sequenceId?: string;
+  @ManyToOne(() => Sequence, { fieldName: "sequence_id" })
+  sequence!: Sequence;
 
   @ManyToOne(() => Customer, { fieldName: "customer_id" })
   customer!: Customer;
 
   @ManyToOne(() => Inventory, { fieldName: "inventory_id" })
   inventory!: Inventory;
+
+  @ManyToOne(() => Store, { fieldName: "store_id" })
+  store!: Store;
 
   @Property({ fieldName: "custom_date", nullable: true })
   customDate?: Date;

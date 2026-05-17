@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { StockInController } from './stock-in.controller';
 import { StockInService } from './stock-in.service';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
@@ -12,6 +13,7 @@ import { StockQuantityModule } from '../stockQuantity/stock-quantity.module';
     SequenceModule,
     StockQuantityModule,
   ],
+  controllers: [StockInController],
   providers: [StockInService],
   exports: [StockInService],
 })

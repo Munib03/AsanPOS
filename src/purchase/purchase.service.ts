@@ -12,28 +12,26 @@ import { BaseRepository } from "../shared/repositories/base.repository";
 import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
 import { PaginateQuery, Meta } from "../shared/types/paginate-query.types";
 import { PurchaseListItem } from "../shared/types/purchase.types";
-import { StockInService } from "../StockIn/stock-in.service";
 import { SequenceService } from "../sequence/sequence.service";
 
 
 @Injectable()
 export class PurchaseService {
   constructor(
-  private readonly em: EntityManager,
-  private readonly purchaseRepository: BaseRepository<Purchase>,
-  private readonly stockInService: StockInService,
-  private readonly sequenceService: SequenceService,
-
+    private readonly em: EntityManager,
+    private readonly purchaseRepository: BaseRepository<Purchase>,
+    private readonly sequenceService: SequenceService,
   ) {}
 
 
   async findAll(store: Store, query: PaginateQuery): Promise<{ data: PurchaseListItem[]; meta: Meta }> {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
-      { inventory: { store } },
+      { store },
       {
-        populate: ["customer", "inventory", "items", "items.product"],
+        populate: ["customer", "inventory", "items", "items.product", "sequence"],
         fields: [
-          "id", "sequenceId", "status", "customDate", "createdAt",
+          "id", "status", "customDate", "createdAt",
+          "sequence.prefix", "sequence.lastIndex",
           "customer.id", "customer.name",
           "inventory.id", "inventory.name",
           "items.id", "items.quantity", "items.unitPrice",
@@ -46,10 +44,11 @@ export class PurchaseService {
       query,
     );
 
-    const serialized = serialize(purchases, { populate: ["customer", "inventory", "items", "items.product"] });
+    const serialized = serialize(purchases, { populate: ["customer", "inventory", "items", "items.product", "sequence"] });
 
     const data = serialized.map(purchase => ({
       ...purchase,
+      sequenceId: `${purchase.sequence.prefix}-${String(purchase.sequence.lastIndex).padStart(4, '0')}`,
       totalPrice: purchase.items.reduce((sum, item) => {
         return sum + item.unitPrice * item.quantity;
       }, 0),
@@ -59,27 +58,28 @@ export class PurchaseService {
   }
 
 
-  async findOne(store: Store, id: string): Promise<PurchaseListItem> {    
+  async findOne(store: Store, id: string): Promise<PurchaseListItem> {
     const purchase = await this.em.findOne(Purchase,
-        { id, inventory: { store } },
-        { populate: ["customer", "inventory", "items", "items.product"] }
-      );
+      { id, store },
+      { populate: ["customer", "inventory", "items", "items.product", "sequence"] }
+    );
 
-      if (!purchase)
-        throw new NotFoundException(`Purchase with id ${id} not found`);
+    if (!purchase)
+      throw new NotFoundException(`Purchase with id ${id} not found`);
 
-      const serialized = serialize(purchase, { populate: ["customer", "inventory", "items", "items.product"] });
+    const serialized = serialize(purchase, { populate: ["customer", "inventory", "items", "items.product", "sequence"] });
 
-      return {
-        ...serialized,
-        totalPrice: serialized.items.reduce((sum, item) => {
-          return sum + item.unitPrice * item.quantity;
-        }, 0),
-      };
+    return {
+      ...serialized,
+      sequenceId: `${serialized.sequence.prefix}-${String(serialized.sequence.lastIndex).padStart(4, '0')}`,
+      totalPrice: serialized.items.reduce((sum, item) => {
+        return sum + item.unitPrice * item.quantity;
+      }, 0),
+    };
   }
 
 
-  async create(dto: CreatePurchaseDto) {
+  async create(store: Store, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
@@ -90,14 +90,14 @@ export class PurchaseService {
         throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
 
       const sequence = await this.sequenceService.generateSequence(em, 'Purchase', 'PUR');
-      const sequenceFormatted = this.sequenceService.formatSequence(sequence);
 
       const purchase = em.create(Purchase, {
         customer,
         inventory,
+        store,
         customDate: dto.customDate,
         status: PurchaseStatus.DRAFT,
-        sequenceId: sequenceFormatted,
+        sequence,
       });
 
       await em.persistAndFlush(purchase);
@@ -126,14 +126,14 @@ export class PurchaseService {
 
       await em.persistAndFlush(purchasedItems);
 
-      return { message: `Purchase created successfully with sequence ${sequenceFormatted}.` };
+      return { message: `Purchase created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
   }
 
 
-  async remove(id: string) {
+  async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {
-      const purchase = await em.findOne(Purchase, { id }, { populate: ["items"] });
+      const purchase = await em.findOne(Purchase, { id, store }, { populate: ["items"] });
       if (!purchase)
         throw new NotFoundException(`Purchase with id ${id} not found`);
 
@@ -142,11 +142,9 @@ export class PurchaseService {
     });
   }
 
-  
-  async update(id: string, dto: UpdatePurchaseDto) {
-    const purchase = await this.em.findOne(Purchase, { id }, {
-      populate: ['items', 'items.product', 'inventory', 'inventory.products']
-    });
+
+  async update(store: Store, id: string, dto: UpdatePurchaseDto) {
+    const purchase = await this.em.findOne(Purchase, { id, store });
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
@@ -163,23 +161,10 @@ export class PurchaseService {
       return { message: `Purchase with id ${id} cancelled successfully.` };
     }
 
-    if (dto.inventoryId && dto.quantity) {
-      await this.stockInService.createFromPurchase(id, dto.inventoryId, dto.quantity);
-
-      await this.em.refresh(purchase, { populate: ['items'] });
-
-      const isPartial = purchase.items.getItems().some(
-        item => (item.received ?? 0) < item.quantity
-      );
-
-      purchase.status = isPartial ? PurchaseStatus.PARTIAL : PurchaseStatus.DONE;
-    }
-
     await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
   }
 
-  
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([

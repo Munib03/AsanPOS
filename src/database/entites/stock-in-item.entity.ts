@@ -1,8 +1,8 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
+import { StockIn } from "./stock-in.entity";
 import { Product } from "./product.entity";
 import { PurchasedItem } from "./purchased_item.entity";
-import { StockIn } from "./stock-in.entity";
 
 @Entity({ tableName: "stock_in_items" })
 export class StockInItem {
@@ -19,7 +19,7 @@ export class StockInItem {
   @ManyToOne(() => PurchasedItem, { fieldName: "purchased_item_id" })
   purchasedItem!: PurchasedItem;
 
-  @Property()
+  @Property({ columnType: 'decimal(10,2)', runtimeType: 'number' })
   quantity!: number;
 
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })

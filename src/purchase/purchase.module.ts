@@ -5,14 +5,11 @@ import { PurchaseController } from './purchase.controller';
 import { PurchaseService } from './purchase.service';
 import { Purchase } from '../database/entites/purchase.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
-import { StockInModule } from '../StockIn/stock-in.module';
 import { SequenceModule } from '../sequence/sequence.module';
-
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Purchase]),
-    StockInModule,
     SequenceModule,
   ],
   controllers: [PurchaseController],

@@ -1,6 +1,6 @@
 export interface PurchaseListItem {
   id: string;
-  sequenceId?: string;
+  sequenceId?: string; 
   status: string;
   customDate?: Date;
   createdAt?: Date;

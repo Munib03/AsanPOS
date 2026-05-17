@@ -2,8 +2,7 @@ import { Entity, PrimaryKey, Property, ManyToMany, Collection, ManyToOne, OneToM
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from "./product.entity";
 import { Store } from "./store.entity";
-import { Purchase } from "./purchase.entity";
-import { PurchasedItem } from "./purchased_item.entity";
+import { StockQuantity } from "./stock-quantity.entity";
 
 @Entity({ tableName: "inventory" })
 export class Inventory {
@@ -23,8 +22,8 @@ export class Inventory {
   @ManyToMany(() => Product, product => product.inventories, { owner: true, pivotTable: 'inventory_product' })
   products = new Collection<Product>(this);
 
-  @OneToMany(() => Purchase, purchase => purchase.inventory)
-  purchases = new Collection<Purchase>(this);
+  @OneToMany(() => StockQuantity, sq => sq.inventory)
+  stockQuantities = new Collection<StockQuantity>(this);
 
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;
