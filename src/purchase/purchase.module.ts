@@ -4,12 +4,13 @@ import { EntityManager } from '@mikro-orm/core';
 import { PurchaseController } from './purchase.controller';
 import { PurchaseService } from './purchase.service';
 import { Purchase } from '../database/entites/purchase.entity';
-import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { StockInModule } from '../StockIn/stock-in.module';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature([Purchase, PurchasedItem]),
+    MikroOrmModule.forFeature([Purchase]),
+    StockInModule,
   ],
   controllers: [PurchaseController],
   providers: [

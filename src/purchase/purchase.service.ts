@@ -12,6 +12,7 @@ import { BaseRepository } from "../shared/repositories/base.repository";
 import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
 import { PaginateQuery, Meta } from "../shared/types/paginate-query.types";
 import { PurchaseListItem } from "../shared/types/purchase.types";
+import { StockInService } from "../StockIn/stock-in.service";
 
 
 @Injectable()
@@ -19,6 +20,7 @@ export class PurchaseService {
   constructor(
   private readonly em: EntityManager,
   private readonly purchaseRepository: BaseRepository<Purchase>,
+  private readonly stockInService: StockInService,
   ) {}
 
 
@@ -136,8 +138,8 @@ export class PurchaseService {
 
   
   async update(id: string, dto: UpdatePurchaseDto) {
-    const purchase = await this.em.findOne(Purchase, { id }, { 
-      populate: ['items', 'items.product', 'inventory', 'inventory.products'] // populate these
+    const purchase = await this.em.findOne(Purchase, { id }, {
+      populate: ['items', 'items.product', 'inventory', 'inventory.products']
     });
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
@@ -149,8 +151,10 @@ export class PurchaseService {
       this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status);
       purchase.status = dto.status;
 
+      if (dto.status === PurchaseStatus.DONE)
+        await this.stockInService.createFromPurchase(id);
     }
-    
+
     await this.em.flush();
     return { message: `Purchase with id ${id} updated successfully.` };
   }

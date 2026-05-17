@@ -11,6 +11,11 @@ import { ProductImage } from './database/entites/product-image.entity';
 import { Attachment } from './database/entites/attachment.entity';
 import { Inventory } from './database/entites/inventory.entity';
 import { Customer } from './database/entites/customer.entity';
+import { StockIn } from './database/entites/stock-in.entity';
+import { StockInItem } from './database/entites/stock-in-item.entity';
+import { PurchasedItem } from './database/entites/purchased_item.entity';
+import { StockQuantity } from './database/entites/stock-quantity.entity';
+import { Sequence } from './database/entites/sequence.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -21,7 +26,8 @@ const config: Options<PostgreSqlDriver> = {
   password: process.env.DB_PASSWORD,
   dbName: process.env.DB_NAME,
   entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
-             Product, ProductImage, Attachment, Inventory, Customer],
+             Product, ProductImage, Attachment, Inventory, Customer, 
+             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',

@@ -1,29 +1,26 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
-import { Purchase } from "./purchase.entity";
+import { Inventory } from "./inventory.entity";
 import { Product } from "./product.entity";
 
-@Entity({ tableName: "purchased_items" })
-export class PurchasedItem {
+@Entity({ tableName: "stock_quantity" })
+export class StockQuantity {
 
   @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
-  @ManyToOne(() => Purchase, { fieldName: "purchase_id" })
-  purchase!: Purchase;
+  @ManyToOne(() => Inventory, { fieldName: "inventory_id" })
+  inventory!: Inventory;
 
   @ManyToOne(() => Product, { fieldName: "product_id" })
   product!: Product;
 
-  @Property()
-  quantity!: number;
-
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
-  received?: number;
-
-  @Property({ columnType: "decimal(10,2)", runtimeType: "number", fieldName: "unit_price" })
-  unitPrice!: number;
+  quantity?: number;
 
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;
+
+  @Property({ fieldName: "updated_at", defaultRaw: "now()", onUpdate: () => new Date(), nullable: true })
+  updatedAt?: Date;
 }
