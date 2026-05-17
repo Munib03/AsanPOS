@@ -1,23 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class DistributionItemDto {
-  @IsUUID()
-  productId!: string;
-
-  @IsNumber()
-  quantity!: number;
-}
-
-export class DistributionDto {
-  @IsUUID()
-  inventoryId!: string;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DistributionItemDto)
-  items!: DistributionItemDto[];
-}
+import { IsString, IsOptional, IsUUID, IsNumber } from 'class-validator';
 
 export class UpdatePurchaseDto {
   @IsOptional()
@@ -25,8 +6,10 @@ export class UpdatePurchaseDto {
   status?: string;
 
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DistributionDto)
-  distributions?: DistributionDto[];
+  @IsUUID()
+  inventoryId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  quantity?: number;
 }

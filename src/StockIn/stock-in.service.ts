@@ -5,7 +5,6 @@ import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { Purchase } from '../database/entites/purchase.entity';
 import { Inventory } from '../database/entites/inventory.entity';
 import { SequenceService } from '../sequence/sequence.service';
-import { DistributionDto } from '../purchase/dto/update-purchase.dto';
 import { Product } from '../database/entites/product.entity';
 import { StockQuantityService } from '../stockQuantity/stock-quantity.service';
 
@@ -17,8 +16,7 @@ export class StockInService {
     private readonly stockQuantityService: StockQuantityService,
   ) {}
 
-  
-  async createFromPurchase(purchaseId: string, distributions: DistributionDto[]): Promise<{ message: string }> {
+  async createFromPurchase(purchaseId: string, inventoryId: string, quantity: number): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(Purchase,
         { id: purchaseId },
@@ -28,87 +26,57 @@ export class StockInService {
       if (!purchase)
         throw new NotFoundException(`Purchase with id ${purchaseId} not found`);
 
-      const purchasedItems = purchase.items.getItems();
+      const purchasedItem = purchase.items.getItems()[0];
+      if (!purchasedItem)
+        throw new NotFoundException(`No items found in purchase`);
 
-      // validate remaining quantities
-      await Promise.all(
-        distributions.flatMap(distribution =>
-          distribution.items.map(async item => {
-            const purchasedItem = purchasedItems.find(p => p.product.id === item.productId);
-            if (!purchasedItem)
-              throw new NotFoundException(`Product with id ${item.productId} not found in purchase`);
+      const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
+      if (quantity > remaining)
+        throw new BadRequestException(
+          `Quantity ${quantity} exceeds remaining quantity ${remaining}`
+        );
 
-            const totalDistributing = distributions
-              .flatMap(d => d.items)
-              .filter(i => i.productId === item.productId)
-              .reduce((sum, i) => sum + i.quantity, 0);
-
-            const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
-            if (totalDistributing > remaining)
-              throw new BadRequestException(
-                `Distributed quantity ${totalDistributing} exceeds remaining quantity ${remaining} for product ${item.productId}`
-              );
-          })
-        )
+      const inventory = await em.findOne(Inventory,
+        { id: inventoryId },
+        { populate: ['products'] }
       );
 
-      // create stock_in per inventory
-      await Promise.all(
-        distributions.map(async distribution => {
-          const inventory = await em.findOne(Inventory,
-            { id: distribution.inventoryId },
-            { populate: ['products'] }
-          );
+      if (!inventory)
+        throw new NotFoundException(`Inventory with id ${inventoryId} not found`);
 
-          if (!inventory)
-            throw new NotFoundException(`Inventory with id ${distribution.inventoryId} not found`);
+      const sequence = await this.sequenceService.generateSequence(em, 'StockIn', 'STK');
 
-          const sequence = await this.sequenceService.generateSequence(em, 'StockIn', 'STK');
+      const stockIn = em.create(StockIn, {
+        inventory,
+        purchase,
+        sequence,
+      });
 
-          const stockIn = em.create(StockIn, {
-            inventory,
-            purchase,
-            sequence,
-          });
+      await em.persistAndFlush(stockIn);
 
-          await em.persistAndFlush(stockIn);
+      em.create(StockInItem, {
+        stockIn,
+        product: purchasedItem.product,
+        purchasedItem,
+        quantity,
+      });
 
-          const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
-
-          const newProducts = distribution.items
-            .map(item => purchasedItems.find(p => p.product.id === item.productId)!.product)
-            .filter(product => !existingProductIds.has(product.id));
-
-          await Promise.all(
-            distribution.items.map(async item => {
-              const purchasedItem = purchasedItems.find(p => p.product.id === item.productId)!;
-
-              em.create(StockInItem, {
-                stockIn,
-                product: purchasedItem.product,
-                purchasedItem,
-                quantity: item.quantity,
-              });
-
-              await this.stockQuantityService.upsertStockQuantity(
-                em,
-                inventory,
-                purchasedItem.product,
-                item.quantity,
-              );
-
-              purchasedItem.received = (purchasedItem.received ?? 0) + item.quantity;
-            })
-          );
-
-          if (newProducts.length)
-            inventory.products.add(...newProducts as [Product, ...Product[]]);
-        })
+      await this.stockQuantityService.upsertStockQuantity(
+        em,
+        inventory,
+        purchasedItem.product,
+        quantity,
       );
+
+      purchasedItem.received = (purchasedItem.received ?? 0) + quantity;
+
+      const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
+      if (!existingProductIds.has(purchasedItem.product.id))
+        inventory.products.add(purchasedItem.product);
 
       await em.flush();
 
-      return { message: `Stock in created successfully.` };
+      return { message: `Stock in created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
   }
 

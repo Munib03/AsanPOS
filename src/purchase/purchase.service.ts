@@ -163,8 +163,8 @@ export class PurchaseService {
       return { message: `Purchase with id ${id} cancelled successfully.` };
     }
 
-    if (dto.distributions?.length) {
-      await this.stockInService.createFromPurchase(id, dto.distributions);
+    if (dto.inventoryId && dto.quantity) {
+      await this.stockInService.createFromPurchase(id, dto.inventoryId, dto.quantity);
 
       await this.em.refresh(purchase, { populate: ['items'] });
 
