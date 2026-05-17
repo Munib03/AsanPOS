@@ -34,9 +34,7 @@ export class StockInService {
 
       const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
       if (quantity > remaining)
-        throw new BadRequestException(
-          `Quantity ${quantity} exceeds remaining quantity ${remaining}`
-        );
+        throw new BadRequestException(`Quantity ${quantity} exceeds remaining quantity ${remaining}`);
 
       const inventory = await em.findOne(Inventory,
         { id: inventoryId },

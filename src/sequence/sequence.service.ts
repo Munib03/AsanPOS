@@ -15,6 +15,7 @@ export class SequenceService {
         prefix,
         lastIndex: 0,
       });
+      
       await em.persistAndFlush(sequence);
     }
 
