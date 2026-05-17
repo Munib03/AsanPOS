@@ -8,6 +8,7 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { Product } from '../database/entites/product.entity';
+import { StockQuantity } from '../database/entites/stock-quantity.entity';
 
 
 @Injectable()
@@ -39,7 +40,7 @@ export class InventoryService {
 
 
   async findOne(store: Store, id: string) {
-    const inventory = await this.em.findOne(Inventory, 
+    const inventory = await this.em.findOne(Inventory,
       { id, store },
       {
         populate: ['products'],
@@ -50,7 +51,19 @@ export class InventoryService {
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 
-    return serialize(inventory, { populate: ['products'] });
+    const stockQuantities = await this.em.findAll(StockQuantity, {
+      where: { inventory: { id } },
+    });
+
+    const serialized = serialize(inventory, { populate: ['products'] });
+
+    return {
+      ...serialized,
+      products: serialized.products.map(product => ({
+        ...product,
+        quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
+      })),
+    };
   }
 
 

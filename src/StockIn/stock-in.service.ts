@@ -14,7 +14,9 @@ export class StockInService {
     private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
-  ) {}
+  ) {
+    
+  }
 
   async createFromPurchase(purchaseId: string, inventoryId: string, quantity: number): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
@@ -78,18 +80,5 @@ export class StockInService {
 
       return { message: `Stock in created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
-  }
-
-
-  async findOne(id: string) {
-    const stockIn = await this.em.findOne(StockIn,
-      { id },
-      { populate: ['inventory', 'purchase', 'sequence', 'items', 'items.product', 'items.purchasedItem'] }
-    );
-
-    if (!stockIn)
-      throw new NotFoundException(`Stock in with id ${id} not found`);
-
-    return serialize(stockIn, { populate: ['inventory', 'purchase', 'sequence', 'items', 'items.product', 'items.purchasedItem'] });
   }
 }
