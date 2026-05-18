@@ -5,7 +5,7 @@ import { StockInService } from './stock-in.service';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { SequenceModule } from '../sequence/sequence.module';
-import { StockQuantityModule } from '../stockQuantity/stock-quantity.module';
+import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
 
 @Module({
   imports: [

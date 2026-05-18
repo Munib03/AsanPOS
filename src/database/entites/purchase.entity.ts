@@ -1,7 +1,6 @@
 import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { Customer } from "./customer.entity";
-import { Inventory } from "./inventory.entity";
 import { PurchasedItem } from "./purchased_item.entity";
 import { Sequence } from "./sequence.entity";
 import { Store } from "./store.entity";

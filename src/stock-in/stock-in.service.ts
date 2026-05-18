@@ -6,7 +6,7 @@ import { Purchase } from '../database/entites/purchase.entity';
 import { Inventory } from '../database/entites/inventory.entity';
 import { Store } from '../database/entites/store.entity';
 import { SequenceService } from '../sequence/sequence.service';
-import { StockQuantityService } from '../stockQuantity/stock-quantity.service';
+import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { CreateStockInDto } from './dto/create-stock-in.dto';
 
