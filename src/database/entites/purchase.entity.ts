@@ -33,6 +33,6 @@ export class Purchase {
   @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
   createdAt?: Date;
 
-  @Property({ fieldName: "updated_at", defaultRaw: "now()", onUpdate: () => new Date(), nullable: true })
+  @Property({ fieldName: "updated_at", onUpdate: () => new Date(), nullable: true })
   updatedAt?: Date;
 }

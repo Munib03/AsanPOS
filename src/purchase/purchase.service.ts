@@ -60,7 +60,16 @@ export class PurchaseService {
   async findOne(store: Store, id: string): Promise<PurchaseListItem> {
     const purchase = await this.em.findOne(Purchase,
       { id, store },
-      { populate: ["customer", "items", "items.product", "sequence"] }
+      {
+        populate: ["customer", "items", "items.product", "sequence"],
+        fields: [
+          "id", "status", "customDate",
+          "sequence.prefix", "sequence.lastIndex",
+          "customer.id", "customer.name", "customer.phone", "customer.address",
+          "items.id", "items.quantity", "items.unitPrice", "items.received",
+          "items.product.id", "items.product.name", "items.product.price",
+        ],
+      }
     );
 
     if (!purchase)
@@ -68,9 +77,11 @@ export class PurchaseService {
 
     const serialized = serialize(purchase, { populate: ["customer", "items", "items.product", "sequence"] });
 
+    const { sequence, createdAt, updatedAt, ...rest } = serialized;
+
     return {
-      ...serialized,
-      sequenceId: `${serialized.sequence.prefix}-${String(serialized.sequence.lastIndex).padStart(4, '0')}`,
+      ...rest,
+      sequenceId: `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`,
       totalPrice: serialized.items.reduce((sum, item) => {
         return sum + item.unitPrice * item.quantity;
       }, 0),

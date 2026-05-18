@@ -7,7 +7,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 
-@Controller('purchases')
+@Controller('purchase')
 @UseGuards(JwtAuthGuard)
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
