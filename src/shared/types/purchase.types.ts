@@ -1,11 +1,10 @@
 export interface PurchaseListItem {
   id: string;
-  sequenceId?: string; 
+  sequenceId?: string;
   status: string;
   customDate?: Date;
   createdAt?: Date;
   customer: { id?: string; name?: string };
-  inventory: { id?: string; name?: string };
   items: {
     id?: string;
     quantity?: number;

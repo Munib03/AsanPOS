@@ -14,6 +14,8 @@ import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CustomerModule } from './customer/customoer.module';
 import { PurchaseModule } from './purchase/purchase.module';
+import { StockInModule } from './StockIn/stock-in.module';
+
 
 @Module({
   imports: [
@@ -28,7 +30,8 @@ import { PurchaseModule } from './purchase/purchase.module';
     ProductModule,
     InventoryModule,
     CustomerModule,
-    PurchaseModule
+    PurchaseModule,
+    StockInModule,
   ],
   controllers: [AppController],
   providers: [AppService],

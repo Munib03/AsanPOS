@@ -28,12 +28,11 @@ export class PurchaseService {
     const [purchases, meta] = await this.purchaseRepository.findAndPaginate(
       { store },
       {
-        populate: ["customer", "inventory", "items", "items.product", "sequence"],
+        populate: ["customer", "items", "items.product", "sequence"],
         fields: [
           "id", "status", "customDate", "createdAt",
           "sequence.prefix", "sequence.lastIndex",
           "customer.id", "customer.name",
-          "inventory.id", "inventory.name",
           "items.id", "items.quantity", "items.unitPrice",
           "items.product.id", "items.product.name", "items.product.price",
         ],
@@ -44,7 +43,7 @@ export class PurchaseService {
       query,
     );
 
-    const serialized = serialize(purchases, { populate: ["customer", "inventory", "items", "items.product", "sequence"] });
+    const serialized = serialize(purchases, { populate: ["customer", "items", "items.product", "sequence"] });
 
     const data = serialized.map(purchase => ({
       ...purchase,
@@ -61,13 +60,13 @@ export class PurchaseService {
   async findOne(store: Store, id: string): Promise<PurchaseListItem> {
     const purchase = await this.em.findOne(Purchase,
       { id, store },
-      { populate: ["customer", "inventory", "items", "items.product", "sequence"] }
+      { populate: ["customer", "items", "items.product", "sequence"] }
     );
 
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    const serialized = serialize(purchase, { populate: ["customer", "inventory", "items", "items.product", "sequence"] });
+    const serialized = serialize(purchase, { populate: ["customer", "items", "items.product", "sequence"] });
 
     return {
       ...serialized,
@@ -85,15 +84,10 @@ export class PurchaseService {
       if (!customer)
         throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
-      const inventory = await em.findOne(Inventory, { id: dto.inventoryId });
-      if (!inventory)
-        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
-
       const sequence = await this.sequenceService.generateSequence(em, 'Purchase', 'PUR');
 
       const purchase = em.create(Purchase, {
         customer,
-        inventory,
         store,
         customDate: dto.customDate,
         status: PurchaseStatus.DRAFT,

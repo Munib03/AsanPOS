@@ -18,9 +18,6 @@ export class Purchase {
   @ManyToOne(() => Customer, { fieldName: "customer_id" })
   customer!: Customer;
 
-  @ManyToOne(() => Inventory, { fieldName: "inventory_id" })
-  inventory!: Inventory;
-
   @ManyToOne(() => Store, { fieldName: "store_id" })
   store!: Store;
 

@@ -7,21 +7,15 @@ export class SequenceService {
   constructor(private readonly em: EntityManager) {}
 
   async generateSequence(em: EntityManager, entity: string, prefix: string): Promise<Sequence> {
-    let sequence = await em.findOne(Sequence, { entity });
+    const last = await em.findOne(Sequence, { entity }, { orderBy: { lastIndex: 'DESC' } });
 
-    if (!sequence) {
-      sequence = em.create(Sequence, {
-        entity,
-        prefix,
-        lastIndex: 0,
-      });
-      
-      await em.persistAndFlush(sequence);
-    }
+    const sequence = em.create(Sequence, {
+      entity,
+      prefix,
+      lastIndex: (last?.lastIndex ?? 0) + 1,
+    });
 
-    sequence.lastIndex += 1;
-    await em.flush();
-
+    await em.persistAndFlush(sequence);
     return sequence;
   }
 
