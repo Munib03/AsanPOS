@@ -11,14 +11,6 @@ import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { CreateStockInDto, StockInItemDto } from './dto/create-stock-in.dto';
 
-const STOCK_IN_POPULATE = [
-  'inventory',
-  'purchase',
-  'sequence',
-  'items',
-  'items.product',
-  'items.purchasedItem',
-] as const;
 
 @Injectable()
 export class StockInService {
@@ -28,7 +20,7 @@ export class StockInService {
     private readonly stockQuantityService: StockQuantityService,
   ) {}
 
-  
+
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const [purchase, inventory] = await Promise.all([
@@ -105,18 +97,6 @@ export class StockInService {
     });
   }
 
-  async findOne(store: Store, id: string) {
-    const stockIn = await this.em.findOne(
-      StockIn,
-      { id, purchase: { store } },
-      { populate: STOCK_IN_POPULATE },
-    );
-
-    if (!stockIn)
-      throw new NotFoundException(`Stock in with id ${id} not found`);
-
-    return serialize(stockIn, { populate: STOCK_IN_POPULATE });
-  }
 
   private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
     for (const item of items) {

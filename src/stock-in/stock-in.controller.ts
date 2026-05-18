@@ -18,11 +18,5 @@ export class StockInController {
     return this.stockInService.createFromPurchase(store, dto);
   }
 
-  @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
-    return this.stockInService.findOne(store, id);
-  }
+
 }
