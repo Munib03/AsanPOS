@@ -80,7 +80,7 @@ export class StockInService {
       const isPartial = purchasedItems.some(
         item => (item.received ?? 0) < item.quantity
       );
-      purchase.status = isPartial ? PurchaseStatus.PARTIAL : PurchaseStatus.DONE;
+      purchase.status = isPartial ? PurchaseStatus.CONFIRMED : PurchaseStatus.DONE;
 
       const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
       if (!existingProductIds.has(purchasedItem.product.id))

@@ -174,8 +174,8 @@ export class PurchaseService {
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([
-      [PurchaseStatus.DRAFT, [PurchaseStatus.PARTIAL, PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
-      [PurchaseStatus.PARTIAL, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DRAFT, [PurchaseStatus.CONFIRMED, PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.CONFIRMED, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
       [PurchaseStatus.DONE, []],
       [PurchaseStatus.CANCELLED, []],
     ]);
