@@ -8,6 +8,7 @@ import { Store } from '../database/entites/store.entity';
 import { SequenceService } from '../sequence/sequence.service';
 import { StockQuantityService } from '../stockQuantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
+import { CreateStockInDto } from './dto/create-stock-in.dto';
 
 @Injectable()
 export class StockInService {
@@ -17,15 +18,15 @@ export class StockInService {
     private readonly stockQuantityService: StockQuantityService,
   ) {}
 
-  async createFromPurchase(store: Store, purchaseId: string, inventoryId: string, quantity: number): Promise<{ message: string }> {
+  async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(Purchase,
-        { id: purchaseId, store },
+        { id: dto.purchaseId, store },
         { populate: ['items', 'items.product'] }
       );
 
       if (!purchase)
-        throw new NotFoundException(`Purchase with id ${purchaseId} not found`);
+        throw new NotFoundException(`Purchase with id ${dto.purchaseId} not found`);
 
       if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot create stock in for a cancelled purchase`);
@@ -34,22 +35,31 @@ export class StockInService {
         throw new BadRequestException(`Cannot create stock in for a completed purchase`);
 
       const purchasedItems = purchase.items.getItems();
-      if (!purchasedItems.length)
-        throw new NotFoundException(`No items found in purchase`);
+      const purchasedItemMap = new Map(purchasedItems.map(item => [item.id, item]));
 
-      const purchasedItem = purchasedItems[0];
+      // validate all purchaseItemIds belong to this purchase — all or nothing
+      for (const item of dto.items) {
+        if (!purchasedItemMap.has(item.purchaseItemId))
+          throw new NotFoundException(`Purchase item with id ${item.purchaseItemId} does not belong to this purchase`);
+      }
 
-      const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
-      if (quantity > remaining)
-        throw new BadRequestException(`Quantity ${quantity} exceeds remaining quantity ${remaining}`);
+      // validate remaining quantities
+      for (const item of dto.items) {
+        const purchasedItem = purchasedItemMap.get(item.purchaseItemId)!;
+        const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
+        if (item.quantity > remaining)
+          throw new BadRequestException(
+            `Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchaseItemId}`
+          );
+      }
 
       const inventory = await em.findOne(Inventory,
-        { id: inventoryId },
+        { id: dto.inventoryId },
         { populate: ['products'] }
       );
 
       if (!inventory)
-        throw new NotFoundException(`Inventory with id ${inventoryId} not found`);
+        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
 
       const sequence = await this.sequenceService.generateSequence(em, 'StockIn', 'STK');
 
@@ -61,30 +71,41 @@ export class StockInService {
 
       await em.persistAndFlush(stockIn);
 
-      em.create(StockInItem, {
-        stockIn,
-        product: purchasedItem.product,
-        purchasedItem,
-        quantity,
-      });
-
-      await this.stockQuantityService.upsertStockQuantity(
-        em,
-        inventory,
-        purchasedItem.product,
-        quantity,
-      );
-
-      purchasedItem.received = (purchasedItem.received ?? 0) + quantity;
-
-      const isPartial = purchasedItems.some(
-        item => (item.received ?? 0) < item.quantity
-      );
-      purchase.status = isPartial ? PurchaseStatus.PENDING : PurchaseStatus.DONE;
-
       const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
-      if (!existingProductIds.has(purchasedItem.product.id))
-        inventory.products.add(purchasedItem.product);
+
+      // create stock in items and update quantities — all or nothing (transactional)
+      for (const item of dto.items) {
+        const purchasedItem = purchasedItemMap.get(item.purchaseItemId)!;
+
+        em.create(StockInItem, {
+          stockIn,
+          product: purchasedItem.product,
+          purchasedItem,
+          quantity: item.quantity,
+        });
+
+        await this.stockQuantityService.upsertStockQuantity(
+          em,
+          inventory,
+          purchasedItem.product,
+          item.quantity,
+        );
+
+        purchasedItem.received = (purchasedItem.received ?? 0) + item.quantity;
+
+        if (!existingProductIds.has(purchasedItem.product.id)) {
+          inventory.products.add(purchasedItem.product);
+          existingProductIds.add(purchasedItem.product.id);
+        }
+      }
+
+      // update purchase status
+      const isFullyReceived = purchasedItems.every(
+        item => (item.received ?? 0) >= item.quantity
+      );
+
+      if (isFullyReceived)
+        purchase.status = PurchaseStatus.DONE;
 
       await em.flush();
 

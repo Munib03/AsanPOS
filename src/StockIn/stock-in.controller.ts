@@ -15,7 +15,7 @@ export class StockInController {
     @CurrentStore() store: Store,
     @Body() dto: CreateStockInDto,
   ) {
-    return this.stockInService.createFromPurchase(store, dto.purchaseId, dto.inventoryId, dto.quantity);
+    return this.stockInService.createFromPurchase(store, dto);
   }
 
   @Get(':id')
