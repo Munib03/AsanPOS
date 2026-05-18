@@ -14,7 +14,7 @@ import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CustomerModule } from './customer/customoer.module';
 import { PurchaseModule } from './purchase/purchase.module';
-import { StockInModule } from './StockIn/stock-in.module';
+import { StockInModule } from './stockIn/stock-in.module';
 
 
 @Module({
