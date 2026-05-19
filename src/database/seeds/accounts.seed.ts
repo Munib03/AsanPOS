@@ -2,11 +2,12 @@ import { Knex } from "knex";
 import { v4 as uuidv4 } from "uuid";
 
 export async function seed(knex: Knex): Promise<void> {
-  const existing = await knex("accounts").where("name", "Inventory Account").first();
+  const existing = await knex("accounts").where("name", "Accounts Payable").first();
   if (existing) return;
 
   const inventoryAccountId = uuidv4();
   const payableAccountId = uuidv4();
+  const receivableAccountId = uuidv4();
   const storeSettingsId = uuidv4();
 
   await knex("accounts").insert([
@@ -22,6 +23,12 @@ export async function seed(knex: Knex): Promise<void> {
       type: "liability",
       created_at: knex.fn.now(),
     },
+    {
+      id: receivableAccountId,
+      name: "Accounts Receivable",
+      type: "asset",
+      created_at: knex.fn.now(),
+    },
   ]);
 
   await knex("store_settings").insert({
@@ -32,4 +39,5 @@ export async function seed(knex: Knex): Promise<void> {
 
   await knex("stores").update({ store_settings_id: storeSettingsId });
   await knex("customer").update({ payable_id: payableAccountId });
+  await knex("customer").update({ receivable_id: receivableAccountId });
 }

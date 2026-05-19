@@ -2,8 +2,6 @@ import { Knex } from "knex";
 import { v4 as uuidv4 } from "uuid";
 
 export async function seed(knex: Knex): Promise<void> {
-  await knex("sequence").del();
-
   await knex("sequence").insert([
     {
       id: uuidv4(),
