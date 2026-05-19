@@ -16,6 +16,8 @@ import { StockInItem } from './database/entites/stock-in-item.entity';
 import { PurchasedItem } from './database/entites/purchased_item.entity';
 import { StockQuantity } from './database/entites/stock-quantity.entity';
 import { Sequence } from './database/entites/sequence.entity';
+import { JournalEntry } from './database/entites/journal-entry.entity';
+import { JournalEntryItem } from './database/entites/journal-entry-item.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -27,7 +29,7 @@ const config: Options<PostgreSqlDriver> = {
   dbName: process.env.DB_NAME,
   entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
              Product, ProductImage, Attachment, Inventory, Customer, 
-             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence],
+             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, JournalEntryItem],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',

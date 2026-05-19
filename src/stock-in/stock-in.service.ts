@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { EntityManager, serialize } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { Purchase } from '../database/entites/purchase.entity';
@@ -10,6 +10,7 @@ import { SequenceService } from '../sequence/sequence.service';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { CreateStockInDto, StockInItemDto } from './dto/create-stock-in.dto';
+import { JournalEntryService } from '../journal/journal-entry.service';
 
 
 @Injectable()
@@ -18,15 +19,15 @@ export class StockInService {
     private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
+    private readonly journalEntryService: JournalEntryService,
   ) {}
-
 
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const [purchase, inventory] = await Promise.all([
         em.findOne(Purchase,
           { id: dto.purchaseId, store },
-          { populate: ['items', 'items.product'] }
+          { populate: ['items', 'items.product', 'customer'] }
         ),
         em.findOne(Inventory,
           { id: dto.inventoryId },
@@ -62,16 +63,19 @@ export class StockInService {
       em.persist(stockIn);
 
       const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
+      const createdStockInItems: StockInItem[] = [];
 
       for (const item of dto.items) {
         const purchasedItem = purchasedItemMap.get(item.purchaseItemId)!;
 
-        em.create(StockInItem, {
+        const stockInItem = em.create(StockInItem, {
           stockIn,
           product: purchasedItem.product,
           purchasedItem,
           quantity: item.quantity,
         });
+
+        createdStockInItems.push(stockInItem);
 
         await this.stockQuantityService.upsertStockQuantity(
           em,
@@ -91,12 +95,13 @@ export class StockInService {
       if (purchasedItems.every(item => (item.received ?? 0) >= item.quantity))
         purchase.status = PurchaseStatus.DONE;
 
+      await this.journalEntryService.createFromStockIn(em, stockIn, createdStockInItems, purchase);
+
       await em.flush();
 
       return { message: `Stock in created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
   }
-
 
   private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
     for (const item of items) {
@@ -110,4 +115,5 @@ export class StockInService {
         throw new BadRequestException(`Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchaseItemId}`);
     }
   }
+
 }

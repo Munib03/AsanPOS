@@ -6,12 +6,14 @@ import { StockIn } from '../database/entites/stock-in.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { SequenceModule } from '../sequence/sequence.module';
 import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
+import { JournalEntryModule } from '../journal/journal.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([StockIn, StockInItem]),
     SequenceModule,
     StockQuantityModule,
+    JournalEntryModule,
   ],
   controllers: [StockInController],
   providers: [StockInService],

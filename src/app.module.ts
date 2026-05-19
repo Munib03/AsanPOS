@@ -15,6 +15,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { CustomerModule } from './customer/customoer.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { StockInModule } from './stock-in/stock-in.module';
+import { JournalEntryModule } from './journal/journal.module';
 
 
 @Module({
@@ -32,6 +33,7 @@ import { StockInModule } from './stock-in/stock-in.module';
     CustomerModule,
     PurchaseModule,
     StockInModule,
+    JournalEntryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
