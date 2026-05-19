@@ -2,6 +2,7 @@ import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from "
 import { v4 as uuidv4 } from "uuid";
 import { Sequence } from "./sequence.entity";
 import { JournalEntryItem } from "./journal-entry-item.entity";
+import { JournalEntryStatus } from "../../shared/utils/journal-entry-status.enum";
 
 @Entity({ tableName: "journal_entry" })
 export class JournalEntry {
@@ -11,6 +12,9 @@ export class JournalEntry {
 
   @ManyToOne(() => Sequence, { fieldName: "sequence_id", nullable: true })
   sequence?: Sequence;
+
+  @Property({ default: JournalEntryStatus.PENDING })
+  status!: string;
 
   @OneToMany(() => JournalEntryItem, item => item.journalEntry)
   items = new Collection<JournalEntryItem>(this);

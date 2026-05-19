@@ -6,16 +6,16 @@ import { Sequence } from '../database/entites/sequence.entity';
 export class SequenceService {
   constructor(private readonly em: EntityManager) {}
 
-  async generateSequence(em: EntityManager, entity: string, prefix: string): Promise<Sequence> {
-    const last = await em.findOne(Sequence, { entity }, { orderBy: { lastIndex: 'DESC' } });
+  async generateSequence(entity: string, prefix: string): Promise<Sequence> {
+    const last = await this.em.findOne(Sequence, { entity }, { orderBy: { lastIndex: 'DESC' } });
 
-    const sequence = em.create(Sequence, {
+    const sequence = this.em.create(Sequence, {
       entity,
       prefix,
       lastIndex: (last?.lastIndex ?? 0) + 1,
     });
 
-    await em.persistAndFlush(sequence);
+    await this.em.persistAndFlush(sequence);
     return sequence;
   }
 

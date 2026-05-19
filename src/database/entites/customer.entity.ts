@@ -2,6 +2,7 @@ import { Entity, PrimaryKey, Property, OneToMany, Collection, ManyToOne } from "
 import { v4 as uuidv4 } from "uuid";
 import { Purchase } from "./purchase.entity";
 import { Store } from "./store.entity";
+import { Account } from "./account.entity";
 
 @Entity({ tableName: "customer" })
 export class Customer {
@@ -18,8 +19,14 @@ export class Customer {
   @Property({ nullable: false })
   address!: string;
 
-@Property({ onCreate: () => new Date(), nullable: true })
+  @Property({ onCreate: () => new Date(), nullable: true })
   createdAt?: Date;
+
+  @ManyToOne(() => Account, { fieldName: "payable_id", nullable: true })
+  payable?: Account;
+
+  @ManyToOne(() => Account, { fieldName: "receivable_id", nullable: true })
+  receivable?: Account;
 
   @Property({ onUpdate: () => new Date(), nullable: true })
   updatedAt?: Date;

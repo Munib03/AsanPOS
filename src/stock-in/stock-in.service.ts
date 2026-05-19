@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager, serialize } from '@mikro-orm/postgresql';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { Purchase } from '../database/entites/purchase.entity';
@@ -9,9 +9,18 @@ import { Store } from '../database/entites/store.entity';
 import { SequenceService } from '../sequence/sequence.service';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
+import { StockInStatus } from '../shared/utils/stock-in-status.enum';
 import { CreateStockInDto, StockInItemDto } from './dto/create-stock-in.dto';
 import { JournalEntryService } from '../journal/journal-entry.service';
 
+const STOCK_IN_POPULATE = [
+  'inventory',
+  'purchase',
+  'sequence',
+  'items',
+  'items.product',
+  'items.purchasedItem',
+] as const;
 
 @Injectable()
 export class StockInService {
@@ -52,12 +61,13 @@ export class StockInService {
 
       this.validateItems(dto.items, purchasedItemMap);
 
-      const sequence = await this.sequenceService.generateSequence(em, 'StockIn', 'STK');
+      const sequence = await this.sequenceService.generateSequence('StockIn', 'STK');
 
       const stockIn = em.create(StockIn, {
         inventory,
         purchase,
         sequence,
+        status: StockInStatus.PENDING,
       });
 
       em.persist(stockIn);
@@ -92,16 +102,23 @@ export class StockInService {
         }
       }
 
-      if (purchasedItems.every(item => (item.received ?? 0) >= item.quantity))
-        purchase.status = PurchaseStatus.DONE;
+      const isFullyReceived = purchasedItems.every(
+        item => (item.received ?? 0) >= item.quantity
+      );
 
-      await this.journalEntryService.createFromStockIn(em, stockIn, createdStockInItems, purchase);
+      if (isFullyReceived) {
+        purchase.status = PurchaseStatus.DONE;
+        stockIn.status = StockInStatus.DONE;
+      }
+
+      await this.journalEntryService.createFromStockIn(store, createdStockInItems, purchase);
 
       await em.flush();
 
       return { message: `Stock in created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
   }
+
 
   private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
     for (const item of items) {
@@ -116,4 +133,17 @@ export class StockInService {
     }
   }
 
+
+  async findOne(store: Store, id: string) {
+    const stockIn = await this.em.findOne(
+      StockIn,
+      { id, purchase: { store } },
+      { populate: STOCK_IN_POPULATE },
+    );
+
+    if (!stockIn)
+      throw new NotFoundException(`Stock in with id ${id} not found`);
+
+    return serialize(stockIn, { populate: STOCK_IN_POPULATE });
+  }
 }

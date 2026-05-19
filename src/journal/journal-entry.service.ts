@@ -1,36 +1,56 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JournalEntry } from '../database/entites/journal-entry.entity';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 import { Purchase } from '../database/entites/purchase.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
-import { StockIn } from '../database/entites/stock-in.entity';
 import { SequenceService } from '../sequence/sequence.service';
+import { Store } from '../database/entites/store.entity';
+import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 
 @Injectable()
 export class JournalEntryService {
   constructor(
-    private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
+    private readonly em: EntityManager,
   ) {}
 
-  async createFromStockIn(em: EntityManager, stockIn: StockIn, stockInItems: StockInItem[], purchase: Purchase): Promise<void> {
-    const sequence = await this.sequenceService.generateSequence(em, 'JournalEntry', 'JRN');
+  async createFromStockIn(store: Store, stockInItems: StockInItem[], purchase: Purchase): Promise<void> {
+    await this.em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
+    const defaultAccount = store.storeSettings?.defaultAccount;
+    if (!defaultAccount)
+      throw new NotFoundException(`Default account not found for store`);
 
-    const journalEntry = em.create(JournalEntry, {
+    await this.em.populate(purchase.customer, ['payable']);
+    const payableAccount = purchase.customer.payable;
+    if (!payableAccount)
+      throw new NotFoundException(`Payable account not found for customer`);
+
+    const sequence = await this.sequenceService.generateSequence('JournalEntry', 'JRN');
+
+    const journalEntry = this.em.create(JournalEntry, {
       sequence,
+      status: JournalEntryStatus.PENDING,
     });
 
-    em.persist(journalEntry);
+    this.em.persist(journalEntry);
 
     for (const stockInItem of stockInItems) {
       const amount = stockInItem.quantity * stockInItem.purchasedItem.unitPrice;
 
-      em.create(JournalEntryItem, {
+      // debit row — inventory account (asset increases)
+      this.em.create(JournalEntryItem, {
         journalEntry,
         purchase,
-        customer: purchase.customer,
+        account: defaultAccount,
         debit: amount,
+      });
+
+      // credit row — payable account (liability increases)
+      this.em.create(JournalEntryItem, {
+        journalEntry,
+        purchase,
+        account: payableAccount,
         credit: amount,
       });
     }

@@ -3,7 +3,6 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Purchase } from "../database/entites/purchase.entity";
 import { Customer } from "../database/entites/customer.entity";
 import { Product } from "../database/entites/product.entity";
-import { Inventory } from "../database/entites/inventory.entity";
 import { UpdatePurchaseDto } from "./dto/update-purchase.dto";
 import { PurchasedItem } from "../database/entites/purchased_item.entity";
 import { CreatePurchaseDto } from "./dto/create-purchase.dto";
@@ -85,7 +84,7 @@ export class PurchaseService {
       totalPrice: serialized.items.reduce((sum, item) => {
         return sum + item.unitPrice * item.quantity;
       }, 0),
-      items: serialized.items.map(({ purchase, ...item }) => item),
+      items: serialized.items.map(({ purchase, id, ...item }) => item),
     };
   }
 
@@ -96,7 +95,7 @@ export class PurchaseService {
       if (!customer)
         throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
-      const sequence = await this.sequenceService.generateSequence(em, 'Purchase', 'PUR');
+      const sequence = await this.sequenceService.generateSequence('Purchase', 'PUR');
 
       const purchase = em.create(Purchase, {
         customer,
@@ -172,8 +171,7 @@ export class PurchaseService {
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([
-      [PurchaseStatus.DRAFT, [PurchaseStatus.PENDING, PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
-      [PurchaseStatus.PENDING, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DRAFT, [PurchaseStatus.CANCELLED]],
       [PurchaseStatus.DONE, []],
       [PurchaseStatus.CANCELLED, []],
     ]);
