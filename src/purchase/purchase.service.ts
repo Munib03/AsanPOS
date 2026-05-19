@@ -160,11 +160,9 @@ export class PurchaseService {
     if (purchase.status === PurchaseStatus.DONE)
       throw new BadRequestException(`Cannot update a completed purchase.`);
 
-    if (dto.status === PurchaseStatus.CANCELLED) {
+    if (dto.status) {
       this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
       purchase.status = dto.status;
-      await this.em.flush();
-      return { message: `Purchase with id ${id} cancelled successfully.` };
     }
 
     await this.em.flush();
