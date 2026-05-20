@@ -10,7 +10,7 @@ export async function seed(knex: Knex): Promise<void> {
 
   await knex("accounts").insert({
     id: inventoryAccountId,
-    name: "Inventory Account",
+    name: "Default Account",
     type: "asset",
     created_at: knex.fn.now(),
   });

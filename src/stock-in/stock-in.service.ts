@@ -11,7 +11,7 @@ import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { StockInStatus } from '../shared/utils/stock-in-status.enum';
 import { CreateStockInDto, StockInItemDto } from './dto/create-stock-in.dto';
-import { JournalEntryService } from '../journal/journal-entry.service';
+import { UpdateStockInDto } from './dto/update-stock-in.dto';
 
 const STOCK_IN_POPULATE = [
   'inventory',
@@ -28,8 +28,8 @@ export class StockInService {
     private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
-    private readonly journalEntryService: JournalEntryService,
   ) {}
+
 
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
@@ -45,6 +45,9 @@ export class StockInService {
 
       if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot create stock in for a cancelled purchase`);
+
+      if (purchase.status === PurchaseStatus.DRAFT)
+        throw new BadRequestException(`Cannot create stock in for a draft purchase, confirm it first by setting status to Done`);
 
       if (purchase.status === PurchaseStatus.DONE)
         throw new BadRequestException(`Cannot create stock in for a completed purchase`);
@@ -66,19 +69,16 @@ export class StockInService {
       em.persist(stockIn);
 
       const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
-      const createdStockInItems: StockInItem[] = [];
 
       for (const item of dto.items) {
         const purchasedItem = purchasedItemMap.get(item.purchaseItemId)!;
 
-        const stockInItem = em.create(StockInItem, {
+        em.create(StockInItem, {
           stockIn,
           product: purchasedItem.product,
           purchasedItem,
           quantity: item.quantity,
         });
-
-        createdStockInItems.push(stockInItem);
 
         await this.stockQuantityService.upsertStockQuantity(
           em,
@@ -95,23 +95,27 @@ export class StockInService {
         }
       }
 
-      const isFullyReceived = purchasedItems.every(
-        item => (item.received ?? 0) >= item.quantity
-      );
-
-      if (isFullyReceived) {
-        purchase.status = PurchaseStatus.DONE;
-        stockIn.status = StockInStatus.DONE;
-      }
-
-      await this.journalEntryService.createFromStockIn(em, store, createdStockInItems, purchase);
-
       await em.flush();
 
       return { message: `Stock in created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
     });
   }
 
+
+  async update(store: Store, id: string, dto: UpdateStockInDto): Promise<{ message: string }> {
+    const stockIn = await this.em.findOne(StockIn, { id, purchase: { store } });
+    if (!stockIn)
+      throw new NotFoundException(`Stock in with id ${id} not found`);
+
+    if (stockIn.status === StockInStatus.DONE)
+      throw new BadRequestException(`Cannot update a completed stock in`);
+
+    if (dto.status)
+      stockIn.status = dto.status;
+
+    await this.em.flush();
+    return { message: `Stock in with id ${id} updated successfully.` };
+  }
 
   private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
     for (const item of items) {

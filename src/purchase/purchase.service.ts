@@ -12,6 +12,7 @@ import { PurchaseStatus } from "../shared/utils/purchase-status-enum";
 import { PaginateQuery, Meta } from "../shared/types/paginate-query.types";
 import { PurchaseListItem } from "../shared/types/purchase.types";
 import { SequenceService } from "../sequence/sequence.service";
+import { JournalEntryService } from "../journal/journal-entry.service";
 
 
 @Injectable()
@@ -20,6 +21,7 @@ export class PurchaseService {
     private readonly em: EntityManager,
     private readonly purchaseRepository: BaseRepository<Purchase>,
     private readonly sequenceService: SequenceService,
+    private readonly journalEntryService: JournalEntryService,
   ) {}
 
 
@@ -149,29 +151,36 @@ export class PurchaseService {
 
 
   async update(store: Store, id: string, dto: UpdatePurchaseDto) {
-    const purchase = await this.em.findOne(Purchase, { id, store });
-    if (!purchase)
-      throw new NotFoundException(`Purchase with id ${id} not found`);
+    return await this.em.transactional(async (em) => {
+      const purchase = await em.findOne(Purchase, { id, store }, {
+        populate: ['items', 'items.product', 'customer']
+      });
+      if (!purchase)
+        throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    if (purchase.status === PurchaseStatus.CANCELLED)
-      throw new BadRequestException(`Cannot update a cancelled purchase.`);
+      if (purchase.status === PurchaseStatus.CANCELLED)
+        throw new BadRequestException(`Cannot update a cancelled purchase.`);
 
-    if (purchase.status === PurchaseStatus.DONE)
-      throw new BadRequestException(`Cannot update a completed purchase.`);
+      if (purchase.status === PurchaseStatus.DONE)
+        throw new BadRequestException(`Cannot update a completed purchase.`);
 
-    if (dto.status) {
-      this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
-      purchase.status = dto.status;
-    }
+      if (dto.status) {
+        this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
+        purchase.status = dto.status;
 
-    await this.em.flush();
-    return { message: `Purchase with id ${id} updated successfully.` };
+        if (dto.status === PurchaseStatus.DONE)
+          await this.journalEntryService.createFromPurchase(em, store, purchase);
+      }
+
+      await em.flush();
+      return { message: `Purchase with id ${id} updated successfully.` };
+    });
   }
 
 
   private getAllowedTransitions(currentStatus: PurchaseStatus, newStatus: PurchaseStatus): void {
     const transitions = new Map([
-      [PurchaseStatus.DRAFT, [PurchaseStatus.CANCELLED]],
+      [PurchaseStatus.DRAFT, [PurchaseStatus.DONE, PurchaseStatus.CANCELLED]],
       [PurchaseStatus.DONE, []],
       [PurchaseStatus.CANCELLED, []],
     ]);

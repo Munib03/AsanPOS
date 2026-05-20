@@ -6,11 +6,13 @@ import { PurchaseService } from './purchase.service';
 import { Purchase } from '../database/entites/purchase.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceModule } from '../sequence/sequence.module';
+import { JournalEntryModule } from '../journal/journal.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Purchase]),
     SequenceModule,
+    JournalEntryModule,
   ],
   controllers: [PurchaseController],
   providers: [
