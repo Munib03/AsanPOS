@@ -33,16 +33,9 @@ export class StockInService {
 
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
-      const [purchase, inventory] = await Promise.all([
-        em.findOne(Purchase,
-          { id: dto.purchaseId, store },
-          { populate: ['items', 'items.product', 'customer'] }
-        ),
-        em.findOne(Inventory,
-          { id: dto.inventoryId },
-          { populate: ['products'] }
-        ),
-      ]);
+
+      const inventory = await em.findOne(Inventory, { id: dto.inventoryId }, { populate: ['products'] });
+      const purchase = await em.findOne(Purchase, { id: dto.purchaseId }, { populate: ['items', 'items.product', 'customer'] });
 
       if (!purchase)
         throw new NotFoundException(`Purchase with id ${dto.purchaseId} not found`);
@@ -111,7 +104,7 @@ export class StockInService {
         stockIn.status = StockInStatus.DONE;
       }
 
-      await this.journalEntryService.createFromStockIn(store, createdStockInItems, purchase);
+      await this.journalEntryService.createFromStockIn(em, store, createdStockInItems, purchase);
 
       await em.flush();
 
