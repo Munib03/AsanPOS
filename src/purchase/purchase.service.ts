@@ -84,7 +84,7 @@ export class PurchaseService {
       totalPrice: serialized.items.reduce((sum, item) => {
         return sum + item.unitPrice * item.quantity;
       }, 0),
-      items: serialized.items.map(({ purchase, id, ...item }) => item),
+      items: serialized.items.map(({ purchase, ...item }) => item),
     };
   }
 
