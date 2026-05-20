@@ -7,6 +7,7 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Store } from '../database/entites/store.entity';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { Account } from '../database/entites/account.entity';
 
 @Injectable()
 export class CustomerService {
@@ -41,19 +42,37 @@ export class CustomerService {
 
 
   async create(store: Store, dto: CreateCustomerDto) {
-    const phone = await this.em.findOne(Customer, { phone: dto.phone, store });
-    if (phone)
-      throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
+    return await this.em.transactional(async (em) => {
+      const existing = await em.findOne(Customer, { phone: dto.phone, store });
+      if (existing)
+        throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
 
-      const customer = this.em.create(Customer, {
-          name: dto.name,
-          address: dto.address,
-          phone: dto.phone,
-          store,
+      const payable = em.create(Account, {
+        name: `${dto.name} - Accounts Payable`,
+        type: 'liability',
       });
 
-      await this.em.persistAndFlush(customer);
-      return customer;
+      const receivable = em.create(Account, {
+        name: `${dto.name} - Accounts Receivable`,
+        type: 'asset',
+      });
+
+      em.persist(payable);
+      em.persist(receivable);
+
+      const customer = em.create(Customer, {
+        name: dto.name,
+        phone: dto.phone,
+        address: dto.address,
+        store,
+        payable,
+        receivable,
+      });
+
+      await em.persistAndFlush(customer);
+
+      return { message: 'Customer created successfully.' };
+    });
   }
 
   async update(id: string, dto: UpdateCustomerDto) {
