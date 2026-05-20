@@ -30,10 +30,8 @@ export class StockInService {
     private readonly stockQuantityService: StockQuantityService,
   ) {}
 
-
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
-
       const inventory = await em.findOne(Inventory, { id: dto.inventoryId }, { populate: ['products'] });
       const purchase = await em.findOne(Purchase, { id: dto.purchaseId }, { populate: ['items', 'items.product', 'customer'] });
 
@@ -47,7 +45,7 @@ export class StockInService {
         throw new BadRequestException(`Cannot create stock in for a cancelled purchase`);
 
       if (purchase.status === PurchaseStatus.DRAFT)
-        throw new BadRequestException(`Cannot create stock in for a draft purchase, confirm it first by setting status to Done`);
+        throw new BadRequestException(`Cannot create stock in for a draft purchase`);
 
       const purchasedItems = purchase.items.getItems();
       const purchasedItemMap = new Map(purchasedItems.map(item => [item.id, item]));
@@ -77,14 +75,6 @@ export class StockInService {
           quantity: item.quantity,
         });
 
-        await this.stockQuantityService.upsertStockQuantity(
-          em,
-          inventory,
-          purchasedItem.product,
-          item.quantity,
-        );
-
-        purchasedItem.received = (purchasedItem.received ?? 0) + item.quantity;
 
         if (!existingProductIds.has(purchasedItem.product.id)) {
           inventory.products.add(purchasedItem.product);
@@ -100,31 +90,71 @@ export class StockInService {
 
 
   async update(store: Store, id: string, dto: UpdateStockInDto): Promise<{ message: string }> {
-    const stockIn = await this.em.findOne(StockIn, { id, purchase: { store } });
-    if (!stockIn)
-      throw new NotFoundException(`Stock in with id ${id} not found`);
+    return await this.em.transactional(async (em) => {
+      const stockIn = await em.findOne(StockIn,
+        { id, purchase: { store } },
+        { populate: ['items', 'items.product', 'items.purchasedItem', 'inventory'] }
+      );
 
-    if (stockIn.status === StockInStatus.DONE)
-      throw new BadRequestException(`Cannot update a completed stock in`);
+      if (!stockIn)
+        throw new NotFoundException(`Stock in with id ${id} not found`);
 
-    if (dto.status)
-      stockIn.status = dto.status;
+      if (stockIn.status === StockInStatus.DONE)
+        throw new BadRequestException(`Cannot update a completed stock in`);
 
-    await this.em.flush();
-    return { message: `Stock in with id ${id} updated successfully.` };
+      if (stockIn.status === StockInStatus.CANCELLED)
+        throw new BadRequestException(`Cannot update a cancelled stock in`);
+
+      if (dto.status) {
+        this.validateStockInTransition(stockIn.status as StockInStatus, dto.status as StockInStatus);
+        stockIn.status = dto.status;
+
+        if (dto.status === StockInStatus.DONE) {
+          await Promise.all(
+            stockIn.items.getItems().map(async item => {
+              await this.stockQuantityService.upsertStockQuantity(
+                em,
+                stockIn.inventory,
+                item.product,
+                item.quantity,
+              );
+
+              item.purchasedItem.received = (item.purchasedItem.received ?? 0) + item.quantity;
+            })
+          );
+        }
+      }
+
+      await em.flush();
+      return { message: `Stock in with id ${id} updated successfully.` };
+    });
   }
 
-  private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
-    for (const item of items) {
-      const purchasedItem = purchasedItemMap.get(item.purchaseItemId);
 
-      if (!purchasedItem)
-        throw new NotFoundException(`Purchase item with id ${item.purchaseItemId} does not belong to this purchase`);
+  private validateStockInTransition(currentStatus: StockInStatus, newStatus: StockInStatus): void {
+    const transitions = new Map([
+      [StockInStatus.PENDING, [StockInStatus.DONE, StockInStatus.CANCELLED]],
+      [StockInStatus.DONE, []],
+      [StockInStatus.CANCELLED, []],
+    ]);
 
-      const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
-      if (item.quantity > remaining)
-        throw new BadRequestException(`Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchaseItemId}`);
-    }
+    const allowedTransitions = transitions.get(currentStatus) ?? [];
+    if (!allowedTransitions.includes(newStatus))
+      throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
+  }
+
+
+  async findAll(store: Store, purchaseId: string) {
+    const purchase = await this.em.findOne(Purchase, { id: purchaseId, store });
+    if (!purchase)
+      throw new NotFoundException(`Purchase with id ${purchaseId} not found`);
+
+    const stockIns = await this.em.findAll(StockIn, {
+      where: { purchase },
+      populate: STOCK_IN_POPULATE,
+    }); 
+
+    return serialize(stockIns, { populate: STOCK_IN_POPULATE });
   }
 
 
@@ -140,4 +170,18 @@ export class StockInService {
 
     return serialize(stockIn, { populate: STOCK_IN_POPULATE });
   }
-}
+
+
+  private validateItems(items: StockInItemDto[], purchasedItemMap: Map<string, PurchasedItem>): void {
+    for (const item of items) {
+      const purchasedItem = purchasedItemMap.get(item.purchaseItemId);
+
+      if (!purchasedItem)
+        throw new NotFoundException(`Purchase item with id ${item.purchaseItemId} does not belong to this purchase`);
+
+      const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
+      if (item.quantity > remaining)
+        throw new BadRequestException(`Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchaseItemId}`);
+    }
+  }
+} 

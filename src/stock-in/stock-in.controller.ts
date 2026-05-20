@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { StockInService } from './stock-in.service';
 import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
@@ -17,6 +17,22 @@ export class StockInController {
     @Body() dto: CreateStockInDto,
   ) {
     return this.stockInService.createFromPurchase(store, dto);
+  }
+
+  @Get()
+  findAll(
+    @CurrentStore() store: Store,
+    @Query('purchaseId') purchaseId: string,
+  ) {
+    return this.stockInService.findAll(store, purchaseId);
+  }
+
+  @Get(':id')
+  findOne(
+    @CurrentStore() store: Store,
+    @Param('id') id: string,
+  ) {
+    return this.stockInService.findOne(store, id);
   }
 
   @Put(':id')
