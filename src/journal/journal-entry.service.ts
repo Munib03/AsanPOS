@@ -52,5 +52,7 @@ export class JournalEntryService {
       account: defaultAccount,
       credit: totalAmount,
     });
+
+    await em.flush();
   }
 }
