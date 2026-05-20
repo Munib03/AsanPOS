@@ -42,14 +42,14 @@ export class JournalEntryService {
     em.create(JournalEntryItem, {
       journalEntry,
       purchase,
-      account: payableAccount,
+      account: defaultAccount,
       debit: totalAmount,
     });
 
     em.create(JournalEntryItem, {
       journalEntry,
       purchase,
-      account: defaultAccount,
+      account: payableAccount,
       credit: totalAmount,
     });
 

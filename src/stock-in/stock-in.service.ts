@@ -49,9 +49,6 @@ export class StockInService {
       if (purchase.status === PurchaseStatus.DRAFT)
         throw new BadRequestException(`Cannot create stock in for a draft purchase, confirm it first by setting status to Done`);
 
-      if (purchase.status === PurchaseStatus.DONE)
-        throw new BadRequestException(`Cannot create stock in for a completed purchase`);
-
       const purchasedItems = purchase.items.getItems();
       const purchasedItemMap = new Map(purchasedItems.map(item => [item.id, item]));
 
