@@ -15,6 +15,9 @@ import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 import Redis from 'ioredis';
+import { create } from 'domain';
+import { Account } from '../database/entites/account.entity';
+import { StoreSettings } from '../database/entites/store-settings.entity';
 
 
 @Injectable()
@@ -133,14 +136,29 @@ export class AuthService {
 
       if (existingEmployee)
         throw new BadRequestException('This store already has an owner. Please create a new store.');
+
     }
     else {
+      const defaultAccount = this.em.create(Account, {
+        name: 'Default Account',
+        type: 'asset',
+      });
+
+      const storeSettings = this.em.create(StoreSettings, {
+        defaultAccount,
+      });
+
       store = this.em.create(Store, {
         name: dto.storeName,
         address: dto.storeAddress,
+        storeSettings,
       });
 
-      await this.em.persistAndFlush(store);
+      await this.em.persistAndFlush([
+        defaultAccount,
+        storeSettings,
+        store,
+      ]);
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);

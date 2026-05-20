@@ -26,6 +26,7 @@ import Redis from 'ioredis';
   providers: [
     AuthService,
     JwtStrategy,
+    
     {
       provide: 'REDIS_CLIENT',
       useFactory: (config: ConfigService) => new Redis(config.get<string>('REDIS_URL')!),
