@@ -144,15 +144,11 @@ export class StockInService {
   }
 
 
-  async findAll(store: Store, purchaseId: string) {
-    const purchase = await this.em.findOne(Purchase, { id: purchaseId, store });
-    if (!purchase)
-      throw new NotFoundException(`Purchase with id ${purchaseId} not found`);
-
+  async findAll(store: Store) {
     const stockIns = await this.em.findAll(StockIn, {
-      where: { purchase },
+      where: { purchase: { store } },
       populate: STOCK_IN_POPULATE,
-    }); 
+    });
 
     return serialize(stockIns, { populate: STOCK_IN_POPULATE });
   }

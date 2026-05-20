@@ -20,11 +20,8 @@ export class StockInController {
   }
 
   @Get()
-  findAll(
-    @CurrentStore() store: Store,
-    @Query('purchaseId') purchaseId: string,
-  ) {
-    return this.stockInService.findAll(store, purchaseId);
+  findAll(@CurrentStore() store: Store) {
+    return this.stockInService.findAll(store);
   }
 
   @Get(':id')

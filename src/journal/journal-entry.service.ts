@@ -25,6 +25,10 @@ export class JournalEntryService {
     if (!payableAccount)
       throw new NotFoundException(`Payable account not found for customer`);
 
+    const receivableAccount = purchase.customer.receivable;
+    if (!receivableAccount)
+      throw new NotFoundException(`Receivable account not found for customer`);
+
     const totalAmount = purchase.items.getItems().reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0
@@ -49,7 +53,7 @@ export class JournalEntryService {
     em.create(JournalEntryItem, {
       journalEntry,
       purchase,
-      account: payableAccount,
+      account: receivableAccount,
       credit: totalAmount,
     });
 
