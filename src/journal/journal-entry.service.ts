@@ -14,6 +14,48 @@ export class JournalEntryService {
     private readonly em: EntityManager,
   ) {}
 
+
+
+  async findAll(): Promise<JournalEntry[]> {
+    return this.em.find(
+      JournalEntry,
+      {},
+      {
+        populate: [
+          'sequence',
+          'items',
+          'items.account',
+          'items.purchase',
+        ],
+        orderBy: {
+          createdAt: 'DESC',
+        },
+      },
+    );
+  }
+
+  async findOne(id: string): Promise<JournalEntry> {
+    const journalEntry = await this.em.findOne(
+      JournalEntry,
+      { id },
+      {
+        populate: [
+          'sequence',
+          'items',
+          'items.account',
+          'items.purchase',
+        ],
+      },
+    );
+
+    if (!journalEntry) {
+      throw new NotFoundException('Journal entry not found');
+    }
+
+    return journalEntry;
+  }
+
+
   async createFromPurchase(em: EntityManager, store: Store, purchase: Purchase): Promise<void> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;

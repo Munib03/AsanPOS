@@ -4,6 +4,7 @@ import { JournalEntry } from '../database/entites/journal-entry.entity';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 import { JournalEntryService } from './journal-entry.service';
 import { SequenceModule } from '../sequence/sequence.module';
+import { JournalEntryController } from './journal-entry.controller';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { SequenceModule } from '../sequence/sequence.module';
     SequenceModule,
   ],
   providers: [JournalEntryService],
+  controllers: [JournalEntryController],
   exports: [JournalEntryService],
 })
 export class JournalEntryModule {}
