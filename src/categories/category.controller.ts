@@ -1,33 +1,48 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
-import { CategoryService } from "./category.service";
-import { CreateCategoryDto } from "./dto/create-category.dto";
-import { JwtAuthGuard } from "../shared/jwt/jwt-auth.guard";
-import { UpdateCategoryDto } from "./dto/update-category.dto";
-import { CurrentStore } from "../shared/decorators/store.decorator";
-import { Store } from "../database/entites/store.entity";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 
+import { CategoryService } from './category.service';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
-@Controller("categories")
+import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { CurrentStore } from '../shared/decorators/store.decorator';
+
+import { Store } from '../database/entites/store.entity';
+
+import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+
+@Controller('categories')
 @UseGuards(JwtAuthGuard)
 export class CategoryController {
+  constructor(
+    private readonly categoryService: CategoryService,
+  ) {}
 
-  constructor(private readonly categoryService: CategoryService) {}
-
-  
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.categoryService.findAll(store);
+  findAll(
+    @CurrentStore() store: Store,
+    @Query() query: paginateQueryTypes.PaginateQuery,
+  ) {
+    return this.categoryService.findAll(store, query);
   }
 
-  
-  @Get(":name")
+  @Get(':name')
   findOne(
     @CurrentStore() store: Store,
-    @Body("name") name: string,
+    @Param('name') name: string,
   ) {
     return this.categoryService.findOne(store, name);
   }
-
 
   @Post()
   create(
@@ -36,7 +51,6 @@ export class CategoryController {
   ) {
     return this.categoryService.create(store, dto);
   }
-
 
   @Put(':id')
   update(
@@ -47,11 +61,10 @@ export class CategoryController {
     return this.categoryService.update(store, id, dto);
   }
 
-
-  @Delete(":id")
+  @Delete(':id')
   remove(
     @CurrentStore() store: Store,
-    @Param("id") id: string,
+    @Param('id') id: string,
   ) {
     return this.categoryService.remove(store, id);
   }

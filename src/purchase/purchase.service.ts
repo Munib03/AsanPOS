@@ -1,11 +1,7 @@
 // src/purchase/purchase.service.ts
 
 import { EntityManager, serialize } from '@mikro-orm/postgresql';
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Customer } from '../database/entites/customer.entity';
 import { Product } from '../database/entites/product.entity';
 import { Purchase } from '../database/entites/purchase.entity';
@@ -34,6 +30,7 @@ export class PurchaseService {
     private readonly journalEntryService: JournalEntryService,
   ) {}
 
+
   async findAll(
     store: Store,
     query: PaginateQuery,
@@ -55,11 +52,13 @@ export class PurchaseService {
       const serialized = serialize(purchase, {
         populate: ['customer', 'items', 'items.product', 'sequence'],
       });
+
       return this.mapPurchaseToListItem(serialized);
     });
 
     return { data, meta };
   }
+
 
   async findOne(store: Store, id: string): Promise<PurchaseListItem> {
     const purchase = await this.em.findOne(
@@ -120,49 +119,6 @@ export class PurchaseService {
     return this.mapPurchaseToListItem(serialized, stockInsMap);
   }
 
-  private buildStockInsMap(
-    stockInItems: StockInItem[],
-  ): Map<string, StockInDetail> {
-    const stockInsMap = new Map<string, StockInDetail>();
-
-    for (const item of stockInItems) {
-      if (!item.stockIn || !item.stockIn.inventory) continue;
-
-      const sequence = item.stockIn.sequence;
-      const sequenceId = sequence
-        ? `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`
-        : '';
-
-      const stockInId = item.stockIn.id;
-
-      if (!stockInsMap.has(stockInId)) {
-        stockInsMap.set(stockInId, {
-          stockInId,
-          sequenceId,
-          inventoryId: item.stockIn.inventory.id,
-          inventoryName: item.stockIn.inventory.name,
-          inventoryAddress: item.stockIn.inventory.address,
-          status: item.stockIn.status,
-          createdAt: item.stockIn.createdAt,
-          products: [],
-        });
-      }
-
-      const purchasedItem = item.purchasedItem;
-      if (!purchasedItem?.id || !purchasedItem?.product) 
-        continue;
-
-      stockInsMap.get(stockInId)!.products.push({
-        purchasedItemId: purchasedItem.id,
-        productId: purchasedItem.product.id,
-        productName: purchasedItem.product.name ?? '',
-        quantity: item.quantity,
-      });
-    }
-
-    return stockInsMap;
-  }
-
 
   async create(store: Store, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
@@ -221,6 +177,7 @@ export class PurchaseService {
     });
   }
 
+
   async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
@@ -236,6 +193,7 @@ export class PurchaseService {
     });
   }
 
+
   async update(store: Store, id: string, dto: UpdatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
@@ -248,6 +206,7 @@ export class PurchaseService {
 
       if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot update a cancelled purchase.`);
+      
       if (purchase.status === PurchaseStatus.DONE)
         throw new BadRequestException(`Cannot update a completed purchase.`);
 
@@ -271,6 +230,52 @@ export class PurchaseService {
     });
   }
 
+
+
+  private buildStockInsMap(
+    stockInItems: StockInItem[],
+  ): Map<string, StockInDetail> {
+    const stockInsMap = new Map<string, StockInDetail>();
+
+    for (const item of stockInItems) {
+      if (!item.stockIn || !item.stockIn.inventory) continue;
+
+      const sequence = item.stockIn.sequence;
+      const sequenceId = sequence
+        ? `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`
+        : '';
+
+      const stockInId = item.stockIn.id;
+
+      if (!stockInsMap.has(stockInId)) {
+        stockInsMap.set(stockInId, {
+          stockInId,
+          sequenceId,
+          inventoryId: item.stockIn.inventory.id,
+          inventoryName: item.stockIn.inventory.name,
+          inventoryAddress: item.stockIn.inventory.address,
+          status: item.stockIn.status,
+          createdAt: item.stockIn.createdAt,
+          products: [],
+        });
+      }
+
+      const purchasedItem = item.purchasedItem;
+      if (!purchasedItem?.id || !purchasedItem?.product) 
+        continue;
+
+      stockInsMap.get(stockInId)!.products.push({
+        purchasedItemId: purchasedItem.id,
+        productId: purchasedItem.product.id,
+        productName: purchasedItem.product.name ?? '',
+        quantity: item.quantity,
+      });
+    }
+
+    return stockInsMap;
+  }
+
+
   private getAllowedTransitions(
     currentStatus: PurchaseStatus,
     newStatus: PurchaseStatus,
@@ -288,7 +293,8 @@ export class PurchaseService {
       );
   }
 
-    private mapPurchaseToListItem(
+  
+  private mapPurchaseToListItem(
     serialized: any,
     stockInsMap?: Map<string, StockInDetail>,
   ): PurchaseListItem {
