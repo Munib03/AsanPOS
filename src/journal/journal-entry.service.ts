@@ -25,11 +25,15 @@ export class JournalEntryService {
           'sequence',
           'items',
           'items.account',
-          'items.purchase',
+          // 'items.purchase',
         ],
         orderBy: {
           createdAt: 'DESC',
         },
+        exclude: ['items.purchase.createdAt', 'items.purchase.updatedAt', 'createdAt', 'updatedAt', 
+          'sequence.createdAt', 'sequence.updatedAt', 'items.account.createdAt', 'items.account.updatedAt',
+          'items.createdAt', 'items.updatedAt'
+        ],
       },
     );
   }
@@ -43,7 +47,11 @@ export class JournalEntryService {
           'sequence',
           'items',
           'items.account',
-          'items.purchase',
+          // 'items.purchase',
+        ],
+        exclude: ['items.purchase.createdAt', 'items.purchase.updatedAt', 'createdAt', 'updatedAt', 
+          'sequence.createdAt', 'sequence.updatedAt', 'items.account.createdAt', 'items.account.updatedAt',
+          'items.createdAt', 'items.updatedAt'
         ],
       },
     );
