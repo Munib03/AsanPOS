@@ -38,7 +38,7 @@ export class JournalEntryService {
     );
   }
 
-  async findOne(id: string): Promise<JournalEntry> {
+  async findOne(id: string): Promise<any> {
     const journalEntry = await this.em.findOne(
       JournalEntry,
       { id },
@@ -47,11 +47,20 @@ export class JournalEntryService {
           'sequence',
           'items',
           'items.account',
-          // 'items.purchase',
+          'items.purchase',
+          'items.purchase.items',
         ],
-        exclude: ['items.purchase.createdAt', 'items.purchase.updatedAt', 'createdAt', 'updatedAt', 
-          'sequence.createdAt', 'sequence.updatedAt', 'items.account.createdAt', 'items.account.updatedAt',
-          'items.createdAt', 'items.updatedAt'
+        exclude: [
+          'items.purchase.createdAt',
+          'items.purchase.updatedAt',
+          'createdAt',
+          'updatedAt',
+          'sequence.createdAt',
+          'sequence.updatedAt',
+          'items.account.createdAt',
+          'items.account.updatedAt',
+          'items.createdAt',
+          'items.updatedAt',
         ],
       },
     );
@@ -60,7 +69,25 @@ export class JournalEntryService {
       throw new NotFoundException('Journal entry not found');
     }
 
-    return journalEntry;
+    const totalCurrBill =
+      journalEntry.items
+        .getItems()
+        .reduce((sum, item) => {
+          const purchaseTotal =
+            item.purchase?.items
+              ?.getItems()
+              ?.reduce(
+                (pSum, pItem) => pSum + pItem.quantity * pItem.unitPrice,
+                0,
+              ) ?? 0;
+
+          return sum + purchaseTotal;
+        }, 0);
+
+    return {
+      ...journalEntry,
+      totalCurrBill,
+    };
   }
 
 
