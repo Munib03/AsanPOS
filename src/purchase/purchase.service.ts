@@ -86,6 +86,7 @@ export class PurchaseService {
       const serialized = serialize(purchase, {
         populate: ['customer', 'items', 'items.product', 'sequence'],
       });
+      
       return this.mapPurchaseToListItem(serialized);
     }
 
@@ -148,7 +149,8 @@ export class PurchaseService {
       }
 
       const purchasedItem = item.purchasedItem;
-      if (!purchasedItem?.id || !purchasedItem?.product) continue;
+      if (!purchasedItem?.id || !purchasedItem?.product) 
+        continue;
 
       stockInsMap.get(stockInId)!.products.push({
         purchasedItemId: purchasedItem.id,

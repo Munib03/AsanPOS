@@ -55,7 +55,7 @@ export class StockInService {
     return serialize(stockIn, { populate: STOCK_IN_POPULATE });
   }
 
-  
+
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const inventory = await em.findOne(Inventory, { id: dto.inventoryId });

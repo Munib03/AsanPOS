@@ -21,6 +21,14 @@ export class ProductController {
     return this.productService.findAll(store, query);
   }
 
+  @Get(":id")
+  findOne(
+    @CurrentStore() store: Store,
+    @Param('id') id: string,
+  ) {
+    return this.productService.findOne(store, id);
+  }
+
   @Post()
   create(
     @CurrentStore() store: Store,

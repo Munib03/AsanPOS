@@ -43,6 +43,20 @@ export class ProductService {
       meta,
     };
   }
+  
+
+  async findOne(store: Store, id: string) {
+    const product = await this.productRepository.findOneOrFail(
+      { id, store },
+      {
+        populate: ['images', 'categories'],
+        fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
+        notFoundMessage: `Product with id ${id} not found`,
+      },
+    );
+
+    return serialize(product, { populate: ['images', 'categories'] });  
+  }
 
 
   async create(store: Store, dto: CreateProductDto) {

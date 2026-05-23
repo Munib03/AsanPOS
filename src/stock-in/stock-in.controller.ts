@@ -10,15 +10,7 @@ import { UpdateStockInDto } from './dto/update-stock-in.dto';
 @UseGuards(JwtAuthGuard)
 export class StockInController {
   constructor(private readonly stockInService: StockInService) {}
-
-  @Post()
-  create(
-    @CurrentStore() store: Store,
-    @Body() dto: CreateStockInDto,
-  ) {
-    return this.stockInService.createFromPurchase(store, dto);
-  }
-
+  
   @Get()
   findAll(@CurrentStore() store: Store) {
     return this.stockInService.findAll(store);
@@ -31,6 +23,15 @@ export class StockInController {
   ) {
     return this.stockInService.findOne(store, id);
   }
+  
+  @Post()
+  create(
+    @CurrentStore() store: Store,
+    @Body() dto: CreateStockInDto,
+  ) {
+    return this.stockInService.createFromPurchase(store, dto);
+  }
+
 
   @Put(':id')
   update(
