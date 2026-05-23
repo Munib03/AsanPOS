@@ -75,7 +75,6 @@ export class StockInService {
           quantity: item.quantity,
         });
 
-
         if (!existingProductIds.has(purchasedItem.product.id)) {
           inventory.products.add(purchasedItem.product);
           existingProductIds.add(purchasedItem.product.id);
@@ -93,7 +92,7 @@ export class StockInService {
     return await this.em.transactional(async (em) => {
       const stockIn = await em.findOne(StockIn,
         { id, purchase: { store } },
-        { populate: ['items', 'items.product', 'items.purchasedItem', 'inventory'] }
+        { populate: ['items', 'items.product', 'items.purchasedItem', 'inventory', 'purchase', 'purchase.items'] }
       );
 
       if (!stockIn)
@@ -107,9 +106,21 @@ export class StockInService {
 
       if (dto.status) {
         this.validateStockInTransition(stockIn.status as StockInStatus, dto.status as StockInStatus);
-        stockIn.status = dto.status;
 
         if (dto.status === StockInStatus.DONE) {
+          const purchasedItems = stockIn.purchase.items.getItems();
+          const purchasedItemMap = new Map(purchasedItems.map(item => [item.id, item]));
+
+          for (const item of stockIn.items.getItems()) {
+            const purchasedItem = purchasedItemMap.get(item.purchasedItem.id)!;
+            const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
+
+            if (item.quantity > remaining)
+              throw new BadRequestException(
+                `Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchasedItem.id}`
+              );
+          }
+
           await Promise.all(
             stockIn.items.getItems().map(async item => {
               await this.stockQuantityService.upsertStockQuantity(
@@ -123,24 +134,13 @@ export class StockInService {
             })
           );
         }
+
+        stockIn.status = dto.status;
       }
 
       await em.flush();
       return { message: `Stock in with id ${id} updated successfully.` };
     });
-  }
-
-
-  private validateStockInTransition(currentStatus: StockInStatus, newStatus: StockInStatus): void {
-    const transitions = new Map([
-      [StockInStatus.PENDING, [StockInStatus.DONE, StockInStatus.CANCELLED]],
-      [StockInStatus.DONE, []],
-      [StockInStatus.CANCELLED, []],
-    ]);
-
-    const allowedTransitions = transitions.get(currentStatus) ?? [];
-    if (!allowedTransitions.includes(newStatus))
-      throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
   }
 
 
@@ -174,10 +174,19 @@ export class StockInService {
 
       if (!purchasedItem)
         throw new NotFoundException(`Purchase item with id ${item.purchaseItemId} does not belong to this purchase`);
-
-      const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
-      if (item.quantity > remaining)
-        throw new BadRequestException(`Quantity ${item.quantity} exceeds remaining quantity ${remaining} for purchase item ${item.purchaseItemId}`);
     }
   }
-} 
+
+
+  private validateStockInTransition(currentStatus: StockInStatus, newStatus: StockInStatus): void {
+    const transitions = new Map([
+      [StockInStatus.PENDING, [StockInStatus.DONE, StockInStatus.CANCELLED]],
+      [StockInStatus.DONE, []],
+      [StockInStatus.CANCELLED, []],
+    ]);
+
+    const allowedTransitions = transitions.get(currentStatus) ?? [];
+    if (!allowedTransitions.includes(newStatus))
+      throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
+  }
+}

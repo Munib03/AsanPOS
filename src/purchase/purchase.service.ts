@@ -42,22 +42,8 @@ export class PurchaseService {
       { store },
       {
         populate: ['customer', 'items', 'items.product', 'sequence'],
-        fields: [
-          'id',
-          'status',
-          'customDate',
-          'createdAt',
-          'sequence.prefix',
-          'sequence.lastIndex',
-          'customer.id',
-          'customer.name',
-          'items.id',
-          'items.quantity',
-          'items.unitPrice',
-          'items.product.id',
-          'items.product.name',
-          'items.product.price',
-        ],
+        fields: ['id', 'status', 'customDate', 'createdAt', 'sequence.prefix', 'sequence.lastIndex', 'customer.id', 'customer.name',
+          'items.id', 'items.quantity', 'items.unitPrice', 'items.product.id', 'items.product.name', 'items.product.price',],
       },
       {
         searchable: ['customer.name', 'status'],
@@ -76,26 +62,13 @@ export class PurchaseService {
   }
 
   async findOne(store: Store, id: string): Promise<PurchaseListItem> {
-    // 1. Fetch purchase with basic relations
     const purchase = await this.em.findOne(
       Purchase,
       { id, store },
       {
         populate: ['customer', 'items', 'items.product', 'sequence'],
-        fields: [
-          'id',
-          'status',
-          'customDate',
-          'sequence.prefix',
-          'sequence.lastIndex',
-          'customer.id',
-          'customer.name',
-          'customer.phone',
-          'customer.address',
-          'items.id',
-          'items.quantity',
-          'items.unitPrice',
-          'items.received',
+        fields: ['id', 'status', 'customDate', 'sequence.prefix', 'sequence.lastIndex', 'customer.id', 'customer.name', 'customer.phone',
+          'customer.address', 'items.id', 'items.quantity', 'items.unitPrice', 'items.received',
           'items.product.id',
           'items.product.name',
           'items.product.price',
@@ -106,11 +79,9 @@ export class PurchaseService {
     if (!purchase)
       throw new NotFoundException(`Purchase with id ${id} not found`);
 
-    // 2. Get all purchasedItem IDs from this purchase
     const purchasedItems = purchase.items.getItems();
     const purchasedItemIds = purchasedItems.map((item) => item.id);
 
-    // 3. EDGE CASE: No items in purchase
     if (purchasedItemIds.length === 0) {
       const serialized = serialize(purchase, {
         populate: ['customer', 'items', 'items.product', 'sequence'],
@@ -118,7 +89,6 @@ export class PurchaseService {
       return this.mapPurchaseToListItem(serialized);
     }
 
-    // 4. Find all StockInItems that reference these purchasedItems
     let stockInsMap: Map<string, StockInDetail> = new Map();
 
     try {
@@ -138,13 +108,11 @@ export class PurchaseService {
         },
       );
 
-      // 5. Build stockIn details grouped by stockInId
       stockInsMap = this.buildStockInsMap(stockInItems);
     } catch (error) {
       console.error('Error fetching stock-in items:', error);
     }
 
-    // 6. Serialize and return with stock-ins grouped by inventory
     const serialized = serialize(purchase, {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
@@ -157,10 +125,8 @@ export class PurchaseService {
     const stockInsMap = new Map<string, StockInDetail>();
 
     for (const item of stockInItems) {
-      // EDGE CASE: StockIn or Inventory might be deleted (null)
       if (!item.stockIn || !item.stockIn.inventory) continue;
 
-      // EDGE CASE: Handle null sequence
       const sequence = item.stockIn.sequence;
       const sequenceId = sequence
         ? `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`
@@ -168,7 +134,6 @@ export class PurchaseService {
 
       const stockInId = item.stockIn.id;
 
-      // Initialize the StockInDetail entry the first time we see this stockInId
       if (!stockInsMap.has(stockInId)) {
         stockInsMap.set(stockInId, {
           stockInId,
@@ -182,7 +147,6 @@ export class PurchaseService {
         });
       }
 
-      // EDGE CASE: purchasedItem or its product might be null
       const purchasedItem = item.purchasedItem;
       if (!purchasedItem?.id || !purchasedItem?.product) continue;
 
@@ -197,27 +161,6 @@ export class PurchaseService {
     return stockInsMap;
   }
 
-  private mapPurchaseToListItem(
-    serialized: any,
-    stockInsMap?: Map<string, StockInDetail>,
-  ): PurchaseListItem {
-    const { sequence, createdAt, updatedAt, ...rest } = serialized;
-
-    const items: PurchaseItemType[] = serialized.items.map((item: any) => {
-      const { purchase, ...itemData } = item;
-      return itemData;
-    });
-
-    return {
-      ...rest,
-      sequenceId: `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`,
-      totalPrice: serialized.items.reduce((sum: number, item: any) => {
-        return sum + item.unitPrice * item.quantity;
-      }, 0),
-      items,
-      stockIns: stockInsMap ? Array.from(stockInsMap.values()) : [],
-    };
-  }
 
   async create(store: Store, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
@@ -341,5 +284,27 @@ export class PurchaseService {
       throw new BadRequestException(
         `Cannot transition from '${currentStatus}' to '${newStatus}'.`,
       );
+  }
+
+    private mapPurchaseToListItem(
+    serialized: any,
+    stockInsMap?: Map<string, StockInDetail>,
+  ): PurchaseListItem {
+    const { sequence, createdAt, updatedAt, ...rest } = serialized;
+
+    const items: PurchaseItemType[] = serialized.items.map((item: any) => {
+      const { purchase, ...itemData } = item;
+      return itemData;
+    });
+
+    return {
+      ...rest,
+      sequenceId: `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`,
+      totalPrice: serialized.items.reduce((sum: number, item: any) => {
+        return sum + item.unitPrice * item.quantity;
+      }, 0),
+      items,
+      stockIns: stockInsMap ? Array.from(stockInsMap.values()) : [],
+    };
   }
 }
