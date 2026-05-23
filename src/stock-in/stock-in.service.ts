@@ -32,7 +32,7 @@ export class StockInService {
 
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
-      const inventory = await em.findOne(Inventory, { id: dto.inventoryId }, { populate: ['products'] });
+      const inventory = await em.findOne(Inventory, { id: dto.inventoryId });
       const purchase = await em.findOne(Purchase, { id: dto.purchaseId }, { populate: ['items', 'items.product', 'customer'] });
 
       if (!purchase)
@@ -63,8 +63,6 @@ export class StockInService {
 
       em.persist(stockIn);
 
-      const existingProductIds = new Set(inventory.products.getItems().map(p => p.id));
-
       for (const item of dto.items) {
         const purchasedItem = purchasedItemMap.get(item.purchaseItemId)!;
 
@@ -74,11 +72,6 @@ export class StockInService {
           purchasedItem,
           quantity: item.quantity,
         });
-
-        if (!existingProductIds.has(purchasedItem.product.id)) {
-          inventory.products.add(purchasedItem.product);
-          existingProductIds.add(purchasedItem.product.id);
-        }
       }
 
       await em.flush();
@@ -92,7 +85,7 @@ export class StockInService {
     return await this.em.transactional(async (em) => {
       const stockIn = await em.findOne(StockIn,
         { id, purchase: { store } },
-        { populate: ['items', 'items.product', 'items.purchasedItem', 'inventory', 'purchase', 'purchase.items'] }
+        { populate: ['items', 'items.product', 'items.purchasedItem', 'inventory', 'inventory.products', 'purchase', 'purchase.items'] }
       );
 
       if (!stockIn)
@@ -121,6 +114,8 @@ export class StockInService {
               );
           }
 
+          const existingProductIds = new Set(stockIn.inventory.products.getItems().map(p => p.id));
+
           await Promise.all(
             stockIn.items.getItems().map(async item => {
               await this.stockQuantityService.upsertStockQuantity(
@@ -131,6 +126,11 @@ export class StockInService {
               );
 
               item.purchasedItem.received = (item.purchasedItem.received ?? 0) + item.quantity;
+
+              if (!existingProductIds.has(item.product.id)) {
+                stockIn.inventory.products.add(item.product);
+                existingProductIds.add(item.product.id);
+              }
             })
           );
         }
