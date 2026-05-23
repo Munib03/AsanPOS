@@ -30,6 +30,32 @@ export class StockInService {
     private readonly stockQuantityService: StockQuantityService,
   ) {}
 
+
+  
+  async findAll(store: Store) {
+    const stockIns = await this.em.findAll(StockIn, {
+      where: { purchase: { store } },
+      populate: STOCK_IN_POPULATE,
+    });
+
+    return serialize(stockIns, { populate: STOCK_IN_POPULATE });
+  }
+
+
+  async findOne(store: Store, id: string) {
+    const stockIn = await this.em.findOne(
+      StockIn,
+      { id, purchase: { store } },
+      { populate: STOCK_IN_POPULATE },
+    );
+
+    if (!stockIn)
+      throw new NotFoundException(`Stock in with id ${id} not found`);
+
+    return serialize(stockIn, { populate: STOCK_IN_POPULATE });
+  }
+
+  
   async createFromPurchase(store: Store, dto: CreateStockInDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const inventory = await em.findOne(Inventory, { id: dto.inventoryId });
@@ -141,30 +167,6 @@ export class StockInService {
       await em.flush();
       return { message: `Stock in with id ${id} updated successfully.` };
     });
-  }
-
-
-  async findAll(store: Store) {
-    const stockIns = await this.em.findAll(StockIn, {
-      where: { purchase: { store } },
-      populate: STOCK_IN_POPULATE,
-    });
-
-    return serialize(stockIns, { populate: STOCK_IN_POPULATE });
-  }
-
-
-  async findOne(store: Store, id: string) {
-    const stockIn = await this.em.findOne(
-      StockIn,
-      { id, purchase: { store } },
-      { populate: STOCK_IN_POPULATE },
-    );
-
-    if (!stockIn)
-      throw new NotFoundException(`Stock in with id ${id} not found`);
-
-    return serialize(stockIn, { populate: STOCK_IN_POPULATE });
   }
 
 
