@@ -1,7 +1,11 @@
 // src/purchase/purchase.service.ts
 
 import { EntityManager, serialize } from '@mikro-orm/postgresql';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Customer } from '../database/entites/customer.entity';
 import { Product } from '../database/entites/product.entity';
 import { Purchase } from '../database/entites/purchase.entity';
@@ -30,7 +34,6 @@ export class PurchaseService {
     private readonly journalEntryService: JournalEntryService,
   ) {}
 
-
   async findAll(
     store: Store,
     query: PaginateQuery,
@@ -39,8 +42,23 @@ export class PurchaseService {
       { store },
       {
         populate: ['customer', 'items', 'items.product', 'sequence'],
-        fields: ['id', 'status', 'customDate', 'createdAt', 'sequence.prefix', 'sequence.lastIndex', 'customer.id', 'customer.name',
-          'items.id', 'items.quantity', 'items.unitPrice', 'items.product.id', 'items.product.name', 'items.product.price',],
+        fields: [
+          'id',
+          'status',
+          'customDate',
+          'createdAt',
+          'items.received',
+          'sequence.prefix',
+          'sequence.lastIndex',
+          'customer.id',
+          'customer.name',
+          'items.id',
+          'items.quantity',
+          'items.unitPrice',
+          'items.product.id',
+          'items.product.name',
+          'items.product.price',
+        ],
       },
       {
         searchable: ['customer.name', 'status'],
@@ -59,15 +77,26 @@ export class PurchaseService {
     return { data, meta };
   }
 
-
   async findOne(store: Store, id: string): Promise<PurchaseListItem> {
     const purchase = await this.em.findOne(
       Purchase,
       { id, store },
       {
         populate: ['customer', 'items', 'items.product', 'sequence'],
-        fields: ['id', 'status', 'customDate', 'sequence.prefix', 'sequence.lastIndex', 'customer.id', 'customer.name', 'customer.phone',
-          'customer.address', 'items.id', 'items.quantity', 'items.unitPrice', 'items.received',
+        fields: [
+          'id',
+          'status',
+          'customDate',
+          'sequence.prefix',
+          'sequence.lastIndex',
+          'customer.id',
+          'customer.name',
+          'customer.phone',
+          'customer.address',
+          'items.id',
+          'items.quantity',
+          'items.unitPrice',
+          'items.received',
           'items.product.id',
           'items.product.name',
           'items.product.price',
@@ -85,7 +114,7 @@ export class PurchaseService {
       const serialized = serialize(purchase, {
         populate: ['customer', 'items', 'items.product', 'sequence'],
       });
-      
+
       return this.mapPurchaseToListItem(serialized);
     }
 
@@ -118,7 +147,6 @@ export class PurchaseService {
     });
     return this.mapPurchaseToListItem(serialized, stockInsMap);
   }
-
 
   async create(store: Store, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
@@ -177,7 +205,6 @@ export class PurchaseService {
     });
   }
 
-
   async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
@@ -193,7 +220,6 @@ export class PurchaseService {
     });
   }
 
-
   async update(store: Store, id: string, dto: UpdatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
@@ -206,7 +232,7 @@ export class PurchaseService {
 
       if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot update a cancelled purchase.`);
-      
+
       if (purchase.status === PurchaseStatus.DONE)
         throw new BadRequestException(`Cannot update a completed purchase.`);
 
@@ -229,8 +255,6 @@ export class PurchaseService {
       return { message: `Purchase with id ${id} updated successfully.` };
     });
   }
-
-
 
   private buildStockInsMap(
     stockInItems: StockInItem[],
@@ -261,8 +285,7 @@ export class PurchaseService {
       }
 
       const purchasedItem = item.purchasedItem;
-      if (!purchasedItem?.id || !purchasedItem?.product) 
-        continue;
+      if (!purchasedItem?.id || !purchasedItem?.product) continue;
 
       stockInsMap.get(stockInId)!.products.push({
         purchasedItemId: purchasedItem.id,
@@ -274,7 +297,6 @@ export class PurchaseService {
 
     return stockInsMap;
   }
-
 
   private getAllowedTransitions(
     currentStatus: PurchaseStatus,
@@ -293,7 +315,6 @@ export class PurchaseService {
       );
   }
 
-  
   private mapPurchaseToListItem(
     serialized: any,
     stockInsMap?: Map<string, StockInDetail>,
