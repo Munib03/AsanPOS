@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { JournalEntry } from '../database/entites/journal-entry.entity';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
+import { JournalEntry } from '../database/entites/journal-entry.entity';
 import { Purchase } from '../database/entites/purchase.entity';
-import { SequenceService } from '../sequence/sequence.service';
 import { Store } from '../database/entites/store.entity';
+import { SequenceService } from '../sequence/sequence.service';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 
 @Injectable()
@@ -13,8 +13,6 @@ export class JournalEntryService {
     private readonly sequenceService: SequenceService,
     private readonly em: EntityManager,
   ) {}
-
-
 
   async findAll(): Promise<JournalEntry[]> {
     return this.em.find(
@@ -30,9 +28,15 @@ export class JournalEntryService {
         orderBy: {
           createdAt: 'DESC',
         },
-        exclude: ['items.purchase.createdAt', 'items.purchase.updatedAt', 'createdAt', 'updatedAt', 
-          'sequence.createdAt', 'sequence.updatedAt', 'items.account.createdAt', 'items.account.updatedAt',
-          'items.createdAt', 'items.updatedAt'
+        exclude: [
+          'items.purchase.createdAt',
+          'items.purchase.updatedAt',
+          'updatedAt',
+          'sequence.createdAt',
+          'sequence.updatedAt',
+          'items.account.createdAt',
+          'items.account.updatedAt',
+          'items.updatedAt',
         ],
       },
     );
@@ -49,6 +53,7 @@ export class JournalEntryService {
           'items.account',
           'items.purchase',
           'items.purchase.items',
+          'items.purchase.items.product.name',
         ],
         exclude: [
           'items.purchase.createdAt',
@@ -61,6 +66,8 @@ export class JournalEntryService {
           'items.account.updatedAt',
           'items.createdAt',
           'items.updatedAt',
+          'items.purchase.items.product.createdAt',
+          'items.purchase.items.product.updatedAt',
         ],
       },
     );
@@ -69,20 +76,17 @@ export class JournalEntryService {
       throw new NotFoundException('Journal entry not found');
     }
 
-    const totalCurrBill =
-      journalEntry.items
-        .getItems()
-        .reduce((sum, item) => {
-          const purchaseTotal =
-            item.purchase?.items
-              ?.getItems()
-              ?.reduce(
-                (pSum, pItem) => pSum + pItem.quantity * pItem.unitPrice,
-                0,
-              ) ?? 0;
+    const totalCurrBill = journalEntry.items.getItems().reduce((sum, item) => {
+      const purchaseTotal =
+        item.purchase?.items
+          ?.getItems()
+          ?.reduce(
+            (pSum, pItem) => pSum + pItem.quantity * pItem.unitPrice,
+            0,
+          ) ?? 0;
 
-          return sum + purchaseTotal;
-        }, 0);
+      return sum + purchaseTotal;
+    }, 0);
 
     return {
       ...journalEntry,
@@ -90,8 +94,11 @@ export class JournalEntryService {
     };
   }
 
-
-  async createFromPurchase(em: EntityManager, store: Store, purchase: Purchase): Promise<void> {
+  async createFromPurchase(
+    em: EntityManager,
+    store: Store,
+    purchase: Purchase,
+  ): Promise<void> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
     if (!defaultAccount)
@@ -106,12 +113,14 @@ export class JournalEntryService {
     if (!receivableAccount)
       throw new NotFoundException(`Receivable account not found for customer`);
 
-    const totalAmount = purchase.items.getItems().reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0
-    );
+    const totalAmount = purchase.items
+      .getItems()
+      .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
-    const sequence = await this.sequenceService.generateSequence('JournalEntry', 'JRN');
+    const sequence = await this.sequenceService.generateSequence(
+      'JournalEntry',
+      'JRN',
+    );
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
