@@ -3,10 +3,13 @@ import {
   Get,
   Param,
   NotFoundException,
+  UseGuards,
 } from '@nestjs/common';
 import { JournalEntryService } from './journal-entry.service';
+import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
 
 @Controller('journal-entries')
+@UseGuards(JwtAuthGuard)
 export class JournalEntryController {
   constructor(
     private readonly journalEntryService: JournalEntryService,
