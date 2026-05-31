@@ -11,15 +11,16 @@ export class StockQuantityService {
   async upsertStockQuantity(em: EntityManager, inventory: Inventory, product: Product, quantity: number): Promise<void> {
     const existing = await em.findOne(StockQuantity, { inventory, product });
 
-    if (existing) 
+    if (existing)
       existing.quantity = (existing.quantity ?? 0) + quantity;
-    
-    else {
-      em.create(StockQuantity, {
-        inventory,
-        product,
-        quantity,
-      });
-    }
+    else
+      em.create(StockQuantity, { inventory, product, quantity });
+  }
+
+  async decreaseStockQuantity(em: EntityManager, inventory: Inventory, product: Product, quantity: number): Promise<void> {
+    const existing = await em.findOne(StockQuantity, { inventory, product });
+
+    if (existing)
+      existing.quantity = Math.max(0, (existing.quantity ?? 0) - quantity);
   }
 }

@@ -153,8 +153,7 @@ export class PurchaseService {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
         throw new NotFoundException(
-          `Customer with id ${dto.customerId} not found`,
-        );
+`Customer with id ${dto.customerId} not found`);
 
       const sequence = await this.sequenceService.generateSequence(
         'Purchase',

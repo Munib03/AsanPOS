@@ -16,6 +16,8 @@ import { CustomerModule } from './customer/customoer.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { StockInModule } from './stock-in/stock-in.module';
 import { JournalEntryModule } from './journal/journal.module';
+import { SaleModule } from './sale/sale.module';
+import { StockOutModule } from './stock-out/stock-out.module';
 
 
 @Module({
@@ -34,6 +36,8 @@ import { JournalEntryModule } from './journal/journal.module';
     PurchaseModule,
     StockInModule,
     JournalEntryModule,
+    SaleModule,
+    StockOutModule
   ],
   controllers: [AppController],
   providers: [AppService],

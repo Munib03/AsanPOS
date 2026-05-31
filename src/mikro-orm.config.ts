@@ -18,6 +18,10 @@ import { StockQuantity } from './database/entites/stock-quantity.entity';
 import { Sequence } from './database/entites/sequence.entity';
 import { JournalEntry } from './database/entites/journal-entry.entity';
 import { JournalEntryItem } from './database/entites/journal-entry-item.entity';
+import { Sale } from './database/entites/sale.entity';
+import { SaleItem } from './database/entites/sale-item.entity';
+import { StockOut } from './database/entites/stock-out.entity';
+import { StockOutItem } from './database/entites/stock-out-item.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -29,7 +33,8 @@ const config: Options<PostgreSqlDriver> = {
   dbName: process.env.DB_NAME,
   entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
              Product, ProductImage, Attachment, Inventory, Customer, 
-             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, JournalEntryItem],
+             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, 
+             JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',
