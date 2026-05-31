@@ -9,14 +9,15 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { Product } from '../database/entites/product.entity';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
-
+import { MinioService } from '../shared/services/minio.service';
 
 @Injectable()
 export class InventoryService {
-  constructor(
-    private readonly em: EntityManager,
-    private readonly inventoryRepository: BaseRepository<Inventory>,
-  ) {}
+constructor(
+  private readonly em: EntityManager,
+  private readonly inventoryRepository: BaseRepository<Inventory>,
+  private readonly minioService: MinioService
+) {}
 
 
   async findAll(store: Store, query: PaginateQuery) {
@@ -40,12 +41,22 @@ export class InventoryService {
 
 
   async findOne(store: Store, id: string) {
-    const inventory = await this.em.findOne(Inventory,
+    const inventory = await this.em.findOne(
+      Inventory,
       { id, store },
       {
-        populate: ['products'],
-        fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
-      }
+        populate: [
+          'products',
+          'products.images',     
+          'products.categories', 
+        ],
+        fields: [
+          'id', 'name', 'address',
+          'products.id', 'products.name', 'products.price',
+          'products.images.id', 'products.images.imageUrl',
+          'products.categories.id', 'products.categories.name',
+        ],
+      },
     );
 
     if (!inventory)
@@ -55,16 +66,33 @@ export class InventoryService {
       where: { inventory: { id } },
     });
 
-    const serialized = serialize(inventory, { populate: ['products'] });
+    const serialized = serialize(inventory, {
+      populate: ['products', 'products.images', 'products.categories'],
+    });
 
-    return {
-      ...serialized,
-      products: serialized.products.map(product => ({
-        ...product,
-        quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
-      })),
-    };
+    const products = await Promise.all(
+      serialized.products.map(async (product) => {
+        const imagesWithSignedUrls = await Promise.all(
+          (product.images ?? []).map(async (image) => ({
+            ...image,
+            signedUrl: image.imageUrl
+              ? await this.minioService.getSignedUrl(image.imageUrl)
+              : null,
+          })),
+        );
+
+        return {
+          ...product,
+          images: imagesWithSignedUrls,
+          categories: product.categories ?? [],
+          quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
+        };
+      }),
+    );
+
+    return { ...serialized, products };
   }
+
 
 
   async create(store: Store, dto: CreateInventoryDto) {

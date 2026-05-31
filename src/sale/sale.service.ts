@@ -10,6 +10,8 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery, Meta } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { Inventory } from '../database/entites/inventory.entity';
+import { StockQuantity } from '../database/entites/stock-quantity.entity';
 
 
 export interface SaleListItem {
@@ -90,45 +92,68 @@ export class SaleService {
         return await this.em.transactional(async (em) => {
             const customer = await em.findOne(Customer, { id: dto.customerId });
             if (!customer)
-                throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
+            throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
             const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
 
-            const sale = em.create(Sale, {
-                customer,
-                store,
-                sequence,
-            });
-
+            const sale = em.create(Sale, { customer, store, sequence });
             await em.persistAndFlush(sale);
 
             const products = await em.findAll(Product, {
-                where: { id: { $in: dto.items.map(item => item.productId) } },
+            where: { id: { $in: dto.items.map(item => item.productId) } },
             });
 
             if (products.length !== dto.items.length)
-                throw new NotFoundException(`One or more products not found`);
+            throw new NotFoundException(`One or more products not found`);
 
             const productMap = new Map(products.map(product => [product.id, product]));
 
-            const saleItems = dto.items.map(item => {
+            const storeInventories = await em.find(Inventory, { store });
+
+            if (storeInventories.length === 0)
+            throw new BadRequestException(`No inventories are configured for this store.`);
+
+            for (const item of dto.items) {
                 const product = productMap.get(item.productId);
                 if (!product)
                     throw new NotFoundException(`Product with id ${item.productId} not found`);
 
-                return em.create(SaleItem, {
-                    sale,
-                    product,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                });
+                const stockRecords = await em.find(StockQuantity, {
+                    product: { id: item.productId },
+                    inventory: { $in: storeInventories.map(inv => inv.id) },
+            });
+
+            const totalStock = stockRecords.reduce(
+                (sum, sq) => sum + (sq.quantity ?? 0),
+                0,
+            );
+
+            if (totalStock < item.quantity)
+                throw new BadRequestException(
+                `Insufficient stock for product "${product.name}": ` +
+                `requested ${item.quantity}, available ${totalStock}.`,
+                );
+            }
+
+            const saleItems = dto.items.map(item => {
+            const product = productMap.get(item.productId)!;
+            return em.create(SaleItem, {
+                sale,
+                product,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+            });
             });
 
             await em.persistAndFlush(saleItems);
 
-            return { message: `Sale created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
+            return {
+            message: `Sale created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
+            };
         });
     }
+
+
 
     async remove(store: Store, id: string) {
         return await this.em.transactional(async (em) => {
