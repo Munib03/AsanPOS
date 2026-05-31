@@ -9,7 +9,6 @@ import { SequenceService } from '../sequence/sequence.service';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery, Meta } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { UpdateSaleDto } from './dto/update-sale.dto';
 import { Inventory } from '../database/entites/inventory.entity';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 
