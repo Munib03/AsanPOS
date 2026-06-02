@@ -15,7 +15,7 @@ import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { serialize } from '@mikro-orm/postgresql';
-import { AttachmentService } from '../attachments/attachment.service'; 
+import { AttachmentService } from '../attachments/attachment.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { MinioService } from '../shared/services/minio.service';
 import { Attachment } from '../database/entites/attachment.entity';
@@ -28,7 +28,7 @@ export class EmployeeService {
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
     private readonly minioService: MinioService,
-  ) {}
+  ) { }
 
 
   async findAll() {
@@ -64,32 +64,101 @@ export class EmployeeService {
   }
 
 
-  async create(dto: CreateEmployeeDto) {
-    const store = await this.em.findOne(Store, { name: dto.storeName });
-    if (!store)
-      throw new NotFoundException(`Store with name ${dto.storeName} not found`);
+  async employeeRegister(dto: CreateEmployeeDto, store: Store) {
+    const existing = await this.em.findOne(Employee, {
+      email: dto.email,
+    });
+
+    if (existing) {
+      if (existing.verifiedAt)
+        throw new BadRequestException('Email already in use');
+
+      await this.em.nativeDelete(SecurityAction, {
+        employee: existing,
+      });
+
+      await this.em.remove(existing);
+      await this.em.flush();
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const employee = this.em.create(Employee, {
       name: dto.name,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
       email: dto.email,
-      password: hashedPassword,
       phone: dto.phone,
+      role: dto.role ?? 'Cashier',
+      gender: dto.gender,
+      dob: dto.dob,
+      imageUrl: dto.imageUrl,
+      password: hashedPassword,
       store,
     });
 
+    const code = generateOTP();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    const securityAction = this.em.create(SecurityAction, {
+      employee,
+      actionType: 'sign-up',
+      secret: code,
+      expiresAt,
+      createdAt: new Date(),
+    });
+
     await this.em.persistAndFlush(employee);
+    await this.em.persistAndFlush(securityAction);
+
+    await this.queueService.sendVerificationEmail(dto.email, code);
 
     return {
-      id: employee.id,
-      name: employee.name,
-      email: employee.email,
-      phone: employee.phone,
+      message: 'OTP sent to your email. Please verify to complete registration.',
     };
   }
 
-  
+  async verifyEmployeeRegister(dto: VerifyDto) {
+    const employee = await this.em.findOne(Employee, {
+      email: dto.email,
+    });
+
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    if (employee.verifiedAt)
+      throw new BadRequestException('Employee already verified');
+
+    const securityAction = await this.em.findOne(SecurityAction, {
+      employee,
+      secret: dto.code,
+      actionType: 'sign-up',
+    });
+
+    if (!securityAction)
+      throw new BadRequestException('Invalid OTP code');
+
+    const now = new Date();
+
+    if (
+      securityAction.expiresAt &&
+      securityAction.expiresAt < now
+    ) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    employee.verifiedAt = new Date();
+
+    await this.em.remove(securityAction);
+
+    await this.em.flush();
+
+    return {
+      message: 'Registration successful',
+      employee_id: employee.id,
+    };
+  }
+
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -194,7 +263,7 @@ export class EmployeeService {
       phone: employee.phone,
     };
   }
-  
+
 
   async verifyUpdatedEmail(dto: VerifyDto) {
     const securityAction = await this.em.findOne(
@@ -206,11 +275,11 @@ export class EmployeeService {
       { populate: ['employee'] },
     );
 
-    if (!securityAction) 
+    if (!securityAction)
       throw new BadRequestException('Invalid OTP code');
 
     const employee = securityAction.employee;
-    if (!employee) 
+    if (!employee)
       throw new NotFoundException('Employee not found');
 
     const now = new Date();
@@ -220,7 +289,7 @@ export class EmployeeService {
     if (securityAction.metadata?.email)
       employee.email = securityAction.metadata.email;
 
-    else 
+    else
       throw new BadRequestException('No email found in metadata');
 
     employee.verifiedAt = new Date();
@@ -233,7 +302,7 @@ export class EmployeeService {
       employee_id: employee.id,
     };
   }
-  
+
 
   async deleteEmployeeImage(id: string) {
     const employee = await this.em.findOne(Employee, { id });

@@ -13,8 +13,10 @@ import { EmployeeService } from './employee.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { VerifyDto } from './dto/verify.dto';
-import { ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
+import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { Employee } from '../database/entites/employee.entity';
+import { Store } from '../database/entites/store.entity';
+import { CurrentStore } from '../shared/decorators/store.decorator';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard)
@@ -23,17 +25,31 @@ export class EmployeeController {
     private readonly employeeService: EmployeeService,
   ) {}
 
+  @Post('register')
+  registerEmployee(
+    @CurrentStore() store: Store,
+    @Body() dto: CreateEmployeeDto,
+  ) {
+    return this.employeeService.employeeRegister({
+      ...dto,
+      storeName: store.name,
+    }, store);
+  }
+
+  @Post('verify-register')
+  verifyRegister(@Body() dto: VerifyDto) {
+    return this.employeeService.verifyEmployeeRegister(dto);
+  }
+
   @Get()
   findAll() {
     return this.employeeService.findAll();
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@CurrentUser() user: { id: string; email: string }) {
     return this.employeeService.findOne(user.id);
   }
-
 
   @Put('info')
   updateEmployeeInfo(
@@ -43,12 +59,10 @@ export class EmployeeController {
     return this.employeeService.updateEmployeeInfo(user.id, dto);
   }
 
-
   @Post('verify-updated-email')
   verifyUpdatedEmail(@Body() dto: VerifyDto) {
     return this.employeeService.verifyUpdatedEmail(dto);
   }
-
 
   @Delete('profile-pic')
   deleteEmployeeImage(@CurrentUser() user: Employee) {

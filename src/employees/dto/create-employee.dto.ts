@@ -8,11 +8,11 @@ export class CreateEmployeeDto {
 
   @IsOptional()
   @IsString()
-  firstname?: string;
+  firstName?: string;
 
   @IsOptional()
   @IsString()
-  lastname?: string;
+  lastName?: string;
 
   @IsNotEmpty()
   @IsEmail()
@@ -26,9 +26,9 @@ export class CreateEmployeeDto {
   @IsString()
   phone?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  storeName!: string;
+  storeName?: string;
 
   @IsOptional()
   @IsString()
@@ -41,4 +41,8 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsDateString()
   dob?: Date;
+
+  @IsOptional()
+  @IsString()
+  role?: string;
 }
