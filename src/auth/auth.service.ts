@@ -254,7 +254,10 @@ export class AuthService {
         throw new BadRequestException('Invalid or expired 2FA code');
     }
 
-    return { message: 'Login successful', token: this.generateJWT(employee) };
+    return { 
+      message: 'Login successful', 
+      role: employee.role,
+      token: this.generateJWT(employee) };
   }
 
 
