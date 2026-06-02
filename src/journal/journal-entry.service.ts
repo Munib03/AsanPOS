@@ -20,11 +20,7 @@ export class JournalEntryService {
       JournalEntry,
       {},
       {
-        populate: [
-          'sequence',
-          'items',
-          'items.account',
-        ],
+        populate: ['sequence', 'items', 'items.account'],
         orderBy: {
           createdAt: 'DESC',
         },
@@ -77,17 +73,25 @@ export class JournalEntryService {
       },
     );
 
-    if (!journalEntry)
-      throw new NotFoundException('Journal entry not found');
+    if (!journalEntry) throw new NotFoundException('Journal entry not found');
 
     const totalCurrBill = journalEntry.items.getItems().reduce((sum, item) => {
-      const purchaseTotal = item.purchase?.items
-        ?.getItems()
-        ?.reduce((pSum, pItem) => pSum + pItem.quantity * pItem.unitPrice, 0) ?? 0;
+      const purchaseTotal =
+        item.purchase?.items
+          ?.getItems()
+          ?.reduce(
+            (pSum, pItem) => pSum + pItem.quantity * pItem.unitPrice,
+            0,
+          ) ?? 0;
 
-      const saleTotal = item.sale?.items
-        ?.getItems()
-        ?.reduce((sSum, sItem) => sSum + (sItem.quantity ?? 0) * (sItem.unitPrice ?? 0), 0) ?? 0;
+      const saleTotal =
+        item.sale?.items
+          ?.getItems()
+          ?.reduce(
+            (sSum, sItem) =>
+              sSum + (sItem.quantity ?? 0) * (sItem.unitPrice ?? 0),
+            0,
+          ) ?? 0;
 
       return sum + purchaseTotal + saleTotal;
     }, 0);
@@ -98,8 +102,11 @@ export class JournalEntryService {
     };
   }
 
-
-  async createFromPurchase(em: EntityManager, store: Store, purchase: Purchase): Promise<void> {
+  async createFromPurchase(
+    em: EntityManager,
+    store: Store,
+    purchase: Purchase,
+  ): Promise<void> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
     if (!defaultAccount)
@@ -114,7 +121,10 @@ export class JournalEntryService {
       .getItems()
       .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
-    const sequence = await this.sequenceService.generateSequence('JournalEntry', 'JRN');
+    const sequence = await this.sequenceService.generateSequence(
+      'JournalEntry',
+      'JRN',
+    );
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
@@ -138,23 +148,32 @@ export class JournalEntryService {
     });
   }
 
-
-  async createFromSale(em: EntityManager, store: Store, sale: Sale): Promise<void> {
+  async createFromSale(
+    em: EntityManager,
+    store: Store,
+    sale: Sale,
+  ): Promise<void> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
     if (!defaultAccount)
       throw new NotFoundException(`Default account not found for store`);
 
-    await em.populate(sale.customer, ['receivable']);
-    const receivableAccount = sale.customer.receivable;
-    if (!receivableAccount)
-      throw new NotFoundException(`Receivable account not found for customer`);
+    await em.populate(sale.customer, ['payable']);
+    const payableAccount = sale.customer.payable;
+    if (!payableAccount)
+      throw new NotFoundException(`Payable account not found for customer`);
 
     const totalAmount = sale.items
       .getItems()
-      .reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0);
+      .reduce(
+        (sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+        0,
+      );
 
-    const sequence = await this.sequenceService.generateSequence('JournalEntry', 'JRN');
+    const sequence = await this.sequenceService.generateSequence(
+      'JournalEntry',
+      'JRN',
+    );
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
@@ -166,7 +185,7 @@ export class JournalEntryService {
     em.create(JournalEntryItem, {
       journalEntry,
       sale,
-      account: receivableAccount,
+      account: payableAccount,
       debit: totalAmount,
     });
 
