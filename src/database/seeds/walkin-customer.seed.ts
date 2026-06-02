@@ -12,24 +12,33 @@ export async function seed(knex: Knex): Promise<void> {
     if (existing) continue;
 
     const payableId = uuidv4();
+    const receivableId = uuidv4();
 
-    await knex("accounts").insert({
-      id: payableId,
-      name: "Walk-in Customer - Accounts Payable",
-      type: "liability",
-      created_at: knex.fn.now(),
-    });
+    await knex("accounts").insert([
+      {
+        id: payableId,
+        name: "Walk-in Customer - Accounts Payable",
+        type: "liability",
+        created_at: knex.fn.now(),
+      },
+      {
+        id: receivableId,
+        name: "Walk-in Customer - Accounts Receivable",
+        type: "asset",
+        created_at: knex.fn.now(),
+      },
+    ]);
 
     await knex("customer").insert({
-    id: uuidv4(),
-    store_id: store.id,
-    name: "Walk-in Customer",
-    phone: "0000000000",
-    address: "N/A",
-    payable_id: payableId,
-    receivable_id: null,
-    created_at: knex.fn.now(),
-    updated_at: knex.fn.now(),
+      id: uuidv4(),
+      store_id: store.id,
+      name: "Walk-in Customer",
+      phone: "0000000000",
+      address: "N/A",
+      payable_id: payableId,
+      receivable_id: receivableId,
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now(),
     });
   }
 }
