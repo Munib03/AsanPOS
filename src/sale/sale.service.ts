@@ -109,100 +109,79 @@ export class SaleService {
     };
   }
 
-  async create(store: Store, dto: CreateSaleDto) {
-    return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id: dto.customerId });
-      if (!customer)
-        throw new NotFoundException(
-          `Customer with id ${dto.customerId} not found`,
-        );
+    async create(store: Store, dto: CreateSaleDto) {
+        return await this.em.transactional(async (em) => {
+            const customer = await em.findOne(Customer, { id: dto.customerId });
+            if (!customer)
+            throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
-      const sequence = await this.sequenceService.generateSequence(
-        'Sale',
-        'SAL',
-      );
+            const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
 
-      const sale = em.create(Sale, { customer, store, sequence });
-      await em.persistAndFlush(sale);
+            const sale = em.create(Sale, { customer, store, sequence });
+            await em.persistAndFlush(sale);
 
-      const products = await em.findAll(Product, {
-        where: { id: { $in: dto.items.map((item) => item.productId) } },
-      });
+            const products = await em.findAll(Product, {
+            where: { id: { $in: dto.items.map((item) => item.productId) } },
+            });
 
-      if (products.length !== dto.items.length)
-        throw new NotFoundException(`One or more products not found`);
+            if (products.length !== dto.items.length)
+            throw new NotFoundException(`One or more products not found`);
 
-      const productMap = new Map(
-        products.map((product) => [product.id, product]),
-      );
+            const productMap = new Map(products.map((product) => [product.id, product]));
 
-      const storeInventories = await em.find(Inventory, { store });
+            const storeInventories = await em.find(Inventory, { store });
 
-      if (storeInventories.length === 0)
-        throw new BadRequestException(
-          `No inventories are configured for this store.`,
-        );
+            if (storeInventories.length === 0)
+            throw new BadRequestException(`No inventories are configured for this store.`);
 
-      for (const item of dto.items) {
-        const product = productMap.get(item.productId);
-        if (!product)
-          throw new NotFoundException(
-            `Product with id ${item.productId} not found`,
-          );
+            for (const item of dto.items) {
+            const product = productMap.get(item.productId);
+            if (!product)
+                throw new NotFoundException(`Product with id ${item.productId} not found`);
 
-        const stockRecords = await em.find(StockQuantity, {
-          product: { id: item.productId },
-          inventory: { $in: storeInventories.map((inv) => inv.id) },
+            const stockRecords = await em.find(StockQuantity, {
+                product: { id: item.productId },
+                inventory: { $in: storeInventories.map((inv) => inv.id) },
+            });
+
+            const totalStock = stockRecords.reduce((sum, sq) => sum + (sq.quantity ?? 0), 0);
+
+            if (totalStock < item.quantity)
+                throw new BadRequestException(
+                `Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${totalStock}.`
+                );
+            }
+
+            const saleItems = dto.items.map((item) => {
+            const product = productMap.get(item.productId)!;
+            return em.create(SaleItem, {
+                sale,
+                product,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+            });
+            });
+
+            await em.persistAndFlush(saleItems);
+
+            await em.populate(sale, ['items', 'items.product', 'customer']);
+            await this.journalEntryService.createFromSale(em, store, sale);
+
+            const createdSale = await em.findOne(Sale, { id: sale.id }, { populate: ['items', 'items.product'] });
+            const serialized = serialize(createdSale!, { populate: ['items', 'items.product'] });
+
+            return {
+            message: `Sale created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
+            id: sale.id,
+            items: serialized.items.map((item) => ({
+                id: item.id,
+                productId: item.product.id,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+            })),
+            };
         });
-
-        const totalStock = stockRecords.reduce(
-          (sum, sq) => sum + (sq.quantity ?? 0),
-          0,
-        );
-
-        if (totalStock < item.quantity)
-          throw new BadRequestException(
-            `Insufficient stock for product "${product.name}": ` +
-              `requested ${item.quantity}, available ${totalStock}.`,
-          );
-      }
-
-      const saleItems = dto.items.map((item) => {
-        const product = productMap.get(item.productId)!;
-        return em.create(SaleItem, {
-          sale,
-          product,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        });
-      });
-
-      await this.journalEntryService.createFromSale(em, store, sale);
-
-      await em.persistAndFlush(saleItems);
-
-      const createdSale = await em.findOne(
-        Sale,
-        { id: sale.id },
-        { populate: ['items', 'items.product'] },
-      );
-
-      const serialized = serialize(createdSale!, {
-        populate: ['items', 'items.product'],
-      });
-
-      return {
-        message: `Sale created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
-        id: sale.id,
-        items: serialized.items.map((item) => ({
-          id: item.id,
-          productId: item.product.id,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-      };
-    });
-  }
+    }
 
 
   async remove(store: Store, id: string) {
