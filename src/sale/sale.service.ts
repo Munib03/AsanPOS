@@ -199,6 +199,7 @@ export class SaleService {
       };
     });
   }
+  
 
   async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {

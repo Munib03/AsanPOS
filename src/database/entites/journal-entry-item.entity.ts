@@ -1,8 +1,9 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { JournalEntry } from "./journal-entry.entity";
-import { Purchase } from "./purchase.entity";
 import { Account } from "./account.entity";
+import { Purchase } from "./purchase.entity";
+import { Sale } from "./sale.entity";
 
 @Entity({ tableName: "journal_entry_items" })
 export class JournalEntryItem {
@@ -13,8 +14,11 @@ export class JournalEntryItem {
   @ManyToOne(() => JournalEntry, { fieldName: "journal_entry_id" })
   journalEntry!: JournalEntry;
 
-  @ManyToOne(() => Purchase, { fieldName: "purchase_id" })
-  purchase!: Purchase;
+  @ManyToOne(() => Purchase, { fieldName: "purchase_id", nullable: true })
+  purchase?: Purchase;
+
+  @ManyToOne(() => Sale, { fieldName: "sale_id", nullable: true })
+  sale?: Sale;
 
   @ManyToOne(() => Account, { fieldName: "acount_id" })
   account!: Account;
