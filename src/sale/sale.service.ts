@@ -15,6 +15,7 @@ import { SequenceService } from '../sequence/sequence.service';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { JournalEntryService } from '../journal/journal-entry.service';
 
 export interface SaleListItem {
   id: string;
@@ -36,6 +37,7 @@ export class SaleService {
     private readonly em: EntityManager,
     private readonly saleRepository: BaseRepository<Sale>,
     private readonly sequenceService: SequenceService,
+    private readonly journalEntryService: JournalEntryService,
   ) {}
 
   async findAll(
@@ -175,6 +177,8 @@ export class SaleService {
         });
       });
 
+      await this.journalEntryService.createFromSale(em, store, sale);
+
       await em.persistAndFlush(saleItems);
 
       const createdSale = await em.findOne(
@@ -199,7 +203,7 @@ export class SaleService {
       };
     });
   }
-  
+
 
   async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {
