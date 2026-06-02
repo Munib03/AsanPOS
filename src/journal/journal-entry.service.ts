@@ -13,7 +13,7 @@ export class JournalEntryService {
   constructor(
     private readonly sequenceService: SequenceService,
     private readonly em: EntityManager,
-  ) {}
+  ) { }
 
   async findAll(): Promise<JournalEntry[]> {
     return this.em.find(

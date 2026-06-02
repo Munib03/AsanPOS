@@ -31,7 +31,7 @@ export class StockOutService {
     private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     const stockOuts = await this.em.findAll(StockOut, {

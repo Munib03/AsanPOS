@@ -32,7 +32,7 @@ export class PurchaseService {
     private readonly purchaseRepository: BaseRepository<Purchase>,
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -153,7 +153,7 @@ export class PurchaseService {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
         throw new NotFoundException(
-`Customer with id ${dto.customerId} not found`);
+          `Customer with id ${dto.customerId} not found`);
 
       const sequence = await this.sequenceService.generateSequence(
         'Purchase',

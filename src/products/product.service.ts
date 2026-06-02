@@ -22,7 +22,7 @@ export class ProductService {
     private readonly minioService: MinioService,
     private readonly attachmentService: AttachmentService,
     private readonly productRepository: BaseRepository<Product>,
-  ) {}
+  ) { }
 
 
   async findAll(store: Store, query: PaginateQuery) {
@@ -43,7 +43,7 @@ export class ProductService {
       meta,
     };
   }
-  
+
 
   async findOne(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
@@ -55,7 +55,7 @@ export class ProductService {
       },
     );
 
-    return serialize(product, { populate: ['images', 'categories'] });  
+    return serialize(product, { populate: ['images', 'categories'] });
   }
 
 
@@ -100,7 +100,7 @@ export class ProductService {
 
     await this.em.persistAndFlush(product);
 
-    return { message: "Product created Successfully!"}
+    return { message: "Product created Successfully!" }
   }
 
 

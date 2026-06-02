@@ -13,11 +13,11 @@ import { MinioService } from '../shared/services/minio.service';
 
 @Injectable()
 export class InventoryService {
-constructor(
-  private readonly em: EntityManager,
-  private readonly inventoryRepository: BaseRepository<Inventory>,
-  private readonly minioService: MinioService
-) {}
+  constructor(
+    private readonly em: EntityManager,
+    private readonly inventoryRepository: BaseRepository<Inventory>,
+    private readonly minioService: MinioService
+  ) { }
 
 
   async findAll(store: Store, query: PaginateQuery) {
@@ -47,8 +47,8 @@ constructor(
       {
         populate: [
           'products',
-          'products.images',     
-          'products.categories', 
+          'products.images',
+          'products.categories',
         ],
         fields: [
           'id', 'name', 'address',
@@ -136,23 +136,23 @@ constructor(
 
 
 
-//   // In InventoryService, when you want to link products:
-// async addProductsToInventory(store: Store, inventoryId: string, productIds: string[]) {
-//   const inventory = await this.inventoryRepository.findOneOrFail(
-//     { id: inventoryId, store },
-//     { populate: ['products'] }
-//   );
+  //   // In InventoryService, when you want to link products:
+  // async addProductsToInventory(store: Store, inventoryId: string, productIds: string[]) {
+  //   const inventory = await this.inventoryRepository.findOneOrFail(
+  //     { id: inventoryId, store },
+  //     { populate: ['products'] }
+  //   );
 
-//   const products = await this.em.findAll(Product, {
-//     where: { id: { $in: productIds }, store }
-//   });
+  //   const products = await this.em.findAll(Product, {
+  //     where: { id: { $in: productIds }, store }
+  //   });
 
-//   if (!products.length)
-//     throw new NotFoundException('No matching products found');
+  //   if (!products.length)
+  //     throw new NotFoundException('No matching products found');
 
-//   inventory.products.add(...products);  
-//   await this.em.flush();
+  //   inventory.products.add(...products);  
+  //   await this.em.flush();
 
-//   return { message: 'Products added to inventory successfully.' };
-// }
+  //   return { message: 'Products added to inventory successfully.' };
+  // }
 }
