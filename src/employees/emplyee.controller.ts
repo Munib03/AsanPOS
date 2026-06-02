@@ -36,10 +36,6 @@ export class EmployeeController {
     }, store);
   }
 
-  @Post('verify-register')
-  verifyRegister(@Body() dto: VerifyDto) {
-    return this.employeeService.verifyEmployeeRegister(dto);
-  }
 
   @Get()
   findAll() {

@@ -118,46 +118,6 @@ export class EmployeeService {
     };
   }
 
-  async verifyEmployeeRegister(dto: VerifyDto) {
-    const employee = await this.em.findOne(Employee, {
-      email: dto.email,
-    });
-
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    if (employee.verifiedAt)
-      throw new BadRequestException('Employee already verified');
-
-    const securityAction = await this.em.findOne(SecurityAction, {
-      employee,
-      secret: dto.code,
-      actionType: 'sign-up',
-    });
-
-    if (!securityAction)
-      throw new BadRequestException('Invalid OTP code');
-
-    const now = new Date();
-
-    if (
-      securityAction.expiresAt &&
-      securityAction.expiresAt < now
-    ) {
-      throw new BadRequestException('OTP has expired');
-    }
-
-    employee.verifiedAt = new Date();
-
-    await this.em.remove(securityAction);
-
-    await this.em.flush();
-
-    return {
-      message: 'Registration successful',
-      employee_id: employee.id,
-    };
-  }
 
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
