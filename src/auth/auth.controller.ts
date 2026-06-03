@@ -22,11 +22,12 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
+  @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
     return this.authService.findOne(store, user.id);
   }
-
+ 
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
