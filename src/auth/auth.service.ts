@@ -33,6 +33,29 @@ export class AuthService {
   ) { }
 
 
+  async findOne(store: Store, id: string) {
+    const employee = await this.em.findOne(Employee, { id, store }, { populate: ['store'] });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    return {
+      id: employee.id,
+      email: employee.email,
+      name: employee.name,
+      firstName: employee.firstName ?? null,
+      lastName: employee.lastName ?? null,
+      phone: employee.phone ?? null,
+      role: employee.role ?? null,
+      imageUrl: employee.imageUrlSigned,
+      dob: employee.dob ?? null,
+      gender: employee.gender ?? null,
+      storeName: employee.store?.name ?? null,
+      createdAt: employee.createdAt ?? null,
+    };
+  }
+
+
+
   async enableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
