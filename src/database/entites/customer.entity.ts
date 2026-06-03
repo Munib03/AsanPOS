@@ -38,6 +38,6 @@ export class Customer {
   @OneToMany(() => Purchase, purchase => purchase.customer)
   purchases = new Collection<Purchase>(this);
 
-  @OneToMany(() => Sale, sale => sale.customer)  
+  @OneToMany(() => Sale, sale => sale.customer)
   sales = new Collection<Sale>(this);
 }
