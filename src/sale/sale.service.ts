@@ -84,6 +84,7 @@ export class SaleService {
 
     return { data, meta };
   }
+  
 
   async findOne(store: Store, id: string): Promise<SaleListItem> {
     const sale = await this.em.findOne(
@@ -92,10 +93,11 @@ export class SaleService {
       { populate: ['customer', 'items', 'items.product', 'sequence'] },
     );
 
-    if (!sale) throw new NotFoundException(`Sale with id ${id} not found`);
+    if (!sale) 
+      throw new NotFoundException(`Sale with id ${id} not found`);
 
     const serialized = serialize(sale, {
-      populate: ['customer', 'items', 'items.product', 'sequence'],
+      populate: ['customer', 'items', 'items.product', 'sequence']
     });
     const { sequence, ...rest } = serialized;
 
@@ -108,6 +110,7 @@ export class SaleService {
       ),
     };
   }
+
 
   async create(store: Store, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {

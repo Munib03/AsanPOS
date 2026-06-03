@@ -13,16 +13,17 @@ import {
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-
-import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
-
 import { Store } from '../database/entites/store.entity';
-
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+import { Roles } from '../shared/decorators/role.decorator';
+import { RolesGuard } from '../shared/guards/role.guard';
+import { Role } from '../shared/utils/role.enum';
 
 @Controller('categories')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.Admin)
 export class CategoryController {
   constructor(
     private readonly categoryService: CategoryService,

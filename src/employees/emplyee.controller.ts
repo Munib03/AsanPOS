@@ -3,12 +3,11 @@ import {
   Get,
   Put,
   Delete,
-  Param,
   UseGuards,
   Body,
   Post,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { EmployeeService } from './employee.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -17,9 +16,13 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { CurrentStore } from '../shared/decorators/store.decorator';
+import { Role } from '../shared/utils/role.enum';
+import { RolesGuard } from '../shared/guards/role.guard';
+import { Roles } from '../shared/decorators/role.decorator';
 
 @Controller('employees')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.Admin )
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,

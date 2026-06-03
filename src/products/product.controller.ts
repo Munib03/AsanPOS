@@ -2,14 +2,19 @@ import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query } fro
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+import { RolesGuard } from '../shared/guards/role.guard';
+import { Roles } from '../shared/decorators/role.decorator';
+import { Role } from '../shared/utils/role.enum';
 
 
 @Controller('products')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.Admin)
+
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 

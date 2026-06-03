@@ -11,17 +11,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const result = await super.canActivate(context) as boolean;
-    if (!result) 
-        return false;
+    if (!result)
+       return false;
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    const employee = await this.em.findOne(Employee, { id: user.id }, { populate: ['store'] });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.em.findOne(
+      Employee,
+      { id: user.id },
+      { populate: ['store'] },
+    );
+    if (!employee) throw new NotFoundException('Employee not found');
 
     request.store = employee.store;
+    request.user = { ...request.user, role: employee.role }; 
     return true;
   }
 }

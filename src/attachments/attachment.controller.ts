@@ -1,5 +1,5 @@
 import { Controller, Post, Delete, UseGuards, UploadedFile, UploadedFiles, UseInterceptors, Body, BadRequestException } from '@nestjs/common';
-import { JwtAuthGuard } from '../shared/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { AttachmentService } from './attachment.service';
 import { ImagesUploadInterceptor, ImageUploadInterceptor } from '../shared/interceptors/image-upload.interceptor';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
