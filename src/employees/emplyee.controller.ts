@@ -58,7 +58,8 @@ export class EmployeeController {
     @CurrentUser() user: { id: string },
     @Body() dto: UpdateEmployeeDto,
   ) {
-    return this.employeeService.updateEmployeeInfo(user.id, dto);
+    const targetId = dto.id ?? user.id;  
+    return this.employeeService.updateEmployeeInfo(targetId, dto);
   }
 
 

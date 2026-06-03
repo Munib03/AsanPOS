@@ -7,23 +7,23 @@ import { Sale } from '../database/entites/sale.entity';
 import { Store } from '../database/entites/store.entity';
 import { SequenceService } from '../sequence/sequence.service';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
+import { BaseRepository } from '../shared/repositories/base.repository';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Injectable()
 export class JournalEntryService {
   constructor(
     private readonly sequenceService: SequenceService,
     private readonly em: EntityManager,
-  ) { }
+    private readonly journalEntryRepository: BaseRepository<JournalEntry>,
+  ) {}
 
-  async findAll(): Promise<JournalEntry[]> {
-    return this.em.find(
-      JournalEntry,
+  async findAll(store: Store, query: PaginateQuery) {
+    const [journalEntries, meta] = await this.journalEntryRepository.findAndPaginate(
       {},
       {
         populate: ['sequence', 'items', 'items.account'],
-        orderBy: {
-          createdAt: 'DESC',
-        },
+        orderBy: { createdAt: 'DESC' },
         exclude: [
           'items.purchase.createdAt',
           'items.purchase.updatedAt',
@@ -35,7 +35,13 @@ export class JournalEntryService {
           'items.updatedAt',
         ],
       },
+      {
+        searchable: [],
+      },
+      query,
     );
+
+    return { data: journalEntries, meta };
   }
 
   async findOne(id: string): Promise<any> {
@@ -96,10 +102,7 @@ export class JournalEntryService {
       return sum + purchaseTotal + saleTotal;
     }, 0);
 
-    return {
-      ...journalEntry,
-      totalCurrBill,
-    };
+    return { ...journalEntry, totalCurrBill };
   }
 
   async createFromPurchase(

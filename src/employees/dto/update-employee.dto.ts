@@ -11,6 +11,10 @@ import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
+  id?: string;
+
+  @IsOptional()
+  @IsString()
   name?: string;
 
   @IsOptional()
