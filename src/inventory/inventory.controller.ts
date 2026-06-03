@@ -12,12 +12,13 @@ import { Role } from "../shared/utils/role.enum";
 
 @Controller("inventory")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin)
 export class InventoryController {
 
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(private readonly inventoryService: InventoryService) { }
 
   @Get()
+  @Roles(Role.Admin, Role.Cashier)
+
   findAll(
     @CurrentStore() store: Store,
     @Query() query: paginateQueryTypes.PaginateQuery,
@@ -26,21 +27,27 @@ export class InventoryController {
   }
 
   @Get(":id")
+  @Roles(Role.Admin, Role.Cashier)
   findOne(@CurrentStore() store: Store, @Param("id") id: string) {
     return this.inventoryService.findOne(store, id);
   }
 
   @Post()
+  @Roles(Role.Admin)
   create(@CurrentStore() store: Store, @Body() dto: CreateInventoryDto) {
     return this.inventoryService.create(store, dto);
   }
 
   @Put(":id")
+  @Roles(Role.Admin)
+
   update(@CurrentStore() store: Store, @Param("id") id: string, @Body() dto: UpdateInventoryDto) {
     return this.inventoryService.update(store, id, dto);
   }
 
   @Delete(":id")
+  @Roles(Role.Admin)
+
   remove(@CurrentStore() store: Store, @Param("id") id: string) {
     return this.inventoryService.delete(store, id);
   }
