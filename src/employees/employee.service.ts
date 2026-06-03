@@ -115,6 +115,7 @@ export class EmployeeService {
     await this.queueService.sendVerificationEmail(dto.email, code);
 
     return {
+      message: "Employee registered successfully",
       email: employee.email,
       password: dto.password
     };
