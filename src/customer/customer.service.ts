@@ -13,6 +13,10 @@ import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { SaleItem } from '../database/entites/sale-item.entity';
 import { Sale } from '../database/entites/sale.entity';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
+import { StockInItem } from '../database/entites/stock-in-item.entity';
+import { StockIn } from '../database/entites/stock-in.entity';
+import { StockOutItem } from '../database/entites/stock-out-item.entity';
+import { StockOut } from '../database/entites/stock-out.entity';
 
 @Injectable()
 export class CustomerService {
@@ -104,11 +108,7 @@ export class CustomerService {
 
   async remove(id: string) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(
-        Customer,
-        { id },
-        { populate: ['purchases', 'sales'] },
-      );
+      const customer = await em.findOne(Customer, { id });
 
       if (!customer)
         throw new NotFoundException(`Customer with id ${id} not found`);
@@ -116,21 +116,34 @@ export class CustomerService {
       if (customer.name === 'Walk-in Customer')
         throw new BadRequestException(`Walk-in Customer cannot be deleted.`);
 
-      const purchases = customer.purchases.getItems();
-      for (const purchase of purchases) {
-        await em.nativeDelete(JournalEntryItem, { purchase });
-        await em.nativeDelete(PurchasedItem, { purchase });
-      }
-      await em.nativeDelete(Purchase, { customer });
+      const purchases = await em.find(Purchase, { customer: { id } });
+      const purchaseIds = purchases.map(p => p.id);
 
-      const sales = customer.sales.getItems();
-      for (const sale of sales) {
-        await em.nativeDelete(JournalEntryItem, { sale });
-        await em.nativeDelete(SaleItem, { sale });
+      if (purchaseIds.length > 0) {
+        await em.nativeDelete(JournalEntryItem, { purchase: { $in: purchaseIds } });
+        await em.nativeDelete(StockInItem, { stockIn: { purchase: { $in: purchaseIds } } });
+        await em.nativeDelete(StockIn, { purchase: { $in: purchaseIds } });
+        await em.nativeDelete(PurchasedItem, { purchase: { $in: purchaseIds } });
+        await em.nativeDelete(Purchase, { id: { $in: purchaseIds } });
       }
-      await em.nativeDelete(Sale, { customer });
 
-      await em.removeAndFlush(customer);
+      // sales side
+      const sales = await em.find(Sale, { customer: { id } });
+      const saleIds = sales.map(s => s.id);
+
+      if (saleIds.length > 0) {
+        const saleItems = await em.find(SaleItem, { sale: { $in: saleIds } });
+        const saleItemIds = saleItems.map(si => si.id);
+
+        await em.nativeDelete(JournalEntryItem, { sale: { $in: saleIds } });
+        if (saleItemIds.length > 0)
+          await em.nativeDelete(StockOutItem, { saleItem: { $in: saleItemIds } });
+        await em.nativeDelete(StockOut, { sale: { $in: saleIds } });
+        await em.nativeDelete(SaleItem, { sale: { $in: saleIds } });
+        await em.nativeDelete(Sale, { id: { $in: saleIds } });
+      }
+
+      await em.nativeDelete(Customer, { id });
 
       return { message: `Customer with id ${id} deleted successfully.` };
     });
