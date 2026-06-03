@@ -65,7 +65,7 @@ export class ProductController {
   }
 
 
-  @Get(':id/barcode')
+  @Get('qrcode/:id')
   getBarcode(
     @CurrentStore() store: Store,
     @Param('id') id: string,
