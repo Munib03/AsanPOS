@@ -14,7 +14,7 @@ export class CustomerService {
   constructor(
     private readonly em: EntityManager,
     private readonly customerRepository: BaseRepository<Customer>,
-  ) {}
+  ) { }
 
 
   async findAll(store: Store, query: PaginateQuery) {
@@ -24,12 +24,17 @@ export class CustomerService {
         fields: ['id', 'name', 'phone', 'address'],
       },
       {
-        searchable: ['name', 'phone', 'address']
+        searchable: ['name', 'phone', 'address'],
       },
       query,
     );
 
-    return { data: customers, meta };
+    const sorted = [
+      ...customers.filter(c => c.name === 'Walk-in Customer'),
+      ...customers.filter(c => c.name !== '-in Customer'),
+    ];
+
+    return { data: sorted, meta };
   }
 
 
