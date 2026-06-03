@@ -31,7 +31,7 @@ export class CustomerService {
 
     const sorted = [
       ...customers.filter(c => c.name === 'Walk-in Customer'),
-      ...customers.filter(c => c.name !== '-in Customer'),
+      ...customers.filter(c => c.name !== 'Walk-in Customer'),
     ];
 
     return { data: sorted, meta };
