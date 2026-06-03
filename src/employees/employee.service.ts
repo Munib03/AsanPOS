@@ -227,44 +227,6 @@ export class EmployeeService {
   }
 
 
-  async verifyUpdatedEmail(dto: VerifyDto) {
-    const securityAction = await this.em.findOne(
-      SecurityAction,
-      {
-        secret: dto.code,
-        actionType: 'email-update',
-      },
-      { populate: ['employee'] },
-    );
-
-    if (!securityAction)
-      throw new BadRequestException('Invalid OTP code');
-
-    const employee = securityAction.employee;
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    const now = new Date();
-    if (securityAction.expiresAt && securityAction.expiresAt < now)
-      throw new BadRequestException('OTP has expired');
-
-    if (securityAction.metadata?.email)
-      employee.email = securityAction.metadata.email;
-
-    else
-      throw new BadRequestException('No email found in metadata');
-
-    employee.verifiedAt = new Date();
-
-    await this.em.removeAndFlush(securityAction);
-    await this.em.flush();
-
-    return {
-      message: 'Email updated successfully',
-      employee_id: employee.id,
-    };
-  }
-
 
   async deleteEmployeeImage(id: string) {
     const employee = await this.em.findOne(Employee, { id });

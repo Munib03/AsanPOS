@@ -58,10 +58,6 @@ export class EmployeeController {
     return this.employeeService.updateEmployeeInfo(user.id, dto);
   }
 
-  @Post('verify-updated-email')
-  verifyUpdatedEmail(@Body() dto: VerifyDto) {
-    return this.employeeService.verifyUpdatedEmail(dto);
-  }
 
   @Delete('profile-pic')
   deleteEmployeeImage(@CurrentUser() user: Employee) {

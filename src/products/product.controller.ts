@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Query, StreamableFile } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -16,7 +16,7 @@ import { Role } from '../shared/utils/role.enum';
 @Roles(Role.Admin)
 
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(private readonly productService: ProductService) { }
 
   @Get()
   findAll(
@@ -62,5 +62,14 @@ export class ProductController {
   @Delete('images/:imageId')
   deleteProductImage(@Param('imageId') imageId: string) {
     return this.productService.deleteProductImage(imageId);
+  }
+
+
+  @Get(':id/barcode')
+  getBarcode(
+    @CurrentStore() store: Store,
+    @Param('id') id: string,
+  ) {
+    return this.productService.generateQrCode(store, id);
   }
 }

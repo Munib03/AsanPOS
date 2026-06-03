@@ -21,8 +21,8 @@
     "make:migration": "npx knex migrate:make --knexfile knexfile.js",
     "migrate": "npx knex migrate:latest --knexfile knexfile.js",
     "migrate:rollback": "npx knex migrate:rollback --all --knexfile knexfile.js",
-    "seed": "npx knex seed:run --knexfile knexfile.js"  
-},
+    "seed": "npx knex seed:run --knexfile knexfile.js"
+  },
   "dependencies": {
     "@mikro-orm/cli": "^6.6.13",
     "@mikro-orm/core": "^6.6.13",

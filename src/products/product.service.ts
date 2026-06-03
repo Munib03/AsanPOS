@@ -13,6 +13,9 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import * as QRCode from 'qrcode';
+
+
 
 
 @Injectable()
@@ -210,5 +213,23 @@ export class ProductService {
     await this.em.removeAndFlush(image);
 
     return { message: 'Image deleted successfully' };
+  }
+
+
+  async generateQrCode(store: Store, id: string): Promise<{ qrCode: string }> {
+    const product = await this.productRepository.findOneOrFail(
+      { id, store },
+      { notFoundMessage: `Product with id ${id} not found` },
+    );
+
+    const payload = JSON.stringify({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+    });
+
+    const qrCode = await QRCode.toDataURL(payload);
+
+    return { qrCode };
   }
 }
