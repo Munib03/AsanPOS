@@ -11,14 +11,12 @@ import * as bcrypt from 'bcrypt';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { generateOTP } from '../shared/utils/auth.utils';
-import { VerifyDto } from './dto/verify.dto';
 import { QueueService } from '../queue/queue.service';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { serialize } from '@mikro-orm/postgresql';
 import { AttachmentService } from '../attachments/attachment.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
-import { MinioService } from '../shared/services/minio.service';
-import { Attachment } from '../database/entites/attachment.entity';
+import { Role } from '../shared/utils/role.enum';
 
 
 @Injectable()
@@ -27,7 +25,6 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
-    private readonly minioService: MinioService,
   ) { }
 
 
@@ -89,7 +86,7 @@ export class EmployeeService {
       lastName: dto.lastName,
       email: dto.email,
       phone: dto.phone,
-      role: dto.role ?? 'Cashier',
+      role: dto.role ?? Role.Cashier,
       gender: dto.gender,
       dob: dto.dob,
       imageUrl: dto.imageUrl,

@@ -18,6 +18,7 @@ import Redis from 'ioredis';
 import { create } from 'domain';
 import { Account } from '../database/entites/account.entity';
 import { StoreSettings } from '../database/entites/store-settings.entity';
+import { Role } from '../shared/utils/role.enum';
 
 
 @Injectable()
@@ -183,7 +184,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
-      role: "Admin",
+      role: Role.Admin,
       password: hashedPassword,
       phone: dto.phone,
       imageUrl: dto.imageUrl,
