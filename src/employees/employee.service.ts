@@ -112,7 +112,6 @@ export class EmployeeService {
     await this.em.persistAndFlush(employee);
     await this.em.persistAndFlush(securityAction);
 
-    await this.queueService.sendVerificationEmail(dto.email, code);
 
     return {
       message: "Employee registered successfully",

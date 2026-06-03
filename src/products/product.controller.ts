@@ -65,11 +65,11 @@ export class ProductController {
   }
 
 
-  @Get('qrcode/:id')
+  @Get('barcode/:id')
   getBarcode(
     @CurrentStore() store: Store,
     @Param('id') id: string,
   ) {
-    return this.productService.generateQrCode(store, id);
+    return this.productService.generateBarcode(store, id);
   }
 }

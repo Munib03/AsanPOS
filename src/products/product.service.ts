@@ -13,7 +13,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
-import * as QRCode from 'qrcode';
+import * as bwipjs from 'bwip-js';
+
 
 
 
@@ -216,20 +217,26 @@ export class ProductService {
   }
 
 
-  async generateQrCode(store: Store, id: string): Promise<{ qrCode: string }> {
+
+  async generateBarcode(store: Store, id: string): Promise<{ barcode: string }> {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
       { notFoundMessage: `Product with id ${id} not found` },
     );
 
-    const payload = JSON.stringify({
-      id: product.id,
-      name: product.name,
-      price: product.price,
+    const payload = `${product.id}|${product.name}|${product.price}`;
+
+    const buffer = await bwipjs.toBuffer({
+      bcid: 'code128',
+      text: payload,
+      scale: 3,
+      height: 20,
+      includetext: true,
+      textxalign: 'center',
     });
 
-    const qrCode = await QRCode.toDataURL(payload);
+    const barcode = `data:image/png;base64,${buffer.toString('base64')}`;
 
-    return { qrCode };
+    return { barcode };
   }
 }
