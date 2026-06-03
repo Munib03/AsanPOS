@@ -138,6 +138,7 @@ export class CustomerService {
         await em.nativeDelete(JournalEntryItem, { sale: { $in: saleIds } });
         if (saleItemIds.length > 0)
           await em.nativeDelete(StockOutItem, { saleItem: { $in: saleItemIds } });
+        
         await em.nativeDelete(StockOut, { sale: { $in: saleIds } });
         await em.nativeDelete(SaleItem, { sale: { $in: saleIds } });
         await em.nativeDelete(Sale, { id: { $in: saleIds } });

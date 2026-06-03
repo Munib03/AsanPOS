@@ -31,12 +31,6 @@ export class AuthController {
   }
   
 
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.authService.findOne(user.id);
-  }
-
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
