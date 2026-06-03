@@ -1,6 +1,7 @@
 import { Entity, PrimaryKey, Property, OneToMany, Collection, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { Purchase } from "./purchase.entity";
+import { Sale } from "./sale.entity";
 import { Store } from "./store.entity";
 import { Account } from "./account.entity";
 
@@ -10,7 +11,7 @@ export class Customer {
   @PrimaryKey({ type: "uuid" })
   id: string = uuidv4();
 
-  @Property({ nullable: false})
+  @Property({ nullable: false })
   name!: string;
 
   @Property({ nullable: false, unique: true })
@@ -36,4 +37,7 @@ export class Customer {
 
   @OneToMany(() => Purchase, purchase => purchase.customer)
   purchases = new Collection<Purchase>(this);
+
+  @OneToMany(() => Sale, sale => sale.customer)  
+  sales = new Collection<Sale>(this);
 }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Customer } from '../database/entites/customer.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -8,6 +8,11 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { Store } from '../database/entites/store.entity';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { Account } from '../database/entites/account.entity';
+import { Purchase } from '../database/entites/purchase.entity';
+import { PurchasedItem } from '../database/entites/purchased_item.entity';
+import { SaleItem } from '../database/entites/sale-item.entity';
+import { Sale } from '../database/entites/sale.entity';
+import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 
 @Injectable()
 export class CustomerService {
@@ -98,13 +103,36 @@ export class CustomerService {
 
 
   async remove(id: string) {
-    const customer = await this.customerRepository.findOneOrFail(
-      { id },
-      { notFoundMessage: `Customer with id ${id} not found` },
-    );
+    return await this.em.transactional(async (em) => {
+      const customer = await em.findOne(
+        Customer,
+        { id },
+        { populate: ['purchases', 'sales'] },
+      );
 
-    await this.em.removeAndFlush(customer);
+      if (!customer)
+        throw new NotFoundException(`Customer with id ${id} not found`);
 
-    return { message: `Customer with id ${id} deleted successfully.` };
+      if (customer.name === 'Walk-in Customer')
+        throw new BadRequestException(`Walk-in Customer cannot be deleted.`);
+
+      const purchases = customer.purchases.getItems();
+      for (const purchase of purchases) {
+        await em.nativeDelete(JournalEntryItem, { purchase });
+        await em.nativeDelete(PurchasedItem, { purchase });
+      }
+      await em.nativeDelete(Purchase, { customer });
+
+      const sales = customer.sales.getItems();
+      for (const sale of sales) {
+        await em.nativeDelete(JournalEntryItem, { sale });
+        await em.nativeDelete(SaleItem, { sale });
+      }
+      await em.nativeDelete(Sale, { customer });
+
+      await em.removeAndFlush(customer);
+
+      return { message: `Customer with id ${id} deleted successfully.` };
+    });
   }
 }
