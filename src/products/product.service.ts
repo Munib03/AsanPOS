@@ -72,13 +72,14 @@ export class ProductService {
     const product = this.em.create(Product, {
       ...stripUndefined({
         name: dto.name,
-        scannerId: dto.scannerId,
         price: dto.price,
       }),
       store,
     });
 
     product.categories.add(category);
+
+    product.qrcode = await this.generateQrCode(product);
 
     if (dto.attachmentIds?.length) {
       await this.attachmentService.claimAttachments(
@@ -101,7 +102,7 @@ export class ProductService {
 
     await this.em.persistAndFlush(product);
 
-    return { message: "Product created Successfully!" }
+    return { message: 'Product created Successfully!' };
   }
 
 
@@ -118,10 +119,12 @@ export class ProductService {
       product,
       stripUndefined({
         name: dto.name,
-        scannerId: dto.scannerId,
         price: dto.price,
       }),
     );
+
+    if (dto.name || dto.price)
+      product.qrcode = await this.generateQrCode(product);
 
     if (dto.categoryName) {
       const category = await this.em.findOne(Category, {
@@ -214,21 +217,11 @@ export class ProductService {
   }
 
 
-
-
-
-  async generateQrCode(store: Store, id: string): Promise<{ qrcode: string }> {
-    const product = await this.productRepository.findOneOrFail(
-      { id, store },
-      { notFoundMessage: `Product with id ${id} not found` },
-    );
-
-    const qrcode = await QRCode.toDataURL(JSON.stringify({
+  private async generateQrCode(product: Product): Promise<string> {
+    return QRCode.toDataURL(JSON.stringify({
       id: product.id,
       name: product.name,
       price: product.price,
     }));
-
-    return { qrcode: qrcode };
   }
 }

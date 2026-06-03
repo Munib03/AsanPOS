@@ -64,12 +64,4 @@ export class ProductController {
     return this.productService.deleteProductImage(imageId);
   }
 
-
-  @Get('qrcode/:id')
-  getQrCode(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
-    return this.productService.generateQrCode(store, id);
-  }
 }

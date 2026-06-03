@@ -17,8 +17,8 @@ export class Product {
   @Property({ nullable: true })
   name?: string;
 
-  @Property({ nullable: true, fieldName: 'scanner_id' })
-  scannerId?: string;
+  @Property({ nullable: true, fieldName: 'qrcode' })
+  qrcode?: string;
 
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
   price?: number;
