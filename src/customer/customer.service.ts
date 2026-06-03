@@ -127,7 +127,6 @@ export class CustomerService {
         await em.nativeDelete(Purchase, { id: { $in: purchaseIds } });
       }
 
-      // sales side
       const sales = await em.find(Sale, { customer: { id } });
       const saleIds = sales.map(s => s.id);
 
