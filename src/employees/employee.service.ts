@@ -145,6 +145,9 @@ export class EmployeeService {
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
+    if (dto.role)
+      throw new BadRequestException('Admin role cannot be updated');
+
     if (dto.attachmentId) {
       const attachment = await this.attachmentService.claimAttachment(
         dto.attachmentId,

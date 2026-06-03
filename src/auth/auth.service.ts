@@ -183,7 +183,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
-      role: dto.role,
+      role: "Admin",
       password: hashedPassword,
       phone: dto.phone,
       imageUrl: dto.imageUrl,

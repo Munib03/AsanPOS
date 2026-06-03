@@ -6,7 +6,7 @@ import { Inventory } from '../database/entites/inventory.entity';
 
 @Injectable()
 export class StockQuantityService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(private readonly em: EntityManager) { }
 
   async upsertStockQuantity(em: EntityManager, inventory: Inventory, product: Product, quantity: number): Promise<void> {
     const existing = await em.findOne(StockQuantity, { inventory, product });
@@ -17,10 +17,17 @@ export class StockQuantityService {
       em.create(StockQuantity, { inventory, product, quantity });
   }
 
+
   async decreaseStockQuantity(em: EntityManager, inventory: Inventory, product: Product, quantity: number): Promise<void> {
     const existing = await em.findOne(StockQuantity, { inventory, product });
 
     if (existing)
       existing.quantity = Math.max(0, (existing.quantity ?? 0) - quantity);
+  }
+
+
+  async getStockQuantity(em: EntityManager, inventory: Inventory, product: Product): Promise<number> {
+    const existing = await em.findOne(StockQuantity, { inventory, product });
+    return existing?.quantity ?? 0;
   }
 }

@@ -155,16 +155,25 @@ export class StockOutService {
         );
 
         if (dto.status === StockOutStatus.DONE) {
-          await Promise.all(
-            stockOut.items.getItems().map(async (item) => {
-              await this.stockQuantityService.decreaseStockQuantity(
-                em,
-                stockOut.inventory,
-                item.product,
-                item.quantity,
-              );
-            }),
-          );
+          for (const item of stockOut.items.getItems()) {
+            const available = await this.stockQuantityService.getStockQuantity(
+              em,
+              stockOut.inventory,
+              item.product,
+            );
+
+            if (available < item.quantity)
+              throw new BadRequestException(`Insufficient stock for product "${item.product.name}". Available: ${available}, Requested: ${item.quantity}`);
+          }
+
+          for (const item of stockOut.items.getItems()) {
+            await this.stockQuantityService.decreaseStockQuantity(
+              em,
+              stockOut.inventory,
+              item.product,
+              item.quantity,
+            );
+          }
         }
 
         stockOut.status = dto.status;
@@ -174,6 +183,7 @@ export class StockOutService {
       return { message: `Stock out with id ${id} updated successfully.` };
     });
   }
+
 
   private validateItems(
     items: StockOutItemDto[],
