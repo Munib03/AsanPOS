@@ -22,11 +22,11 @@ import { Roles } from '../shared/decorators/role.decorator';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin )
+@Roles(Role.Admin)
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
-  ) {}
+  ) { }
 
   @Post('register')
   registerEmployee(
@@ -41,13 +41,15 @@ export class EmployeeController {
 
 
   @Get()
-  findAll() {
-    return this.employeeService.findAll();
+  findAll(
+    @CurrentStore() store: Store
+  ) {
+    return this.employeeService.findAll(store);
   }
 
   @Get('me')
-  getMe(@CurrentUser() user: { id: string; email: string }) {
-    return this.employeeService.findOne(user.id);
+  getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
+    return this.employeeService.findOne(store, user.id);
   }
 
   @Put('info')

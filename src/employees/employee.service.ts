@@ -28,8 +28,9 @@ export class EmployeeService {
   ) { }
 
 
-  async findAll() {
+  async findAll(store: Store) {
     const employees = await this.em.findAll(Employee, {
+      where: { store },
       fields: ['id', 'email', 'name', 'phone', 'role', 'firstName', 'lastName', 'imageUrl', 'dob', 'gender', 'verifiedAt'],
     });
 
@@ -38,9 +39,8 @@ export class EmployeeService {
     });
   }
 
-
-  async findOne(id: string) {
-    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
+  async findOne(store: Store, id: string) {
+    const employee = await this.em.findOne(Employee, { id, store }, { populate: ['store'] });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
