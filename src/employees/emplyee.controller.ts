@@ -1,55 +1,60 @@
 import {
-  Controller,
-  Get,
-  Put,
-  Delete,
-  UseGuards,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
   Post,
+  Put,
+  UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
-import { EmployeeService } from './employee.service';
-import { CurrentUser } from '../shared/decorators/current-user.decorator';
-import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { VerifyDto } from './dto/verify.dto';
-import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
-import { CurrentStore } from '../shared/decorators/store.decorator';
-import { Role } from '../shared/utils/role.enum';
-import { RolesGuard } from '../shared/guards/role.guard';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Roles } from '../shared/decorators/role.decorator';
+import { CurrentStore } from '../shared/decorators/store.decorator';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
+import { RolesGuard } from '../shared/guards/role.guard';
+import { Role } from '../shared/utils/role.enum';
+import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { EmployeeService } from './employee.service';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
-
 export class EmployeeController {
-  constructor(
-    private readonly employeeService: EmployeeService,
-  ) { }
+  constructor(private readonly employeeService: EmployeeService) {}
 
   @Post('register')
   registerEmployee(
     @CurrentStore() store: Store,
     @Body() dto: CreateEmployeeDto,
   ) {
-    return this.employeeService.employeeRegister({
-      ...dto,
-      storeName: store.name,
-    }, store);
+    return this.employeeService.employeeRegister(
+      {
+        ...dto,
+        storeName: store.name,
+      },
+      store,
+    );
   }
 
-
   @Get()
-  findAll(
-    @CurrentStore() store: Store
-  ) {
+  findAll(@CurrentStore() store: Store) {
     return this.employeeService.findAll(store);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.employeeService.findOneById(id);
+  }
+
   @Get('me')
-  getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
+  getMe(
+    @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string; email: string },
+  ) {
     return this.employeeService.findOne(store, user.id);
   }
 
@@ -58,10 +63,9 @@ export class EmployeeController {
     @CurrentUser() user: { id: string },
     @Body() dto: UpdateEmployeeDto,
   ) {
-    const targetId = dto.id ?? user.id;  
+    const targetId = dto.id ?? user.id;
     return this.employeeService.updateEmployeeInfo(targetId, dto);
   }
-
 
   @Delete('profile-pic')
   deleteEmployeeImage(@CurrentUser() user: Employee) {
