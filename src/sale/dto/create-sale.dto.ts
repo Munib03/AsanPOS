@@ -1,5 +1,5 @@
-import { IsUUID, IsArray, IsOptional, ValidateNested, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsArray, IsNumber, IsUUID, ValidateNested } from 'class-validator';
 
 export class SaleItemDto {
   @IsUUID()
@@ -15,6 +15,9 @@ export class SaleItemDto {
 export class CreateSaleDto {
   @IsUUID()
   customerId!: string;
+
+  @IsUUID()
+  inventoryId!: string;
 
   @IsArray()
   @ValidateNested({ each: true })
