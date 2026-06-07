@@ -6,9 +6,9 @@ import { Purchase } from '../database/entites/purchase.entity';
 import { Sale } from '../database/entites/sale.entity';
 import { Store } from '../database/entites/store.entity';
 import { SequenceService } from '../sequence/sequence.service';
-import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 
 @Injectable()
 export class JournalEntryService {
@@ -19,27 +19,28 @@ export class JournalEntryService {
   ) {}
 
   async findAll(store: Store, query: PaginateQuery) {
-    const [journalEntries, meta] = await this.journalEntryRepository.findAndPaginate(
-      {},
-      {
-        populate: ['sequence', 'items', 'items.account'],
-        orderBy: { createdAt: 'DESC' },
-        exclude: [
-          'items.purchase.createdAt',
-          'items.purchase.updatedAt',
-          'updatedAt',
-          'sequence.createdAt',
-          'sequence.updatedAt',
-          'items.account.createdAt',
-          'items.account.updatedAt',
-          'items.updatedAt',
-        ],
-      },
-      {
-        searchable: [],
-      },
-      query,
-    );
+    const [journalEntries, meta] =
+      await this.journalEntryRepository.findAndPaginate(
+        {},
+        {
+          populate: ['sequence', 'items', 'items.account'],
+          orderBy: { createdAt: 'DESC' },
+          exclude: [
+            'items.purchase.createdAt',
+            'items.purchase.updatedAt',
+            'updatedAt',
+            'sequence.createdAt',
+            'sequence.updatedAt',
+            'items.account.createdAt',
+            'items.account.updatedAt',
+            'items.updatedAt',
+          ],
+        },
+        {
+          searchable: [],
+        },
+        query,
+      );
 
     return { data: journalEntries, meta };
   }
@@ -115,10 +116,10 @@ export class JournalEntryService {
     if (!defaultAccount)
       throw new NotFoundException(`Default account not found for store`);
 
-    await em.populate(purchase.customer, ['payable']);
-    const payableAccount = purchase.customer.payable;
-    if (!payableAccount)
-      throw new NotFoundException(`Payable account not found for customer`);
+    await em.populate(purchase.customer, ['receivable']);
+    const receivableAccount = purchase.customer.receivable;
+    if (!receivableAccount)
+      throw new NotFoundException(`Receivable account not found for customer`);
 
     const totalAmount = purchase.items
       .getItems()
@@ -146,7 +147,7 @@ export class JournalEntryService {
     em.create(JournalEntryItem, {
       journalEntry,
       purchase,
-      account: payableAccount,
+      account: receivableAccount,
       credit: totalAmount,
     });
   }
