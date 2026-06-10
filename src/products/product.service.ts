@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager, serialize, wrap } from '@mikro-orm/postgresql';
+import { EntityManager, serialize } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
@@ -13,6 +13,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { SequenceService } from '../sequence/sequence.service';
+import { Sequence } from '../database/entites/sequence.entity';
 import * as bwipjs from 'bwip-js';
 
 
@@ -23,6 +25,7 @@ export class ProductService {
     private readonly minioService: MinioService,
     private readonly attachmentService: AttachmentService,
     private readonly productRepository: BaseRepository<Product>,
+    private readonly sequenceService: SequenceService,
   ) { }
 
 
@@ -69,18 +72,21 @@ export class ProductService {
     if (!category)
       throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
+    const sequence = await this.sequenceService.generateSequence('Product', 'PDT');
+    const sequenceText = this.sequenceService.formatSequence(sequence);
+
     const product = this.em.create(Product, {
       ...stripUndefined({
         name: dto.name,
         price: dto.price,
       }),
       updatedAt: null,
+      sequence,
       store,
     });
 
     product.categories.add(category);
-
-    product.barcode = await this.generateBarcode(product);
+    product.barcode = await this.generateBarcode(sequenceText);
 
     if (dto.attachmentIds?.length) {
       await this.attachmentService.claimAttachments(
@@ -111,7 +117,7 @@ export class ProductService {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
       {
-        populate: ['categories', 'images'],
+        populate: ['categories', 'images', 'sequence'],
         notFoundMessage: `Product with id ${id} not found`,
       },
     );
@@ -123,9 +129,15 @@ export class ProductService {
         price: dto.price,
       }),
     );
+    
+    if (dto.name || dto.price) {
+      if (!product.sequence)
+        throw new NotFoundException(`Sequence not found for product ${id}`);
 
-    if (dto.name || dto.price)
-      product.barcode = await this.generateBarcode(product);
+      product.barcode = await this.generateBarcode(
+        this.sequenceService.formatSequence(product.sequence),
+      );
+    }
 
     if (dto.categoryName) {
       const category = await this.em.findOne(Category, {
@@ -217,11 +229,10 @@ export class ProductService {
   }
 
 
-
-  private async generateBarcode(product: Product): Promise<string> {
+  private async generateBarcode(text: string): Promise<string> {
     const buffer = await bwipjs.toBuffer({
       bcid: 'code128',
-      text: product.id,
+      text,
       scale: 2,
       height: 15,
       includetext: false,

@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne, Cascade } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne, Cascade, OneToOne } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from './category.entity';
 import { ProductImage } from './product-image.entity';
@@ -6,6 +6,7 @@ import { Store } from './store.entity';
 import { Inventory } from './inventory.entity';
 import { BaseRepository } from '../../shared/repositories/base.repository';
 import { PurchasedItem } from './purchased_item.entity';
+import { Sequence } from './sequence.entity';
 
 
 @Entity({ tableName: 'products', repository: () => BaseRepository })
@@ -23,6 +24,9 @@ export class Product {
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
   price?: number;
 
+  @OneToOne(() => Sequence, { nullable: true, fieldName: 'sequence_id' })
+  sequence?: Sequence;
+
   @ManyToMany(() => Category, category => category.products, { owner: true, pivotTable: 'category_product' })
   categories = new Collection<Category>(this);
 
@@ -31,7 +35,6 @@ export class Product {
 
   @OneToMany(() => ProductImage, image => image.product, { cascade: [Cascade.REMOVE] })
   images = new Collection<ProductImage>(this);
-
 
   @ManyToOne(() => Store)
   store!: Store;

@@ -7,16 +7,20 @@ import { MinioService } from '../shared/services/minio.service';
 import { Product } from '../database/entites/product.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { AttachmentModule } from '../attachments/attachment.module';
+import { SequenceModule } from '../sequence/sequence.module';
+import { SequenceService } from '../sequence/sequence.service';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Product]),
     AttachmentModule,
+    SequenceModule,
   ],
   controllers: [ProductController],
   providers: [
     ProductService,
     MinioService,
+    SequenceService,
     {
       provide: BaseRepository,
       useFactory: (em: EntityManager) => new BaseRepository(em, Product),
