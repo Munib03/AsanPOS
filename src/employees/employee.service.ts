@@ -23,7 +23,7 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     const employees = await this.em.findAll(Employee, {
