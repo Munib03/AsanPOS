@@ -48,19 +48,22 @@ export class InventoryService {
           'products',
           'products.images',
           'products.categories',
+          'products.sequence',
         ],
         fields: [
-          'id', 
-          'name', 
+          'id',
+          'name',
           'address',
-          'products.id', 
-          'products.name', 
+          'products.id',
+          'products.name',
           'products.price',
-          'products.images.id', 
+          'products.images.id',
           'products.images.imageUrl',
-          'products.categories.id', 
+          'products.categories.id',
           'products.categories.name',
           'products.barcode',
+          'products.sequence.prefix',
+          'products.sequence.lastIndex',
         ],
       },
     );
@@ -73,7 +76,7 @@ export class InventoryService {
     });
 
     const serialized = serialize(inventory, {
-      populate: ['products', 'products.images', 'products.categories'],
+      populate: ['products', 'products.images', 'products.categories', 'products.sequence'],
     });
 
     const products = await Promise.all(
@@ -92,6 +95,9 @@ export class InventoryService {
           images: imagesWithSignedUrls,
           categories: product.categories ?? [],
           quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
+          sequence: product.sequence
+            ? `${product.sequence.prefix}-${String(product.sequence.lastIndex).padStart(4, '0')}`
+            : null,
         };
       }),
     );
