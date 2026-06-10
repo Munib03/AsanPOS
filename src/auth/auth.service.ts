@@ -205,8 +205,9 @@ export class AuthService {
       createdAt: new Date(),
     });
 
-    await this.em.persistAndFlush(employee);
-    await this.em.persistAndFlush(securityAction);
+    this.em.persist(employee);
+    this.em.persist(securityAction);
+    await this.em.flush();
     await this.queueService.sendVerificationEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };

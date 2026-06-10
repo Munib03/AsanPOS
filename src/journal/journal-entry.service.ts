@@ -21,7 +21,7 @@ export class JournalEntryService {
   async findAll(store: Store, query: PaginateQuery) {
     const [journalEntries, meta] =
       await this.journalEntryRepository.findAndPaginate(
-        {},
+        { store },
         {
           populate: ['sequence', 'items', 'items.account'],
           orderBy: { createdAt: 'DESC' },
@@ -132,6 +132,7 @@ export class JournalEntryService {
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
+      store,
       status: JournalEntryStatus.PENDING,
     });
 
@@ -181,6 +182,7 @@ export class JournalEntryService {
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
+      store,
       status: JournalEntryStatus.PENDING,
     });
 

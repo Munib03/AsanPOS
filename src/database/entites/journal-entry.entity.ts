@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Sequence } from "./sequence.entity";
 import { JournalEntryItem } from "./journal-entry-item.entity";
 import { JournalEntryStatus } from "../../shared/utils/journal-entry-status.enum";
+import { Store } from "./store.entity";
 
 @Entity({ tableName: "journal_entry" })
 export class JournalEntry {
@@ -12,6 +13,9 @@ export class JournalEntry {
 
   @ManyToOne(() => Sequence, { fieldName: "sequence_id", nullable: true })
   sequence?: Sequence;
+
+  @ManyToOne(() => Store, { fieldName: "store_id" })
+  store!: Store;
 
   @Property({ default: JournalEntryStatus.PENDING })
   status!: string;

@@ -157,7 +157,7 @@ export class SaleService {
         const stockRecord = await em.findOne(StockQuantity, {
           product: { id: item.productId },
           inventory: { id: dto.inventoryId },
-        });
+        }); 
 
         const available = stockRecord?.quantity ?? 0;
 

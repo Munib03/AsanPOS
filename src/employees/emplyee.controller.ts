@@ -47,15 +47,7 @@ export class EmployeeController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.employeeService.findOneById(id);
-  }
-
-  @Get('me')
-  getMe(
-    @CurrentStore() store: Store,
-    @CurrentUser() user: { id: string; email: string },
-  ) {
-    return this.employeeService.findOne(store, user.id);
+    return this.employeeService.findOne(id);
   }
 
   @Put('info')
