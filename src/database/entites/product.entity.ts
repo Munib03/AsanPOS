@@ -18,7 +18,7 @@ export class Product {
   name?: string;
 
   @Property({ nullable: true, fieldName: 'qrcode' })
-  qrcode?: string;
+  barcode?: string;
 
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
   price?: number;

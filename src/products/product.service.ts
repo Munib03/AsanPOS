@@ -13,7 +13,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
-import * as QRCode from 'qrcode';
+import * as bwipjs from 'bwip-js';
 
 
 @Injectable()
@@ -74,12 +74,13 @@ export class ProductService {
         name: dto.name,
         price: dto.price,
       }),
+      updatedAt: null,
       store,
     });
 
     product.categories.add(category);
 
-    product.qrcode = await this.generateQrCode(product);
+    product.barcode = await this.generateBarcode(product);
 
     if (dto.attachmentIds?.length) {
       await this.attachmentService.claimAttachments(
@@ -124,7 +125,7 @@ export class ProductService {
     );
 
     if (dto.name || dto.price)
-      product.qrcode = await this.generateQrCode(product);
+      product.barcode = await this.generateBarcode(product);
 
     if (dto.categoryName) {
       const category = await this.em.findOne(Category, {
@@ -133,9 +134,7 @@ export class ProductService {
       });
 
       if (!category)
-        throw new NotFoundException(
-          `Category not found: ${dto.categoryName}`,
-        );
+        throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
       product.categories.set([category]);
     }
@@ -159,6 +158,7 @@ export class ProductService {
       );
     }
 
+    product.updatedAt = new Date();
     await this.em.flush();
 
     return {
@@ -217,11 +217,16 @@ export class ProductService {
   }
 
 
-  private async generateQrCode(product: Product): Promise<string> {
-    return QRCode.toDataURL(JSON.stringify({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-    }));
+
+  private async generateBarcode(product: Product): Promise<string> {
+    const buffer = await bwipjs.toBuffer({
+      bcid: 'code128',
+      text: product.id,
+      scale: 2,
+      height: 15,
+      includetext: false,
+    });
+
+    return `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
   }
 }

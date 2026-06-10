@@ -19,6 +19,7 @@ import { create } from 'domain';
 import { Account } from '../database/entites/account.entity';
 import { StoreSettings } from '../database/entites/store-settings.entity';
 import { Role } from '../shared/utils/role.enum';
+import { Customer } from '../database/entites/customer.entity';
 
 
 @Injectable()
@@ -148,14 +149,12 @@ export class AuthService {
     if (store) {
       const existingEmployee = await this.em.findOne(Employee, {
         store,
-        verifiedAt: { $ne: null }
+        verifiedAt: { $ne: null },
       });
 
       if (existingEmployee)
         throw new BadRequestException('This store already has an owner. Please create a new store.');
-
-    }
-    else {
+    } else {
       const defaultAccount = this.em.create(Account, {
         name: 'Default Account',
         type: 'asset',
@@ -176,6 +175,23 @@ export class AuthService {
         storeSettings,
         store,
       ]);
+
+      const payable = this.em.create(Account, {
+        name: 'Walk-in Customer - Accounts Payable',
+        type: 'liability',
+      });
+
+      await this.em.persistAndFlush(payable);
+
+      const walkInCustomer = this.em.create(Customer, {
+        name: 'Walk-in Customer',
+        phone: '0000000000',
+        address: 'N/A',
+        store,
+        payable,
+      });
+
+      await this.em.persistAndFlush(walkInCustomer);
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
