@@ -23,6 +23,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
   @Get('me')
   getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
     return this.authService.findOne(store, user.id);
@@ -34,6 +35,7 @@ export class AuthController {
   }
 
   @Post('verify-register')
+  @HttpCode(HttpStatus.OK)
   verifyRegister(@Body() dto: VerifyDto) {
     return this.authService.verifyRegister(dto);
   }
@@ -46,12 +48,14 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
   @Post('enable-2fa')
   enableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.enableTwoFactor(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
   @Post('verify-2fa-setup')
   verifyTwoFactorSetup(
     @CurrentUser() user: { id: string; email: string },
@@ -61,6 +65,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
   @Delete('disable-2fa')
   disableTwoFactor(@CurrentUser() user: { id: string; email: string }) {
     return this.authService.disableTwoFactor(user.id);

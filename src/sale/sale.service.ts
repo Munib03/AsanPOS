@@ -38,7 +38,7 @@ export class SaleService {
     private readonly saleRepository: BaseRepository<Sale>,
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -61,6 +61,7 @@ export class SaleService {
           'items.product.id',
           'items.product.name',
           'items.product.price',
+          'sequence.entity'
         ],
       },
       {
@@ -73,10 +74,12 @@ export class SaleService {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
 
-    const data: SaleListItem[] = serialized.map((sale) => ({
-      ...sale,
-      sequenceId: `${sale.sequence.prefix}-${String(sale.sequence.lastIndex).padStart(4, '0')}`,
-      totalPrice: sale.items.reduce(
+
+
+    const data: SaleListItem[] = sales.map((sale, index) => ({
+      ...serialized[index],
+      sequenceId: this.sequenceService.formatSequence(sale.sequence),
+      totalPrice: serialized[index].items.reduce(
         (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
         0,
       ),
@@ -97,11 +100,10 @@ export class SaleService {
     const serialized = serialize(sale, {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
-    const { sequence, ...rest } = serialized;
 
     return {
-      ...rest,
-      sequenceId: `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`,
+      ...serialized,
+      sequenceId: this.sequenceService.formatSequence(sale.sequence),
       totalPrice: serialized.items.reduce(
         (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
         0,
@@ -136,7 +138,6 @@ export class SaleService {
         products.map((product) => [product.id, product]),
       );
 
-      // ── Validate the sent inventory belongs to this store ─────────────────
       const inventory = await em.findOne(Inventory, {
         id: dto.inventoryId,
         store,
@@ -146,7 +147,6 @@ export class SaleService {
           `Inventory with id ${dto.inventoryId} not found`,
         );
 
-      // ── Check stock in the specific inventory sent from the frontend ──────
       for (const item of dto.items) {
         const product = productMap.get(item.productId);
         if (!product)
@@ -157,7 +157,7 @@ export class SaleService {
         const stockRecord = await em.findOne(StockQuantity, {
           product: { id: item.productId },
           inventory: { id: dto.inventoryId },
-        }); 
+        });
 
         const available = stockRecord?.quantity ?? 0;
 
