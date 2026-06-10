@@ -47,7 +47,6 @@ export class InventoryController {
 
   @Delete(":id")
   @Roles(Role.Admin)
-
   remove(@CurrentStore() store: Store, @Param("id") id: string) {
     return this.inventoryService.delete(store, id);
   }
