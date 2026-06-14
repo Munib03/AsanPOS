@@ -22,6 +22,21 @@ import { Role } from '../shared/utils/role.enum';
 import { Customer } from '../database/entites/customer.entity';
 
 
+export interface EmployeeDetail {
+  id: string;
+  email: string;
+  name: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  role: string | null;
+  imageUrl: string | null;
+  dob: Date | null;
+  gender: string | null;
+  storeName: string | null;
+  createdAt: Date | null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -34,7 +49,7 @@ export class AuthService {
   ) { }
 
 
-  async findOne(store: Store, id: string) {
+  async findOne(store: Store, id: string): Promise<EmployeeDetail> {
     const employee = await this.em.findOne(Employee, { id, store }, { populate: ['store'] });
     if (!employee)
       throw new NotFoundException('Employee not found');
@@ -47,7 +62,7 @@ export class AuthService {
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
       role: employee.role ?? null,
-      imageUrl: employee.imageUrlSigned,
+      imageUrl: employee.imageUrlSigned ?? null,
       dob: employee.dob ?? null,
       gender: employee.gender ?? null,
       storeName: employee.store?.name ?? null,
