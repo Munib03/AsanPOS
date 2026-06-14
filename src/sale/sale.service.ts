@@ -238,14 +238,12 @@ export class SaleService {
 
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
-
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
 
     const yesterdayStart = new Date(now);
     yesterdayStart.setDate(now.getDate() - 1);
     yesterdayStart.setHours(0, 0, 0, 0);
-    
     const yesterdayEnd = new Date(now);
     yesterdayEnd.setDate(now.getDate() - 1);
     yesterdayEnd.setHours(23, 59, 59, 999);
@@ -253,18 +251,12 @@ export class SaleService {
     const [todaySales, yesterdaySales] = await Promise.all([
       this.em.find(
         Sale,
-        {
-          store,
-          createdAt: { $gte: todayStart, $lte: todayEnd },
-        },
+        { store, createdAt: { $gte: todayStart, $lte: todayEnd } },
         { populate: ['items', 'items.product'] },
       ),
       this.em.find(
         Sale,
-        {
-          store,
-          createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd },
-        },
+        { store, createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd } },
         { populate: ['items', 'items.product'] },
       ),
     ]);
@@ -287,7 +279,7 @@ export class SaleService {
 
     const salesPercentageChange =
       yesterdayTotalSales === 0
-        ? 100
+        ? 0
         : ((todayTotalSales - yesterdayTotalSales) / yesterdayTotalSales) * 100;
 
     const allSales = [...todaySales, ...yesterdaySales];
@@ -300,17 +292,15 @@ export class SaleService {
     ];
 
     const costPriceMap = new Map<string, number>();
-    await Promise.all(
-      productIds.map(async (productId) => {
-        const latestPurchasedItem = await this.em.findOne(
-          PurchasedItem,
-          { product: { id: productId } },
-          { orderBy: { createdAt: 'DESC' } },
-        );
-        if (latestPurchasedItem)
-          costPriceMap.set(productId, latestPurchasedItem.unitPrice);
-      }),
+    const latestPurchasedItems = await this.em.find(
+      PurchasedItem,
+      { product: { id: { $in: productIds } } },
+      { orderBy: { createdAt: 'DESC' } },
     );
+    for (const item of latestPurchasedItems) {
+      if (!costPriceMap.has(item.product.id))
+        costPriceMap.set(item.product.id, item.unitPrice);
+    }
 
     const calcTotalProfit = (sales: Sale[]) =>
       sales.reduce(
@@ -328,15 +318,14 @@ export class SaleService {
 
     const profitPercentageChange =
       yesterdayTotalProfit === 0
-        ? 100
-        : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) *
-        100;
+        ? 0
+        : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) * 100;
 
     const lowStockRecords = await this.em.find(
       StockQuantity,
       {
         inventory: { store },
-        quantity: { $gte: 0, $lte: 10 },
+        quantity: { $gte: 1, $lte: 10 },
       },
       { populate: ['product', 'inventory'] },
     );
