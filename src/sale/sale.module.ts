@@ -7,12 +7,14 @@ import { Sale } from '../database/entites/sale.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryModule } from '../journal/journal.module';
+import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Sale]),
     SequenceModule,
     JournalEntryModule,
+    StockQuantityModule, 
   ],
   controllers: [SaleController],
   providers: [

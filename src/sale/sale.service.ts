@@ -13,6 +13,7 @@ import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { Store } from '../database/entites/store.entity';
 import { JournalEntryService } from '../journal/journal-entry.service';
 import { SequenceService } from '../sequence/sequence.service';
+import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -38,7 +39,8 @@ export class SaleService {
     private readonly saleRepository: BaseRepository<Sale>,
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
-  ) { }
+    private readonly stockQuantityService: StockQuantityService,
+  ) {}
 
   async findAll(
     store: Store,
@@ -53,6 +55,7 @@ export class SaleService {
           'createdAt',
           'sequence.prefix',
           'sequence.lastIndex',
+          'sequence.entity',
           'customer.id',
           'customer.name',
           'items.id',
@@ -61,7 +64,6 @@ export class SaleService {
           'items.product.id',
           'items.product.name',
           'items.product.price',
-          'sequence.entity'
         ],
       },
       {
@@ -73,8 +75,6 @@ export class SaleService {
     const serialized = serialize(sales, {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
-
-
 
     const data: SaleListItem[] = sales.map((sale, index) => ({
       ...serialized[index],
@@ -101,8 +101,10 @@ export class SaleService {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
 
+    const { sequence, ...rest } = serialized;
+
     return {
-      ...serialized,
+      ...rest,
       sequenceId: this.sequenceService.formatSequence(sale.sequence),
       totalPrice: serialized.items.reduce(
         (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
@@ -178,6 +180,16 @@ export class SaleService {
       });
 
       await em.persistAndFlush(saleItems);
+
+      for (const item of dto.items) {
+        const product = productMap.get(item.productId)!;
+        await this.stockQuantityService.decreaseStockQuantity(
+          em,
+          inventory,
+          product,
+          item.quantity,
+        );
+      }
 
       await em.populate(sale, ['items', 'items.product', 'customer']);
       await this.journalEntryService.createFromSale(em, store, sale);
