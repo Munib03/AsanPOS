@@ -23,6 +23,11 @@ export class SaleController {
         return this.saleService.findAll(store, query);
     }
 
+    @Get('dashboard')
+    getDashboardStats(@CurrentStore() store: Store) {
+        return this.saleService.getDashboardStats(store);
+    }
+
     @Get(':id')
     findOne(
         @CurrentStore() store: Store,
@@ -46,4 +51,5 @@ export class SaleController {
     ) {
         return this.saleService.remove(store, id);
     }
+
 }

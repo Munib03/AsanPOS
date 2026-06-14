@@ -17,6 +17,8 @@ import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { PurchasedItem } from '../database/entites/purchased_item.entity';
+import { DashboardStats } from './dto/dashboard.dto';
 
 export interface SaleListItem {
   id: string;
@@ -40,7 +42,7 @@ export class SaleService {
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
     private readonly stockQuantityService: StockQuantityService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -228,5 +230,135 @@ export class SaleService {
       await em.removeAndFlush(sale);
       return { message: `Sale with id ${id} deleted successfully.` };
     });
+  }
+
+
+  async getDashboardStats(store: Store): Promise<DashboardStats> {
+    const now = new Date();
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const yesterdayStart = new Date(now);
+    yesterdayStart.setDate(now.getDate() - 1);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    
+    const yesterdayEnd = new Date(now);
+    yesterdayEnd.setDate(now.getDate() - 1);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+
+    const [todaySales, yesterdaySales] = await Promise.all([
+      this.em.find(
+        Sale,
+        {
+          store,
+          createdAt: { $gte: todayStart, $lte: todayEnd },
+        },
+        { populate: ['items', 'items.product'] },
+      ),
+      this.em.find(
+        Sale,
+        {
+          store,
+          createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd },
+        },
+        { populate: ['items', 'items.product'] },
+      ),
+    ]);
+
+    const calcTotalSales = (sales: Sale[]) =>
+      sales.reduce(
+        (sum, sale) =>
+          sum +
+          sale.items
+            .getItems()
+            .reduce(
+              (s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+              0,
+            ),
+        0,
+      );
+
+    const todayTotalSales = calcTotalSales(todaySales);
+    const yesterdayTotalSales = calcTotalSales(yesterdaySales);
+
+    const salesPercentageChange =
+      yesterdayTotalSales === 0
+        ? 100
+        : ((todayTotalSales - yesterdayTotalSales) / yesterdayTotalSales) * 100;
+
+    const allSales = [...todaySales, ...yesterdaySales];
+    const productIds = [
+      ...new Set(
+        allSales.flatMap((sale) =>
+          sale.items.getItems().map((item) => item.product.id),
+        ),
+      ),
+    ];
+
+    const costPriceMap = new Map<string, number>();
+    await Promise.all(
+      productIds.map(async (productId) => {
+        const latestPurchasedItem = await this.em.findOne(
+          PurchasedItem,
+          { product: { id: productId } },
+          { orderBy: { createdAt: 'DESC' } },
+        );
+        if (latestPurchasedItem)
+          costPriceMap.set(productId, latestPurchasedItem.unitPrice);
+      }),
+    );
+
+    const calcTotalProfit = (sales: Sale[]) =>
+      sales.reduce(
+        (sum, sale) =>
+          sum +
+          sale.items.getItems().reduce((s, item) => {
+            const costPrice = costPriceMap.get(item.product.id) ?? 0;
+            return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
+          }, 0),
+        0,
+      );
+
+    const todayTotalProfit = calcTotalProfit(todaySales);
+    const yesterdayTotalProfit = calcTotalProfit(yesterdaySales);
+
+    const profitPercentageChange =
+      yesterdayTotalProfit === 0
+        ? 100
+        : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) *
+        100;
+
+    const lowStockRecords = await this.em.find(
+      StockQuantity,
+      {
+        inventory: { store },
+        quantity: { $gte: 0, $lte: 10 },
+      },
+      { populate: ['product', 'inventory'] },
+    );
+
+    const lowStockProducts = lowStockRecords.map((record) => ({
+      id: record.product.id,
+      name: record.product.name ?? '',
+      price: record.product.price ?? 0,
+      quantity: record.quantity ?? 0,
+      inventoryName: record.inventory.name ?? '',
+    }));
+
+    return {
+      todaySales: {
+        total: todayTotalSales,
+        percentageChange: Math.round(salesPercentageChange * 100) / 100,
+      },
+      todayProfit: {
+        total: todayTotalProfit,
+        percentageChange: Math.round(profitPercentageChange * 100) / 100,
+      },
+      lowStockProducts,
+    };
   }
 }

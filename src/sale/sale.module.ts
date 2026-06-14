@@ -8,10 +8,11 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryModule } from '../journal/journal.module';
 import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
+import { PurchasedItem } from '../database/entites/purchased_item.entity';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature([Sale]),
+    MikroOrmModule.forFeature([Sale, PurchasedItem]),
     SequenceModule,
     JournalEntryModule,
     StockQuantityModule, 
