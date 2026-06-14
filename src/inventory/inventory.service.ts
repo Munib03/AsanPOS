@@ -81,10 +81,10 @@ export class InventoryService {
 
     const products = await Promise.all(
       serialized.products.map(async (product) => {
-        const imagesWithSignedUrls = await Promise.all(
+        const images = await Promise.all(
           (product.images ?? []).map(async (image) => ({
-            ...image,
-            signedUrl: image.imageUrl
+            id: image.id,
+            imageUrlSigned: image.imageUrl
               ? await this.minioService.getSignedUrl(image.imageUrl)
               : null,
           })),
@@ -92,7 +92,7 @@ export class InventoryService {
 
         return {
           ...product,
-          images: imagesWithSignedUrls,
+          images,
           categories: product.categories ?? [],
           quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
           sequence: product.sequence
