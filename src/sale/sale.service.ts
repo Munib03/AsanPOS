@@ -236,20 +236,7 @@ export class SaleService {
 
 
   async getDashboardStats(store: Store): Promise<DashboardStats> {
-    const now = new Date();
-
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const yesterdayStart = new Date(now);
-    yesterdayStart.setDate(now.getDate() - 1);
-    yesterdayStart.setHours(0, 0, 0, 0);
-    
-    const yesterdayEnd = new Date(now);
-    yesterdayEnd.setDate(now.getDate() - 1);
-    yesterdayEnd.setHours(23, 59, 59, 999);
+    const { todayStart, todayEnd, yesterdayStart, yesterdayEnd } = this.getDayRanges();
 
     const [todaySales, yesterdaySales] = await Promise.all([
       this.em.find(
@@ -264,72 +251,23 @@ export class SaleService {
       ),
     ]);
 
-    const calcTotalSales = (sales: Sale[]) =>
-      sales.reduce(
-        (sum, sale) =>
-          sum +
-          sale.items
-            .getItems()
-            .reduce(
-              (s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0),
-              0,
-            ),
-        0,
-      );
+    const todayTotalSales = this.calcTotalSales(todaySales);
+    const yesterdayTotalSales = this.calcTotalSales(yesterdaySales);
+    const salesPercentageChange = yesterdayTotalSales === 0
+      ? 0
+      : ((todayTotalSales - yesterdayTotalSales) / yesterdayTotalSales) * 100;
 
-    const todayTotalSales = calcTotalSales(todaySales);
-    const yesterdayTotalSales = calcTotalSales(yesterdaySales);
+    const costPriceMap = await this.buildCostPriceMap([...todaySales, ...yesterdaySales]);
 
-    const salesPercentageChange =
-      yesterdayTotalSales === 0
-        ? 0
-        : ((todayTotalSales - yesterdayTotalSales) / yesterdayTotalSales) * 100;
-
-    const allSales = [...todaySales, ...yesterdaySales];
-    const productIds = [
-      ...new Set(
-        allSales.flatMap((sale) =>
-          sale.items.getItems().map((item) => item.product.id),
-        ),
-      ),
-    ];
-
-    const costPriceMap = new Map<string, number>();
-    const latestPurchasedItems = await this.em.find(
-      PurchasedItem,
-      { product: { id: { $in: productIds } } },
-      { orderBy: { createdAt: 'DESC' } },
-    );
-    for (const item of latestPurchasedItems) {
-      if (!costPriceMap.has(item.product.id))
-        costPriceMap.set(item.product.id, item.unitPrice);
-    }
-
-    const calcTotalProfit = (sales: Sale[]) =>
-      sales.reduce(
-        (sum, sale) =>
-          sum +
-          sale.items.getItems().reduce((s, item) => {
-            const costPrice = costPriceMap.get(item.product.id) ?? 0;
-            return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
-          }, 0),
-        0,
-      );
-
-    const todayTotalProfit = calcTotalProfit(todaySales);
-    const yesterdayTotalProfit = calcTotalProfit(yesterdaySales);
-
-    const profitPercentageChange =
-      yesterdayTotalProfit === 0
-        ? 0
-        : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) * 100;
+    const todayTotalProfit = this.calcTotalProfit(todaySales, costPriceMap);
+    const yesterdayTotalProfit = this.calcTotalProfit(yesterdaySales, costPriceMap);
+    const profitPercentageChange = yesterdayTotalProfit === 0
+      ? 0
+      : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) * 100;
 
     const lowStockRecords = await this.em.find(
       StockQuantity,
-      {
-        inventory: { store },
-        quantity: { $gte: 1, $lte: 10 },
-      },
+      { inventory: { store }, quantity: { $gte: 1, $lte: 10 } },
       { populate: ['product', 'inventory'] },
     );
 
@@ -352,5 +290,70 @@ export class SaleService {
       },
       lowStockProducts,
     };
+  }
+
+  private getDayRanges() {
+    const now = new Date();
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const yesterdayStart = new Date(now);
+    yesterdayStart.setDate(now.getDate() - 1);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    const yesterdayEnd = new Date(now);
+    yesterdayEnd.setDate(now.getDate() - 1);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+
+    return { todayStart, todayEnd, yesterdayStart, yesterdayEnd };
+  }
+
+  private calcTotalSales(sales: Sale[]): number {
+    return sales.reduce(
+      (sum, sale) =>
+        sum +
+        sale.items
+          .getItems()
+          .reduce((s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
+      0,
+    );
+  }
+
+  private async buildCostPriceMap(sales: Sale[]): Promise<Map<string, number>> {
+    const productIds = [
+      ...new Set(
+        sales.flatMap((sale) =>
+          sale.items.getItems().map((item) => item.product.id),
+        ),
+      ),
+    ];
+
+    const costPriceMap = new Map<string, number>();
+    const latestPurchasedItems = await this.em.find(
+      PurchasedItem,
+      { product: { id: { $in: productIds } } },
+      { orderBy: { createdAt: 'DESC' } },
+    );
+
+    for (const item of latestPurchasedItems) {
+      if (!costPriceMap.has(item.product.id))
+        costPriceMap.set(item.product.id, item.unitPrice);
+    }
+
+    return costPriceMap;
+  }
+
+  private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
+    return sales.reduce(
+      (sum, sale) =>
+        sum +
+        sale.items.getItems().reduce((s, item) => {
+          const costPrice = costPriceMap.get(item.product.id) ?? 0;
+          return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
+        }, 0),
+      0,
+    );
   }
 }
