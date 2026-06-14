@@ -218,6 +218,7 @@ export class SaleService {
     });
   }
 
+
   async remove(store: Store, id: string) {
     return await this.em.transactional(async (em) => {
       const sale = await em.findOne(
@@ -233,6 +234,7 @@ export class SaleService {
   }
 
 
+
   async getDashboardStats(store: Store): Promise<DashboardStats> {
     const now = new Date();
 
@@ -244,6 +246,7 @@ export class SaleService {
     const yesterdayStart = new Date(now);
     yesterdayStart.setDate(now.getDate() - 1);
     yesterdayStart.setHours(0, 0, 0, 0);
+    
     const yesterdayEnd = new Date(now);
     yesterdayEnd.setDate(now.getDate() - 1);
     yesterdayEnd.setHours(23, 59, 59, 999);
