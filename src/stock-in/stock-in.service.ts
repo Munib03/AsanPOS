@@ -36,7 +36,7 @@ export class StockInService {
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     const stockIns = await this.em.findAll(StockIn, {
@@ -62,6 +62,7 @@ export class StockInService {
 
   async createFromPurchase(
     store: Store,
+    employeeId: string,
     dto: CreateStockInDto,
   ): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
@@ -111,6 +112,19 @@ export class StockInService {
         });
       }
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.StockIn,
+        stockIn.id,
+        null,
+        StockInStatus.PENDING,
+      );
+
       await em.flush();
 
       return {
@@ -118,7 +132,6 @@ export class StockInService {
       };
     });
   }
-
   async update(
     store: Store,
     id: string,

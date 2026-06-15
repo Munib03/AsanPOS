@@ -17,8 +17,8 @@ export class AuditService {
     employee: Employee,
     entityType: AuditEntityType,
     entityId: string,
-    beforeStatus: string,
-    afterStatus: string,
+    beforeStatus: string | null,
+    afterStatus: string | null,
   ): void {
     em.create(AuditLog, {
       employee,

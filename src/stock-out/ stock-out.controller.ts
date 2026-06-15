@@ -14,7 +14,7 @@ import { UpdateStockOutDto } from './dto/update-stock-out.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class StockOutController {
-  constructor(private readonly stockOutService: StockOutService) {}
+  constructor(private readonly stockOutService: StockOutService) { }
 
   @Get()
   findAll(@CurrentStore() store: Store) {
@@ -32,9 +32,10 @@ export class StockOutController {
   @Post()
   create(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: CreateStockOutDto,
   ) {
-    return this.stockOutService.create(store, dto);
+    return this.stockOutService.create(store, user.id, dto);
   }
 
   @Put(':id')

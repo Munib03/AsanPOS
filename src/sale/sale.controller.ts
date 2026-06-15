@@ -8,6 +8,7 @@ import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 import { RolesGuard } from '../shared/guards/role.guard';
 import { Role } from '../shared/utils/role.enum';
 import { Roles } from '../shared/decorators/role.decorator';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,17 +40,19 @@ export class SaleController {
     @Post()
     create(
         @CurrentStore() store: Store,
+        @CurrentUser() user: { id: string; role: string },
         @Body() dto: CreateSaleDto,
     ) {
-        return this.saleService.create(store, dto);
+        return this.saleService.create(store, user.id, dto);
     }
 
     @Delete(':id')
     remove(
         @CurrentStore() store: Store,
+        @CurrentUser() user: { id: string; role: string },
         @Param('id') id: string,
     ) {
-        return this.saleService.remove(store, id);
+        return this.saleService.remove(store, id, user.id);
     }
 
 }

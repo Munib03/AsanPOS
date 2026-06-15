@@ -34,7 +34,7 @@ export class PurchaseService {
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -148,7 +148,7 @@ export class PurchaseService {
     return this.mapPurchaseToListItem(serialized, stockInsMap);
   }
 
-  async create(store: Store, dto: CreatePurchaseDto) {
+  async create(store: Store, employeeId: string, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
@@ -190,13 +190,28 @@ export class PurchaseService {
 
       await em.persistAndFlush(purchasedItems);
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Purchase,
+        purchase.id,
+        null,
+        PurchaseStatus.DRAFT,
+      );
+
+      await em.flush();
+
       return {
         message: `Purchase created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
       };
     });
   }
 
-  async remove(store: Store, id: string) {
+  async remove(store: Store, id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
         Purchase,
@@ -206,6 +221,20 @@ export class PurchaseService {
       if (!purchase)
         throw new NotFoundException(`Purchase with id ${id} not found`);
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Purchase,
+        purchase.id,
+        null,
+        'deleted',
+      );
+
+      await em.flush();
       await em.removeAndFlush(purchase);
       return { message: `Purchase with id ${id} deleted successfully.` };
     });

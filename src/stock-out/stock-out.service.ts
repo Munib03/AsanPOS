@@ -59,7 +59,7 @@ export class StockOutService {
     return serialize(stockOut, { populate: STOCK_OUT_POPULATE });
   }
 
-  async create(store: Store, dto: CreateStockOutDto): Promise<{ message: string }> {
+  async create(store: Store, employeeId: string, dto: CreateStockOutDto): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const [sale, inventory] = await Promise.all([
         em.findOne(
@@ -104,6 +104,19 @@ export class StockOutService {
         });
       }
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.StockOut,
+        stockOut.id,
+        null,
+        StockOutStatus.PENDING,
+      );
+
       await em.flush();
 
       return {
@@ -111,6 +124,9 @@ export class StockOutService {
       };
     });
   }
+
+
+
   async update(
     store: Store,
     id: string,

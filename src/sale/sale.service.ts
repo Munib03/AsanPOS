@@ -48,7 +48,7 @@ export class SaleService {
     private readonly journalEntryService: JournalEntryService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -122,7 +122,7 @@ export class SaleService {
     };
   }
 
-  async create(store: Store, dto: CreateSaleDto) {
+  async create(store: Store, employeeId: string, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
@@ -194,6 +194,19 @@ export class SaleService {
       await em.populate(sale, ['items', 'items.product', 'customer']);
       await this.journalEntryService.createFromSale(em, store, sale);
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Sale,
+        sale.id,
+        null,
+        SaleStatus.DRAFT,
+      );
+
       const createdSale = await em.findOne(
         Sale,
         { id: sale.id },
@@ -252,11 +265,30 @@ export class SaleService {
     });
   }
 
-  async remove(store: Store, id: string) {
+  async remove(store: Store, id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
-      const sale = await em.findOne(Sale, { id, store }, { populate: ['items'] });
-      if (!sale) throw new NotFoundException(`Sale with id ${id} not found`);
+      const sale = await em.findOne(
+        Sale,
+        { id, store },
+        { populate: ['items'] },
+      );
+      if (!sale)
+        throw new NotFoundException(`Sale with id ${id} not found`);
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Sale,
+        sale.id,
+        null,
+        'deleted',
+      );
+
+      await em.flush();
       await em.removeAndFlush(sale);
       return { message: `Sale with id ${id} deleted successfully.` };
     });

@@ -15,7 +15,7 @@ import { Roles } from '../shared/decorators/role.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class PurchaseController {
-  constructor(private readonly purchaseService: PurchaseService) {}
+  constructor(private readonly purchaseService: PurchaseService) { }
 
   @Get()
   findAll(
@@ -36,9 +36,10 @@ export class PurchaseController {
   @Post()
   create(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: CreatePurchaseDto,
   ) {
-    return this.purchaseService.create(store, dto);
+    return this.purchaseService.create(store, user.id, dto);
   }
 
   @Put(':id')
@@ -54,8 +55,9 @@ export class PurchaseController {
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string; role: string },
     @Param('id') id: string,
   ) {
-    return this.purchaseService.remove(store, id);
+    return this.purchaseService.remove(store, id, user.id);
   }
 }
