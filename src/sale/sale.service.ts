@@ -332,6 +332,9 @@ export class SaleService {
     ];
 
     const costPriceMap = new Map<string, number>();
+
+    if (productIds.length === 0) return costPriceMap; // 👈 guard
+
     const latestPurchasedItems = await this.em.find(
       PurchasedItem,
       { product: { id: { $in: productIds } } },
