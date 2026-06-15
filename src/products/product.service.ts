@@ -14,7 +14,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
-import * as bwipjs from 'bwip-js';
+import { generateBarcode } from '../shared/utils/generate.barcode';
 
 
 @Injectable()
@@ -85,7 +85,7 @@ export class ProductService {
     });
 
     product.categories.add(category);
-    product.barcode = await this.generateBarcode(sequenceText);
+    product.barcode = await generateBarcode(sequenceText);
 
     if (dto.attachmentIds?.length) {
       await this.attachmentService.claimAttachments(
@@ -133,7 +133,7 @@ export class ProductService {
       if (!product.sequence)
         throw new NotFoundException(`Sequence not found for product ${id}`);
 
-      product.barcode = await this.generateBarcode(
+      product.barcode = await generateBarcode(
         this.sequenceService.formatSequence(product.sequence),
       );
     }
@@ -225,18 +225,5 @@ export class ProductService {
     await this.em.removeAndFlush(image);
 
     return { message: 'Image deleted successfully' };
-  }
-
-
-  private async generateBarcode(text: string): Promise<string> {
-    const buffer = await bwipjs.toBuffer({
-      bcid: 'code128',
-      text,
-      scale: 2,
-      height: 15,
-      includetext: false,
-    });
-
-    return `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
   }
 }

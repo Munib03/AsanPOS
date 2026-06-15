@@ -333,7 +333,7 @@ export class SaleService {
 
     const costPriceMap = new Map<string, number>();
 
-    if (productIds.length === 0) return costPriceMap; // 👈 guard
+    if (productIds.length === 0) return costPriceMap; 
 
     const latestPurchasedItems = await this.em.find(
       PurchasedItem,
