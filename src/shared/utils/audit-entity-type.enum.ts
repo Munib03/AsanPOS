@@ -4,4 +4,8 @@ export enum AuditEntityType {
   StockIn = 'stock_in',
   StockOut = 'stock_out',
   JournalEntry = 'journal_entry',
+  Category = 'category',
+  Product = 'product',
+  Customer = 'customer',
+  Inventory = 'inventory',
 }

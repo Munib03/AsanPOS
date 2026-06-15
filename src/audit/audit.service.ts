@@ -24,8 +24,25 @@ export class AuditService {
       employee,
       entityType,
       entityId,
-      before: { status: beforeStatus },
-      after: { status: afterStatus },
+      before: beforeStatus ? { status: beforeStatus } : null,
+      after: afterStatus ? { status: afterStatus } : null,
+    });
+  }
+
+  log(
+    em: EntityManager,
+    employee: Employee,
+    entityType: AuditEntityType,
+    entityId: string,
+    before: Record<string, any> | null,
+    after: Record<string, any> | null,
+  ): void {
+    em.create(AuditLog, {
+      employee,
+      entityType,
+      entityId,
+      before,
+      after,
     });
   }
 
