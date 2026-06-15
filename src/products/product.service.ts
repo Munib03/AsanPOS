@@ -14,7 +14,6 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
-import { Sequence } from '../database/entites/sequence.entity';
 import * as bwipjs from 'bwip-js';
 
 

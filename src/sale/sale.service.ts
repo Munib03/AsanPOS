@@ -253,17 +253,17 @@ export class SaleService {
 
     const todayTotalSales = this.calcTotalSales(todaySales);
     const yesterdayTotalSales = this.calcTotalSales(yesterdaySales);
-    const salesPercentageChange = yesterdayTotalSales === 0
+    const salesPercentageChange = todayTotalSales + yesterdayTotalSales === 0
       ? 0
-      : ((todayTotalSales - yesterdayTotalSales) / yesterdayTotalSales) * 100;
+      : (todayTotalSales / (todayTotalSales + yesterdayTotalSales)) * 100;
 
     const costPriceMap = await this.buildCostPriceMap([...todaySales, ...yesterdaySales]);
 
     const todayTotalProfit = this.calcTotalProfit(todaySales, costPriceMap);
     const yesterdayTotalProfit = this.calcTotalProfit(yesterdaySales, costPriceMap);
-    const profitPercentageChange = yesterdayTotalProfit === 0
+    const profitPercentageChange = todayTotalProfit + yesterdayTotalProfit === 0
       ? 0
-      : ((todayTotalProfit - yesterdayTotalProfit) / yesterdayTotalProfit) * 100;
+      : (todayTotalProfit / (todayTotalProfit + yesterdayTotalProfit)) * 100;
 
     const lowStockRecords = await this.em.find(
       StockQuantity,
@@ -291,6 +291,7 @@ export class SaleService {
       lowStockProducts,
     };
   }
+
 
   private getDayRanges() {
     const now = new Date();
