@@ -4,15 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
+import { Employee } from '../database/entites/employee.entity';
 import { Inventory } from '../database/entites/inventory.entity';
 import { SaleItem } from '../database/entites/sale-item.entity';
 import { Sale } from '../database/entites/sale.entity';
 import { StockOutItem } from '../database/entites/stock-out-item.entity';
 import { StockOut } from '../database/entites/stock-out.entity';
 import { Store } from '../database/entites/store.entity';
-import { Employee } from '../database/entites/employee.entity';
 import { SequenceService } from '../sequence/sequence.service';
-import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { StockOutStatus } from '../shared/utils/stock-out-status.enum';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
@@ -35,7 +35,7 @@ export class StockOutService {
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   async findAll(store: Store) {
     const stockOuts = await this.em.findAll(StockOut, {
@@ -59,7 +59,11 @@ export class StockOutService {
     return serialize(stockOut, { populate: STOCK_OUT_POPULATE });
   }
 
-  async create(store: Store, employeeId: string, dto: CreateStockOutDto): Promise<{ message: string }> {
+  async create(
+    store: Store,
+    employeeId: string,
+    dto: CreateStockOutDto,
+  ): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
       const [sale, inventory] = await Promise.all([
         em.findOne(
@@ -74,7 +78,9 @@ export class StockOutService {
         throw new NotFoundException(`Sale with id ${dto.saleId} not found`);
 
       if (!inventory)
-        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
+        throw new NotFoundException(
+          `Inventory with id ${dto.inventoryId} not found`,
+        );
 
       const saleItemMap = new Map(
         sale.items.getItems().map((item) => [item.id, item]),
@@ -82,7 +88,10 @@ export class StockOutService {
 
       this.validateItems(dto.items, saleItemMap);
 
-      const sequence = await this.sequenceService.generateSequence('StockOut', 'STO');
+      const sequence = await this.sequenceService.generateSequence(
+        'StockOut',
+        'STO',
+      );
 
       const stockOut = em.create(StockOut, {
         inventory,
@@ -105,8 +114,7 @@ export class StockOutService {
       }
 
       const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
+      if (!employee) throw new NotFoundException('Employee not found');
 
       this.auditService.logStatusChange(
         em,
@@ -120,12 +128,11 @@ export class StockOutService {
       await em.flush();
 
       return {
+        id: `${stockOut.id}`,
         message: `Stock out created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
       };
     });
   }
-
-
 
   async update(
     store: Store,
@@ -190,8 +197,7 @@ export class StockOutService {
         }
 
         const employee = await em.findOne(Employee, { id: employeeId });
-        if (!employee)
-          throw new NotFoundException('Employee not found');
+        if (!employee) throw new NotFoundException('Employee not found');
 
         this.auditService.logStatusChange(
           em,
@@ -210,7 +216,10 @@ export class StockOutService {
     });
   }
 
-  private validateItems(items: StockOutItemDto[], saleItemMap: Map<string, SaleItem>): void {
+  private validateItems(
+    items: StockOutItemDto[],
+    saleItemMap: Map<string, SaleItem>,
+  ): void {
     for (const item of items) {
       const saleItem = saleItemMap.get(item.saleItemId);
       if (!saleItem)
