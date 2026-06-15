@@ -4,6 +4,7 @@ import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 import { RolesGuard } from '../shared/guards/role.guard';
@@ -43,10 +44,11 @@ export class PurchaseController {
   @Put(':id')
   update(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string; role: string },
     @Param('id') id: string,
     @Body() dto: UpdatePurchaseDto,
   ) {
-    return this.purchaseService.update(store, id, dto);
+    return this.purchaseService.update(store, id, user.id, dto);
   }
 
   @Delete(':id')

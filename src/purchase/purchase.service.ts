@@ -1,5 +1,3 @@
-// src/purchase/purchase.service.ts
-
 import { EntityManager, serialize } from '@mikro-orm/postgresql';
 import {
   BadRequestException,
@@ -7,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Customer } from '../database/entites/customer.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { Product } from '../database/entites/product.entity';
 import { Purchase } from '../database/entites/purchase.entity';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
@@ -14,6 +13,8 @@ import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { Store } from '../database/entites/store.entity';
 import { JournalEntryService } from '../journal/journal-entry.service';
 import { SequenceService } from '../sequence/sequence.service';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import {
@@ -32,7 +33,8 @@ export class PurchaseService {
     private readonly purchaseRepository: BaseRepository<Purchase>,
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
-  ) { }
+    private readonly auditService: AuditService,
+  ) {}
 
   async findAll(
     store: Store,
@@ -114,7 +116,6 @@ export class PurchaseService {
       const serialized = serialize(purchase, {
         populate: ['customer', 'items', 'items.product', 'sequence'],
       });
-
       return this.mapPurchaseToListItem(serialized);
     }
 
@@ -123,9 +124,7 @@ export class PurchaseService {
     try {
       const stockInItems = await this.em.find(
         StockInItem,
-        {
-          purchasedItem: { id: { $in: purchasedItemIds } },
-        },
+        { purchasedItem: { id: { $in: purchasedItemIds } } },
         {
           populate: [
             'stockIn',
@@ -145,6 +144,7 @@ export class PurchaseService {
     const serialized = serialize(purchase, {
       populate: ['customer', 'items', 'items.product', 'sequence'],
     });
+
     return this.mapPurchaseToListItem(serialized, stockInsMap);
   }
 
@@ -152,13 +152,9 @@ export class PurchaseService {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
-        throw new NotFoundException(
-          `Customer with id ${dto.customerId} not found`);
+        throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
 
-      const sequence = await this.sequenceService.generateSequence(
-        'Purchase',
-        'PUR',
-      );
+      const sequence = await this.sequenceService.generateSequence('Purchase', 'PUR');
 
       const purchase = em.create(Purchase, {
         customer,
@@ -177,16 +173,12 @@ export class PurchaseService {
       if (products.length !== dto.items.length)
         throw new NotFoundException(`One or more products not found`);
 
-      const productMap = new Map(
-        products.map((product) => [product.id, product]),
-      );
+      const productMap = new Map(products.map((product) => [product.id, product]));
 
       const purchasedItems = dto.items.map((item) => {
         const product = productMap.get(item.productId);
         if (!product)
-          throw new NotFoundException(
-            `Product with id ${item.productId} not found`,
-          );
+          throw new NotFoundException(`Product with id ${item.productId} not found`);
 
         return em.create(PurchasedItem, {
           purchase,
@@ -219,7 +211,7 @@ export class PurchaseService {
     });
   }
 
-  async update(store: Store, id: string, dto: UpdatePurchaseDto) {
+  async update(store: Store, id: string, employeeId: string, dto: UpdatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
         Purchase,
@@ -240,14 +232,24 @@ export class PurchaseService {
           purchase.status as PurchaseStatus,
           dto.status as PurchaseStatus,
         );
+
+        const employee = await em.findOne(Employee, { id: employeeId });
+        if (!employee)
+          throw new NotFoundException('Employee not found');
+
+        this.auditService.logStatusChange(
+          em,
+          employee,
+          AuditEntityType.Purchase,
+          purchase.id,
+          purchase.status,
+          dto.status,
+        );
+
         purchase.status = dto.status;
 
         if (dto.status === PurchaseStatus.DONE)
-          await this.journalEntryService.createFromPurchase(
-            em,
-            store,
-            purchase,
-          );
+          await this.journalEntryService.createFromPurchase(em, store, purchase);
       }
 
       await em.flush();
@@ -255,9 +257,7 @@ export class PurchaseService {
     });
   }
 
-  private buildStockInsMap(
-    stockInItems: StockInItem[],
-  ): Map<string, StockInDetail> {
+  private buildStockInsMap(stockInItems: StockInItem[]): Map<string, StockInDetail> {
     const stockInsMap = new Map<string, StockInDetail>();
 
     for (const item of stockInItems) {

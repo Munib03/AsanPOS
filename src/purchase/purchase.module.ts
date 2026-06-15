@@ -7,12 +7,14 @@ import { Purchase } from '../database/entites/purchase.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryModule } from '../journal/journal.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Purchase]),
     SequenceModule,
     JournalEntryModule,
+    AuditModule,
   ],
   controllers: [PurchaseController],
   providers: [

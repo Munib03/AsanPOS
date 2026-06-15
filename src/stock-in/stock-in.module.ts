@@ -7,6 +7,7 @@ import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { SequenceModule } from '../sequence/sequence.module';
 import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
 import { JournalEntryModule } from '../journal/journal.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { JournalEntryModule } from '../journal/journal.module';
     SequenceModule,
     StockQuantityModule,
     JournalEntryModule,
+    AuditModule,
   ],
   controllers: [StockInController],
   providers: [StockInService],

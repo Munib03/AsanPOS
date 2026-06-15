@@ -9,13 +9,15 @@ import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryModule } from '../journal/journal.module';
 import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Sale, PurchasedItem]),
     SequenceModule,
     JournalEntryModule,
-    StockQuantityModule, 
+    StockQuantityModule,
+    AuditModule,
   ],
   controllers: [SaleController],
   providers: [

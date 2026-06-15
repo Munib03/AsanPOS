@@ -4,12 +4,16 @@ import { Customer } from "./customer.entity";
 import { Store } from "./store.entity";
 import { Sequence } from "./sequence.entity";
 import { SaleItem } from "./sale-item.entity";
+import { SaleStatus } from "../../shared/utils/sale-status.enum";
 
 @Entity({ tableName: "sale" })
 export class Sale {
 
   @PrimaryKey({ type: "uuid" })
-  id: string = uuidv4();
+  id: string = uuidv4(); 
+  
+  @Property({ default: SaleStatus.DRAFT })
+  status: string = SaleStatus.DRAFT;
 
   @ManyToOne(() => Sequence, { fieldName: "sequence_id" })
   sequence!: Sequence;

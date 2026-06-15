@@ -10,7 +10,10 @@ import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { Store } from '../database/entites/store.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { SequenceService } from '../sequence/sequence.service';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { StockInStatus } from '../shared/utils/stock-in-status.enum';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
@@ -32,7 +35,8 @@ export class StockInService {
     private readonly em: EntityManager,
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
-  ) { }
+    private readonly auditService: AuditService,
+  ) {}
 
   async findAll(store: Store) {
     const stockIns = await this.em.findAll(StockIn, {
@@ -69,36 +73,23 @@ export class StockInService {
       );
 
       if (!purchase)
-        throw new NotFoundException(
-          `Purchase with id ${dto.purchaseId} not found`,
-        );
+        throw new NotFoundException(`Purchase with id ${dto.purchaseId} not found`);
 
       if (!inventory)
-        throw new NotFoundException(
-          `Inventory with id ${dto.inventoryId} not found`,
-        );
+        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
 
       if (purchase.status === PurchaseStatus.CANCELLED)
-        throw new BadRequestException(
-          `Cannot create stock in for a cancelled purchase`,
-        );
+        throw new BadRequestException(`Cannot create stock in for a cancelled purchase`);
 
       if (purchase.status === PurchaseStatus.DRAFT)
-        throw new BadRequestException(
-          `Cannot create stock in for a draft purchase`,
-        );
+        throw new BadRequestException(`Cannot create stock in for a draft purchase`);
 
       const purchasedItems = purchase.items.getItems();
-      const purchasedItemMap = new Map(
-        purchasedItems.map((item) => [item.id, item]),
-      );
+      const purchasedItemMap = new Map(purchasedItems.map((item) => [item.id, item]));
 
       this.validateItems(dto.items, purchasedItemMap);
 
-      const sequence = await this.sequenceService.generateSequence(
-        'StockIn',
-        'STK',
-      );
+      const sequence = await this.sequenceService.generateSequence('StockIn', 'STK');
 
       const stockIn = em.create(StockIn, {
         inventory,
@@ -131,6 +122,7 @@ export class StockInService {
   async update(
     store: Store,
     id: string,
+    employeeId: string,
     dto: UpdateStockInDto,
   ): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
@@ -173,8 +165,7 @@ export class StockInService {
 
           for (const item of stockIn.items.getItems()) {
             const purchasedItem = purchasedItemMap.get(item.purchasedItem.id)!;
-            const remaining =
-              purchasedItem.quantity - (purchasedItem.received ?? 0);
+            const remaining = purchasedItem.quantity - (purchasedItem.received ?? 0);
 
             if (item.quantity > remaining)
               throw new BadRequestException(
@@ -205,6 +196,19 @@ export class StockInService {
             }),
           );
         }
+
+        const employee = await em.findOne(Employee, { id: employeeId });
+        if (!employee)
+          throw new NotFoundException('Employee not found');
+
+        this.auditService.logStatusChange(
+          em,
+          employee,
+          AuditEntityType.StockIn,
+          stockIn.id,
+          stockIn.status,
+          dto.status,
+        );
 
         stockIn.status = dto.status;
       }
