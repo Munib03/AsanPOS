@@ -1,14 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { CashMovement } from '../database/entites/cash-movement.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 
 @Injectable()
 export class CashMovementService {
-    constructor(private readonly em: EntityManager) { }
+    constructor(
+        private readonly em: EntityManager,
+        private readonly auditService: AuditService,
+    ) { }
 
     async findAll(store: Store) {
         return this.em.findAll(CashMovement, {
@@ -32,13 +37,12 @@ export class CashMovementService {
 
     async create(store: Store, employeeId: string, dto: CreateCashMovementDto) {
         const session = await this.em.findOne(StoreSession, {
-            id: dto.sessionId,
             store,
             closedAt: null,
         });
 
         if (!session)
-            throw new NotFoundException(`Active session with id ${dto.sessionId} not found`);
+            throw new BadRequestException('No active session found. Please open a session first.');
 
         const employee = await this.em.findOne(Employee, { id: employeeId });
         if (!employee)
@@ -54,6 +58,17 @@ export class CashMovementService {
         });
 
         await this.em.persistAndFlush(cashMovement);
+
+        this.auditService.log(
+            this.em,
+            employee,
+            AuditEntityType.CashMovement,
+            cashMovement.id,
+            null,
+            { type: dto.type, amount: dto.amount, note: dto.note },
+        );
+
+        await this.em.flush();
 
         return { message: 'Cash movement created successfully.', id: cashMovement.id };
     }

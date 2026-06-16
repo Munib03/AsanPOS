@@ -43,13 +43,12 @@ export class StoreSessionController {
     return this.storeSessionService.open(store, user.id, dto);
   }
 
-  @Put('close/:id')
+  @Put('close')
   close(
     @CurrentStore() store: Store,
     @CurrentUser() user: { id: string },
-    @Param('id') id: string,
     @Body() dto: CloseSessionDto,
   ) {
-    return this.storeSessionService.close(store, user.id, id, dto);
+    return this.storeSessionService.close(store, user.id, dto);
   }
 }

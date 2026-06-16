@@ -5,6 +5,7 @@ import { RolesGuard } from '../shared/guards/role.guard';
 import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 import { CurrentStore } from '../shared/decorators/store.decorator';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
@@ -30,8 +31,9 @@ export class PaymentController {
   @Post()
   create(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
     @Body() dto: CreatePaymentDto,
   ) {
-    return this.paymentService.create(store, dto);
+    return this.paymentService.create(store, user.id, dto);
   }
 }

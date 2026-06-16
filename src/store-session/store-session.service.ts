@@ -4,13 +4,18 @@ import { StoreSession } from '../database/entites/store-session.entity';
 import { CashMovement } from '../database/entites/cash-movement.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 
 @Injectable()
 export class StoreSessionService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    private readonly em: EntityManager,
+    private readonly auditService: AuditService,
+  ) {}
 
   async findAll(store: Store) {
     return this.em.findAll(StoreSession, {
@@ -64,27 +69,35 @@ export class StoreSessionService {
 
     await this.em.persistAndFlush(session);
 
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.StoreSession,
+      session.id,
+      null,
+      { openingAmount: dto.openingAmount, openingNote: dto.openingNote },
+    );
+
+    await this.em.flush();
+
     return { message: 'Session opened successfully.', id: session.id };
   }
 
-  async close(store: Store, employeeId: string, id: string, dto: CloseSessionDto) {
+  async close(store: Store, employeeId: string, dto: CloseSessionDto) {
+    // get active session automatically
     const session = await this.em.findOne(
       StoreSession,
-      { id, store },
+      { store, closedAt: null },
       { populate: ['cashMovements'] },
     );
 
     if (!session)
-      throw new NotFoundException(`Session with id ${id} not found`);
-
-    if (session.closedAt)
-      throw new BadRequestException('Session is already closed.');
+      throw new NotFoundException('No active session found for this store.');
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    // calculate expected amount
     const cashMovements = session.cashMovements.getItems();
     const cashIn = cashMovements
       .filter(cm => cm.type === CashMovementType.CashIn)
@@ -96,11 +109,31 @@ export class StoreSessionService {
 
     const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut;
 
+    const before = {
+      openingAmount: session.openingAmount,
+      openingNote: session.openingNote,
+      openedAt: session.openedAt,
+    };
+
     session.closedBy = employee;
     session.closingAmount = dto.closingAmount;
     session.closingNote = dto.closingNote;
     session.expectedAmount = expectedAmount;
     session.closedAt = new Date();
+
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.StoreSession,
+      session.id,
+      before,
+      {
+        closingAmount: dto.closingAmount,
+        closingNote: dto.closingNote,
+        expectedAmount,
+        closedAt: session.closedAt,
+      },
+    );
 
     await this.em.flush();
 
