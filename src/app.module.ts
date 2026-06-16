@@ -18,6 +18,9 @@ import { StockInModule } from './stock-in/stock-in.module';
 import { JournalEntryModule } from './journal/journal.module';
 import { SaleModule } from './sale/sale.module';
 import { StockOutModule } from './stock-out/stock-out.module';
+import { CashMovementModule } from './cash-movements/cash-movement.module';
+import { PaymentModule } from './payments/payment.module';
+import { StoreSessionModule } from './store-session/store-session.module';
 
 
 @Module({
@@ -37,7 +40,10 @@ import { StockOutModule } from './stock-out/stock-out.module';
     StockInModule,
     JournalEntryModule,
     SaleModule,
-    StockOutModule
+    StockOutModule,
+    CashMovementModule,
+    StoreSessionModule,
+    PaymentModule
   ],
   controllers: [AppController],
   providers: [AppService],

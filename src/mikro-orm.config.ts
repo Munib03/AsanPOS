@@ -23,6 +23,9 @@ import { SaleItem } from './database/entites/sale-item.entity';
 import { StockOut } from './database/entites/stock-out.entity';
 import { StockOutItem } from './database/entites/stock-out-item.entity';
 import { AuditLog } from './database/entites/audit-log.entity';
+import { CashMovement } from './database/entites/cash-movement.entity';
+import { Payment } from './database/entites/payments.entity';
+import { StoreSession } from './database/entites/store-session.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -35,7 +38,7 @@ const config: Options<PostgreSqlDriver> = {
   entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
              Product, ProductImage, Attachment, Inventory, Customer, 
              StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, 
-             JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem, AuditLog],
+             JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem, AuditLog, CashMovement, StoreSession, Payment],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',
