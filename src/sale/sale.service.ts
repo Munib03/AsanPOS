@@ -267,6 +267,7 @@ export class SaleService {
     });
   }
 
+
   async remove(store: Store, id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
       const sale = await em.findOne(
@@ -295,6 +296,7 @@ export class SaleService {
       return { message: `Sale with id ${id} deleted successfully.` };
     });
   }
+
 
   async getDashboardStats(store: Store): Promise<DashboardStats> {
     const { todayStart, todayEnd, yesterdayStart, yesterdayEnd } = this.getDayRanges();
