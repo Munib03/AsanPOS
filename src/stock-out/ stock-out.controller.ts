@@ -12,16 +12,17 @@ import { UpdateStockOutDto } from './dto/update-stock-out.dto';
 
 @Controller('stock-out')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin)
 export class StockOutController {
   constructor(private readonly stockOutService: StockOutService) { }
 
   @Get()
+  @Roles(Role.Admin)
   findAll(@CurrentStore() store: Store) {
     return this.stockOutService.findAll(store);
   }
 
   @Get(':id')
+  @Roles(Role.Admin)
   findOne(
     @CurrentStore() store: Store,
     @Param('id') id: string,
