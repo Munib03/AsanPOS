@@ -15,16 +15,50 @@ export class StoreSessionService {
   constructor(
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     return this.em.findAll(StoreSession, {
       where: { store },
       populate: ['openedBy', 'closedBy'],
+      fields: [
+        'id',
+        'openingAmount',
+        'openingNote',
+        'closingAmount',
+        'expectedAmount',
+        'closingNote',
+        'openedAt',
+        'closedAt',
+        'openedBy.id',
+        'openedBy.name',
+        'openedBy.email',
+        'closedBy.id',
+        'closedBy.name',
+        'closedBy.email',
+      ],
       orderBy: { openedAt: 'DESC' },
     });
   }
 
+  async getActiveSession(store: Store) {
+    return this.em.find(StoreSession, {
+      store,
+      closedAt: null,
+    }, {
+      populate: ['openedBy'],
+      fields: [
+        'id',
+        'openingAmount',
+        'openingNote',
+        'openedAt',
+        'openedBy.id',
+        'openedBy.name',
+        'openedBy.email',
+      ],
+      orderBy: { openedAt: 'DESC' },
+    });
+  }
   async findOne(store: Store, id: string) {
     const session = await this.em.findOne(
       StoreSession,
@@ -37,24 +71,8 @@ export class StoreSessionService {
     return session;
   }
 
-  async getActiveSession(store: Store) {
-    const session = await this.em.findOne(StoreSession, {
-      store,
-      closedAt: null,
-    });
-
-    return session;
-  }
 
   async open(store: Store, employeeId: string, dto: OpenSessionDto) {
-    const existing = await this.em.findOne(StoreSession, {
-      store,
-      closedAt: null,
-    });
-
-    if (existing)
-      throw new BadRequestException('A session is already open for this store.');
-
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
       throw new NotFoundException('Employee not found');
@@ -82,6 +100,7 @@ export class StoreSessionService {
 
     return { message: 'Session opened successfully.', id: session.id };
   }
+
 
   async close(store: Store, employeeId: string, dto: CloseSessionDto) {
     // get active session automatically
