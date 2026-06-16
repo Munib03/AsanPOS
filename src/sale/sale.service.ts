@@ -50,6 +50,7 @@ export class SaleService {
     private readonly auditService: AuditService,
   ) { }
 
+
   async findAll(
     store: Store,
     query: PaginateQuery,
@@ -97,6 +98,7 @@ export class SaleService {
     return { data, meta };
   }
 
+
   async findOne(store: Store, id: string): Promise<SaleListItem> {
     const sale = await this.em.findOne(
       Sale,
@@ -121,6 +123,7 @@ export class SaleService {
       ),
     };
   }
+
 
   async create(store: Store, employeeId: string, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {
@@ -164,9 +167,7 @@ export class SaleService {
         const available = stockRecord?.quantity ?? 0;
 
         if (available < item.quantity)
-          throw new BadRequestException(
-            `Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${available}.`,
-          );
+          throw new BadRequestException(`Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${available}.`);
       }
 
       const saleItems = dto.items.map((item) => {
@@ -225,6 +226,7 @@ export class SaleService {
       };
     });
   }
+
 
   async update(store: Store, id: string, employeeId: string, dto: UpdateSaleDto) {
     return await this.em.transactional(async (em) => {
@@ -342,6 +344,20 @@ export class SaleService {
       inventoryName: record.inventory.name ?? '',
     }));
 
+    const outOfStockRecords = await this.em.find(
+      StockQuantity,
+      { inventory: { store }, quantity: { $gte: 0, $lte: 0 } },
+      { populate: ['product', 'inventory'] },
+    );
+
+    const outOfStockProducts = outOfStockRecords.map((record) => ({
+      id: record.product.id,
+      name: record.product.name ?? '',
+      price: record.product.price ?? 0,
+      quantity: record.quantity ?? 0,
+      inventoryName: record.inventory.name ?? '',
+    }));
+
     return {
       todaySales: {
         total: todayTotalSales,
@@ -352,6 +368,7 @@ export class SaleService {
         percentageChange: Math.round(profitPercentageChange * 100) / 100,
       },
       lowStockProducts,
+      outOfStockProducts,
     };
   }
 
@@ -437,8 +454,6 @@ export class SaleService {
 
     const allowedTransitions = transitions.get(currentStatus) ?? [];
     if (!allowedTransitions.includes(newStatus))
-      throw new BadRequestException(
-        `Cannot transition from '${currentStatus}' to '${newStatus}'.`,
-      );
+      throw new BadRequestException(`Cannot transition from '${currentStatus}' to '${newStatus}'.`);
   }
 }

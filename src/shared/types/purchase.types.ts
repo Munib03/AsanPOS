@@ -41,6 +41,6 @@ export interface PurchaseListItem {
     address?: string;
   };
   items: PurchaseItemType[];
-  stockIns: StockInDetail[]; // <-- moved to purchase level
+  stockIns: StockInDetail[]; 
   totalPrice: number;
 }

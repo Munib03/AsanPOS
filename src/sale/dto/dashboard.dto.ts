@@ -14,4 +14,12 @@ export interface DashboardStats {
     quantity: number;
     inventoryName: string;
   }[];
+
+  outOfStockProducts: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    inventoryName: string;
+  }[];
 }
