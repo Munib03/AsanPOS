@@ -1,5 +1,5 @@
 export enum SaleStatus {
-  DRAFT = 'draft',
-  DONE = 'done',
-  CANCELLED = 'cancelled',
+  DRAFT = 'Draft',
+  DONE = 'Done',
+  CANCELLED = 'Cancelled',
 }
