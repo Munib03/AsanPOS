@@ -5,9 +5,13 @@ import { CustomerController } from './customer.controller';
 import { CustomerService } from './customer.service';
 import { Customer } from '../database/entites/customer.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [MikroOrmModule.forFeature([Customer])],
+  imports: [
+    MikroOrmModule.forFeature([Customer]),
+    AuditModule,
+  ],
   controllers: [CustomerController],
   providers: [
     CustomerService,

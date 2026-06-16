@@ -10,6 +10,8 @@ import { Employee } from '../database/entites/employee.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { Store } from '../database/entites/store.entity';
 import { QueueService } from '../queue/queue.service';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { Role } from '../shared/utils/role.enum';
@@ -23,37 +25,23 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
+    private readonly auditService: AuditService,
   ) { }
 
   async findAll(store: Store) {
     const employees = await this.em.findAll(Employee, {
       where: { store },
       fields: [
-        'id',
-        'email',
-        'name',
-        'phone',
-        'role',
-        'firstName',
-        'lastName',
-        'imageUrl',
-        'dob',
-        'gender',
-        'verifiedAt',
+        'id', 'email', 'name', 'phone', 'role',
+        'firstName', 'lastName', 'imageUrl', 'dob', 'gender', 'verifiedAt',
       ],
     });
 
-    return serialize(employees, {
-      forceObject: true,
-    });
+    return serialize(employees, { forceObject: true });
   }
 
   async findOne(id: string) {
-    const employee = await this.em.findOne(
-      Employee,
-      { id },
-      { populate: ['store'] },
-    );
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee) throw new NotFoundException('Employee not found');
 
     return {
@@ -72,20 +60,14 @@ export class EmployeeService {
     };
   }
 
-
-  async employeeRegister(dto: CreateEmployeeDto, store: Store) {
-    const existing = await this.em.findOne(Employee, {
-      email: dto.email,
-    });
+  async employeeRegister(dto: CreateEmployeeDto, store: Store, employeeId: string) {
+    const existing = await this.em.findOne(Employee, { email: dto.email });
 
     if (existing) {
       if (existing.verifiedAt)
         throw new BadRequestException('Email already in use');
 
-      await this.em.nativeDelete(SecurityAction, {
-        employee: existing,
-      });
-
+      await this.em.nativeDelete(SecurityAction, { employee: existing });
       await this.em.remove(existing);
       await this.em.flush();
     }
@@ -118,8 +100,23 @@ export class EmployeeService {
     });
 
     employee.verifiedAt = new Date();
-    await this.em.persistAndFlush(employee);
-    await this.em.persistAndFlush(securityAction);
+    this.em.persist(employee);
+    this.em.persist(securityAction);
+
+    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
+    if (!adminEmployee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      this.em,
+      adminEmployee,
+      AuditEntityType.Employee,
+      employee.id,
+      null,
+      { name: employee.name, email: employee.email, role: employee.role },
+    );
+
+    await this.em.flush();
 
     return {
       message: 'Employee registered successfully',
@@ -128,29 +125,45 @@ export class EmployeeService {
     };
   }
 
-  async remove(id: string) {
+  async remove(id: string, employeeId: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
+    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
+    if (!adminEmployee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      this.em,
+      adminEmployee,
+      AuditEntityType.Employee,
+      employee.id,
+      { name: employee.name, email: employee.email, role: employee.role },
+      null,
+    );
+
+    await this.em.flush();
     await this.em.removeAndFlush(employee);
 
     return { message: `Employee ${id} deleted successfully` };
   }
 
-  async updateEmployeeInfo(id: string, dto: UpdateEmployeeDto) {
+  async updateEmployeeInfo(id: string, employeeId: string, dto: UpdateEmployeeDto) {
     if (!dto) return { message: 'No changes to update' };
 
-    const employee = await this.em.findOne(
-      Employee,
-      { id },
-      { populate: ['store'] },
-    );
-
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
     if (dto.role) throw new BadRequestException('Admin role cannot be updated');
+
+    const before = {
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      role: employee.role,
+    };
 
     if (dto.attachmentId) {
       const attachment = await this.attachmentService.claimAttachment(
@@ -158,15 +171,12 @@ export class EmployeeService {
         employee.id,
         AttachmentEntityType.EMPLOYEE,
       );
-
       employee.imageUrl = attachment.imageUrl;
     }
 
     if (dto.password) {
       if (!dto.oldPassword)
-        throw new BadRequestException(
-          'Old password is required to change password',
-        );
+        throw new BadRequestException('Old password is required to change password');
 
       const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
       if (!isMatch) throw new BadRequestException('Old password is incorrect');
@@ -176,17 +186,11 @@ export class EmployeeService {
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
-      const existingStore = await this.em.findOne(Store, {
-        name: dto.storeName,
-      });
+      const existingStore = await this.em.findOne(Store, { name: dto.storeName });
       if (existingStore)
-        throw new BadRequestException(
-          `Store with name ${dto.storeName} already exists`,
-        );
+        throw new BadRequestException(`Store with name ${dto.storeName} already exists`);
 
       employee.store.name = dto.storeName;
     }
@@ -194,9 +198,7 @@ export class EmployeeService {
     let emailChange = false;
     if (dto.email) {
       if (dto.email === employee.email)
-        throw new BadRequestException(
-          'New email is the same as the current one',
-        );
+        throw new BadRequestException('New email is the same as the current one');
 
       const existing = await this.em.findOne(Employee, { email: dto.email });
       if (existing) throw new BadRequestException('Email already in use');
@@ -221,6 +223,25 @@ export class EmployeeService {
 
     const { storeName, email, oldPassword, attachmentId, ...rest } = dto;
     this.em.assign(employee, stripUndefined(rest));
+
+    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
+    if (!adminEmployee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      this.em,
+      adminEmployee,
+      AuditEntityType.Employee,
+      employee.id,
+      before,
+      {
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone,
+        role: employee.role,
+      },
+    );
+
     await this.em.flush();
 
     if (emailChange)

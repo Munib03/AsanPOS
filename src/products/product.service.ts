@@ -4,9 +4,12 @@ import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
 import { Attachment } from '../database/entites/attachment.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { AttachmentService } from '../attachments/attachment.service';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -16,7 +19,6 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
 import { generateBarcode } from '../shared/utils/generate.barcode';
 
-
 @Injectable()
 export class ProductService {
   constructor(
@@ -25,8 +27,8 @@ export class ProductService {
     private readonly attachmentService: AttachmentService,
     private readonly productRepository: BaseRepository<Product>,
     private readonly sequenceService: SequenceService,
+    private readonly auditService: AuditService,
   ) { }
-
 
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
@@ -35,9 +37,7 @@ export class ProductService {
         populate: ['images', 'categories'],
         fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
       },
-      {
-        searchable: ['name', 'categories.name'],
-      },
+      { searchable: ['name', 'categories.name'] },
       query,
     );
 
@@ -46,7 +46,6 @@ export class ProductService {
       meta,
     };
   }
-
 
   async findOne(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
@@ -61,13 +60,8 @@ export class ProductService {
     return serialize(product, { populate: ['images', 'categories'] });
   }
 
-
-  async create(store: Store, dto: CreateProductDto) {
-    const category = await this.em.findOne(Category, {
-      name: dto.categoryName,
-      store,
-    });
-
+  async create(store: Store, employeeId: string, dto: CreateProductDto) {
+    const category = await this.em.findOne(Category, { name: dto.categoryName, store });
     if (!category)
       throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
@@ -75,10 +69,7 @@ export class ProductService {
     const sequenceText = this.sequenceService.formatSequence(sequence);
 
     const product = this.em.create(Product, {
-      ...stripUndefined({
-        name: dto.name,
-        price: dto.price,
-      }),
+      ...stripUndefined({ name: dto.name, price: dto.price }),
       updatedAt: null,
       sequence,
       store,
@@ -99,20 +90,31 @@ export class ProductService {
       });
 
       attachments.map((attachment) =>
-        this.em.create(ProductImage, {
-          product,
-          imageUrl: attachment.imageUrl,
-        }),
+        this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
       );
     }
 
     await this.em.persistAndFlush(product);
 
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.Product,
+      product.id,
+      null,
+      { name: product.name, price: product.price, category: dto.categoryName },
+    );
+
+    await this.em.flush();
+
     return { message: 'Product created Successfully!' };
   }
 
-
-  async update(store: Store, id: string, dto: UpdateProductDto) {
+  async update(store: Store, id: string, employeeId: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
       {
@@ -121,14 +123,14 @@ export class ProductService {
       },
     );
 
-    this.em.assign(
-      product,
-      stripUndefined({
-        name: dto.name,
-        price: dto.price,
-      }),
-    );
-    
+    const before = {
+      name: product.name,
+      price: product.price,
+      category: product.categories.getItems().map(c => c.name).join(', '),
+    };
+
+    this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
+
     if (dto.name || dto.price) {
       if (!product.sequence)
         throw new NotFoundException(`Sequence not found for product ${id}`);
@@ -139,11 +141,7 @@ export class ProductService {
     }
 
     if (dto.categoryName) {
-      const category = await this.em.findOne(Category, {
-        name: dto.categoryName,
-        store,
-      });
-
+      const category = await this.em.findOne(Category, { name: dto.categoryName, store });
       if (!category)
         throw new NotFoundException(`Category not found: ${dto.categoryName}`);
 
@@ -162,23 +160,35 @@ export class ProductService {
       });
 
       attachments.map((attachment) =>
-        this.em.create(ProductImage, {
-          product,
-          imageUrl: attachment.imageUrl,
-        }),
+        this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
       );
     }
 
     product.updatedAt = new Date();
+
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.Product,
+      product.id,
+      before,
+      {
+        name: product.name,
+        price: product.price,
+        category: dto.categoryName ?? before.category,
+      },
+    );
+
     await this.em.flush();
 
-    return {
-      message: `Product with id [${product.id}] updated successfully.`,
-    };
+    return { message: `Product with id [${product.id}] updated successfully.` };
   }
 
-
-  async remove(store: Store, id: string) {
+  async remove(store: Store, id: string, employeeId: string) {
     await this.em.transactional(async (em) => {
       const product = await this.productRepository.findOneOrFail(
         { id, store },
@@ -188,15 +198,27 @@ export class ProductService {
         },
       );
 
+      const employee = await em.findOne(Employee, { id: employeeId });
+      if (!employee)
+        throw new NotFoundException('Employee not found');
+
+      this.auditService.log(
+        em,
+        employee,
+        AuditEntityType.Product,
+        product.id,
+        { name: product.name, price: product.price },
+        null,
+      );
+
+      await em.flush();
+
       for (const image of product.images.getItems())
         if (image.imageUrl)
           await this.minioService.deleteFile(image.imageUrl);
 
       const attachments = await em.findAll(Attachment, {
-        where: {
-          entityId: id,
-          entityType: AttachmentEntityType.PRODUCT,
-        },
+        where: { entityId: id, entityType: AttachmentEntityType.PRODUCT },
       });
 
       for (const attachment of attachments)
@@ -209,7 +231,6 @@ export class ProductService {
 
     return { message: `Product ${id} deleted successfully` };
   }
-
 
   async deleteProductImage(imageId: string): Promise<{ message: string }> {
     const image = await this.em.findOne(ProductImage, { id: imageId });

@@ -24,19 +24,18 @@ import { EmployeeService } from './employee.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class EmployeeController {
-  constructor(private readonly employeeService: EmployeeService) {}
+  constructor(private readonly employeeService: EmployeeService) { }
 
   @Post('register')
   registerEmployee(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
     @Body() dto: CreateEmployeeDto,
   ) {
     return this.employeeService.employeeRegister(
-      {
-        ...dto,
-        storeName: store.name,
-      },
+      { ...dto, storeName: store.name },
       store,
+      user.id,
     );
   }
 
@@ -56,11 +55,19 @@ export class EmployeeController {
     @Body() dto: UpdateEmployeeDto,
   ) {
     const targetId = dto.id ?? user.id;
-    return this.employeeService.updateEmployeeInfo(targetId, dto);
+    return this.employeeService.updateEmployeeInfo(targetId, user.id, dto);
   }
 
   @Delete('profile-pic')
   deleteEmployeeImage(@CurrentUser() user: Employee) {
     return this.employeeService.deleteEmployeeImage(user.id);
+  }
+
+  @Delete(':id')
+  remove(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+  ) {
+    return this.employeeService.remove(id, user.id);
   }
 }

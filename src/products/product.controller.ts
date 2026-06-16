@@ -4,19 +4,18 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 import { RolesGuard } from '../shared/guards/role.guard';
 import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 
-
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
-
 export class ProductController {
-  constructor(private readonly productService: ProductService) { }
+  constructor(private readonly productService: ProductService) {}
 
   @Get()
   findAll(
@@ -26,7 +25,7 @@ export class ProductController {
     return this.productService.findAll(store, query);
   }
 
-  @Get(":id")
+  @Get(':id')
   findOne(
     @CurrentStore() store: Store,
     @Param('id') id: string,
@@ -37,31 +36,33 @@ export class ProductController {
   @Post()
   create(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
     @Body() dto: CreateProductDto,
   ) {
-    return this.productService.create(store, dto);
+    return this.productService.create(store, user.id, dto);
   }
 
   @Put(':id')
   update(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
   ) {
-    return this.productService.update(store, id, dto);
+    return this.productService.update(store, id, user.id, dto);
   }
 
   @Delete(':id')
   remove(
     @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
     @Param('id') id: string,
   ) {
-    return this.productService.remove(store, id);
+    return this.productService.remove(store, id, user.id);
   }
 
   @Delete('images/:imageId')
   deleteProductImage(@Param('imageId') imageId: string) {
     return this.productService.deleteProductImage(imageId);
   }
-
 }

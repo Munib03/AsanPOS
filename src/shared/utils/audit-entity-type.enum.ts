@@ -8,4 +8,6 @@ export enum AuditEntityType {
   Product = 'product',
   Customer = 'customer',
   Inventory = 'inventory',
+  Store = 'store',
+  Employee = 'employee',
 }

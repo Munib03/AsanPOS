@@ -18,4 +18,4 @@ import { AuditModule } from '../audit/audit.module';
     },
   ],
 })
-export class CategoryModule {}
+export class CategoryModule { }

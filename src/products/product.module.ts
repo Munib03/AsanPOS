@@ -9,12 +9,14 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { AttachmentModule } from '../attachments/attachment.module';
 import { SequenceModule } from '../sequence/sequence.module';
 import { SequenceService } from '../sequence/sequence.service';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Product]),
     AttachmentModule,
     SequenceModule,
+    AuditModule,
   ],
   controllers: [ProductController],
   providers: [

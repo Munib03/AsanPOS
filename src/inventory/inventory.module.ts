@@ -5,10 +5,12 @@ import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
 import { Inventory } from '../database/entites/inventory.entity';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature([Inventory]),
+    AuditModule,
   ],
   controllers: [InventoryController],
   providers: [
