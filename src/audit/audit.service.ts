@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { AuditLog } from '../database/entites/audit-log.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 
@@ -10,7 +11,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 export class AuditService {
   constructor(
     private readonly auditRepository: BaseRepository<AuditLog>,
-  ) {}
+  ) { }
 
   logStatusChange(
     em: EntityManager,
@@ -24,6 +25,7 @@ export class AuditService {
       employee,
       entityType,
       entityId,
+      actionType: AuditActionType.Update,
       before: beforeStatus ? { status: beforeStatus } : null,
       after: afterStatus ? { status: afterStatus } : null,
     });
@@ -37,10 +39,20 @@ export class AuditService {
     before: Record<string, any> | null,
     after: Record<string, any> | null,
   ): void {
+    let actionType: AuditActionType;
+
+    if (before === null && after !== null)
+      actionType = AuditActionType.Create;
+    else if (before !== null && after === null)
+      actionType = AuditActionType.Delete;
+    else
+      actionType = AuditActionType.Update;
+
     em.create(AuditLog, {
       employee,
       entityType,
       entityId,
+      actionType,
       before,
       after,
     });
@@ -56,6 +68,7 @@ export class AuditService {
           'id',
           'entityType',
           'entityId',
+          'actionType',
           'before',
           'after',
           'createdAt',
@@ -64,7 +77,7 @@ export class AuditService {
           'employee.email',
         ],
       },
-      { searchable: [] },
+      { searchable: ['entityType'] },
       query,
     );
 

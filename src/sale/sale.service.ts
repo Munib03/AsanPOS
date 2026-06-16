@@ -191,9 +191,6 @@ export class SaleService {
         );
       }
 
-      await em.populate(sale, ['items', 'items.product', 'customer']);
-      await this.journalEntryService.createFromSale(em, store, sale);
-
       const employee = await em.findOne(Employee, { id: employeeId });
       if (!employee)
         throw new NotFoundException('Employee not found');
@@ -247,6 +244,11 @@ export class SaleService {
         const employee = await em.findOne(Employee, { id: employeeId });
         if (!employee)
           throw new NotFoundException('Employee not found');
+
+        if (dto.status === SaleStatus.DONE) {
+          await em.populate(sale, ['items', 'items.product', 'customer']);
+          await this.journalEntryService.createFromSale(em, store, sale);
+        }
 
         this.auditService.logStatusChange(
           em,
@@ -351,6 +353,8 @@ export class SaleService {
     };
   }
 
+
+
   private getDayRanges() {
     const now = new Date();
 
@@ -380,6 +384,7 @@ export class SaleService {
     );
   }
 
+
   private async buildCostPriceMap(sales: Sale[]): Promise<Map<string, number>> {
     const productIds = [
       ...new Set(
@@ -407,6 +412,7 @@ export class SaleService {
     return costPriceMap;
   }
 
+
   private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
     return sales.reduce(
       (sum, sale) =>
@@ -418,6 +424,7 @@ export class SaleService {
       0,
     );
   }
+
 
   private validateSaleTransition(currentStatus: SaleStatus, newStatus: SaleStatus): void {
     const transitions = new Map([

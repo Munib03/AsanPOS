@@ -27,7 +27,7 @@ export class CustomerService {
     private readonly em: EntityManager,
     private readonly customerRepository: BaseRepository<Customer>,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store, query: PaginateQuery) {
     const [customers, meta] = await this.customerRepository.findAndPaginate(
@@ -107,11 +107,30 @@ export class CustomerService {
       { notFoundMessage: `Customer with id ${id} not found` },
     );
 
-    const phone = await this.em.findOne(Customer, { phone: dto.phone, store: customer.store });
-    if (phone && phone.id !== id)
-      throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
+    if (dto.phone !== undefined) {
+      const phone = await this.em.findOne(Customer, {
+        phone: dto.phone,
+        store: customer.store,
+      });
+      if (phone && phone.id !== id)
+        throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
+    }
 
-    const before = { name: customer.name, phone: customer.phone, address: customer.address };
+    const before: Record<string, any> = {};
+    const after: Record<string, any> = {};
+
+    if (dto.name !== undefined && dto.name !== customer.name) {
+      before.name = customer.name;
+      after.name = dto.name;
+    }
+    if (dto.phone !== undefined && dto.phone !== customer.phone) {
+      before.phone = customer.phone;
+      after.phone = dto.phone;
+    }
+    if (dto.address !== undefined && dto.address !== customer.address) {
+      before.address = customer.address;
+      after.address = dto.address;
+    }
 
     this.em.assign(customer, stripUndefined(dto));
 
@@ -119,19 +138,23 @@ export class CustomerService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    this.auditService.log(
-      this.em,
-      employee,
-      AuditEntityType.Customer,
-      customer.id,
-      before,
-      { name: customer.name, phone: customer.phone, address: customer.address },
-    );
+    const hasChanges = Object.keys(before).length > 0;
+    if (hasChanges) {
+      this.auditService.log(
+        this.em,
+        employee,
+        AuditEntityType.Customer,
+        customer.id,
+        before,
+        after,
+      );
+    }
 
     await this.em.flush();
 
     return { message: `Customer with id ${id} updated successfully.` };
   }
+
 
   async remove(id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {

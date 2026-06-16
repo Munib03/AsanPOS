@@ -12,16 +12,19 @@ export class AuditLog {
   employee!: Employee;
 
   @Property({ type: 'json', nullable: true })
-  before?: Record<string, any>;
+  before?: Record<string, any> | null;
 
   @Property({ type: 'json', nullable: true })
-  after?: Record<string, any>;
+  after?: Record<string, any> | null;
 
   @Property({ fieldName: 'entity_type' })
   entityType!: string;
 
   @Property({ fieldName: 'entity_id', type: 'uuid', nullable: true })
   entityId?: string;
+
+  @Property({ fieldName: 'action_type', nullable: true })
+  actionType?: string;
 
   @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
