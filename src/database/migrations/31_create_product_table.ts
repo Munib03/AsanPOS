@@ -11,7 +11,7 @@ export async function up(knex: Knex): Promise<void> {
         .defaultTo(knex.raw('gen_random_uuid()'));
 
       table.string('name');
-      table.string('scanner_id');
+      // table.string('scanner_id');
       table.decimal('price', 10, 2);
 
       table.timestamp('created_at').defaultTo(knex.fn.now());

@@ -397,6 +397,15 @@ export class SaleService {
       );
 
       if (payment.amount === totalAmount) {
+        this.auditService.logStatusChange(
+          em,
+          employee,
+          AuditEntityType.JournalEntry,
+          journalEntry.id,
+          JournalEntryStatus.PENDING,
+          JournalEntryStatus.DONE,
+        );
+        
         journalEntry.status = JournalEntryStatus.DONE;
       }
 
