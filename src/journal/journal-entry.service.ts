@@ -16,7 +16,7 @@ export class JournalEntryService {
     private readonly sequenceService: SequenceService,
     private readonly em: EntityManager,
     private readonly journalEntryRepository: BaseRepository<JournalEntry>,
-  ) {}
+  ) { }
 
   async findAll(store: Store, query: PaginateQuery) {
     const [journalEntries, meta] =
@@ -157,7 +157,7 @@ export class JournalEntryService {
     em: EntityManager,
     store: Store,
     sale: Sale,
-  ): Promise<void> {
+  ): Promise<JournalEntry> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
     if (!defaultAccount)
@@ -201,5 +201,7 @@ export class JournalEntryService {
       account: defaultAccount,
       credit: totalAmount,
     });
+
+    return journalEntry;
   }
 }

@@ -30,6 +30,7 @@ import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { DashboardStats } from './dto/dashboard.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
+import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 
 export interface SaleListItem {
   id: string;
@@ -54,7 +55,7 @@ export class SaleService {
     private readonly journalEntryService: JournalEntryService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(
     store: Store,
@@ -281,7 +282,6 @@ export class SaleService {
           );
       }
 
-      // 1. create sale
       const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
       const sale = em.create(Sale, {
         customer,
@@ -291,7 +291,6 @@ export class SaleService {
       });
       await em.persistAndFlush(sale);
 
-      // 2. create sale items
       const saleItems = dto.items.map((item) => {
         const product = productMap.get(item.productId)!;
         return em.create(SaleItem, {
@@ -312,9 +311,8 @@ export class SaleService {
         SaleStatus.DRAFT,
       );
 
-      // 3. mark sale as done -> triggers journal entry
       await em.populate(sale, ['items', 'items.product', 'customer']);
-      await this.journalEntryService.createFromSale(em, store, sale);
+      const journalEntry = await this.journalEntryService.createFromSale(em, store, sale);
 
       this.auditService.logStatusChange(
         em,
@@ -326,7 +324,6 @@ export class SaleService {
       );
       sale.status = SaleStatus.DONE;
 
-      // 4. create stock-out (pending)
       const stockOutSequence = await this.sequenceService.generateSequence('StockOut', 'STO');
       const stockOut = em.create(StockOut, {
         inventory,
@@ -357,7 +354,6 @@ export class SaleService {
 
       await em.flush();
 
-      // 5. mark stock-out as done -> deducts stock (only place this happens)
       for (const item of dto.items) {
         const product = productMap.get(item.productId)!;
         await this.stockQuantityService.decreaseStockQuantity(
@@ -378,7 +374,6 @@ export class SaleService {
       );
       stockOut.status = StockOutStatus.DONE;
 
-      // 6. create payment
       const totalAmount = dto.items.reduce(
         (sum, item) => sum + item.quantity * item.unitPrice,
         0,
@@ -400,6 +395,10 @@ export class SaleService {
         null,
         { saleId: sale.id, amount: totalAmount, status: PaymentStatus.Done },
       );
+
+      if (payment.amount === totalAmount) {
+        journalEntry.status = JournalEntryStatus.DONE;
+      }
 
       await em.flush();
 
