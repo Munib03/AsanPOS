@@ -9,11 +9,22 @@ import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryModule } from '../journal/journal.module';
 import { StockQuantityModule } from '../stock-quantity/stock-quantity.module';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
+import { StoreSession } from '../database/entites/store-session.entity';
+import { StockOut } from '../database/entites/stock-out.entity';
+import { StockOutItem } from '../database/entites/stock-out-item.entity';
+import { Payment } from '../database/entites/payments.entity';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature([Sale, PurchasedItem]),
+    MikroOrmModule.forFeature([
+      Sale,
+      PurchasedItem,
+      StoreSession,
+      StockOut,
+      StockOutItem,
+      Payment,
+    ]),
     SequenceModule,
     JournalEntryModule,
     StockQuantityModule,

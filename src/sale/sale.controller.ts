@@ -38,6 +38,15 @@ export class SaleController {
         return this.saleService.findOne(store, id);
     }
 
+    @Post('checkout')
+    checkout(
+        @CurrentStore() store: Store,
+        @CurrentUser() user: { id: string; role: string },
+        @Body() dto: CreateSaleDto,
+    ) {
+        return this.saleService.checkout(store, user.id, dto);
+    }
+
     @Post()
     create(
         @CurrentStore() store: Store,
