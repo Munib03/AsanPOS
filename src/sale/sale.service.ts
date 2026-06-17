@@ -24,6 +24,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { DashboardStats } from './dto/dashboard.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { StoreSession } from '../database/entites/store-session.entity';
 
 export interface SaleListItem {
   id: string;
@@ -130,6 +131,15 @@ export class SaleService {
       const customer = await em.findOne(Customer, { id: dto.customerId });
       if (!customer)
         throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
+
+      const activeSession = await em.findOne(StoreSession, {
+        store,
+        openedBy: { id: employeeId },
+        closedAt: null,
+      });
+
+      if (!activeSession)
+        throw new BadRequestException('No active session found. Please open a session first.');
 
       const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
 

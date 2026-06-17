@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { StoreSession } from '../database/entites/store-session.entity';
-import { CashMovement } from '../database/entites/cash-movement.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { AuditService } from '../audit/audit.service';
@@ -15,7 +14,7 @@ export class StoreSessionService {
   constructor(
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   async findAll(store: Store) {
     return this.em.findAll(StoreSession, {
@@ -41,41 +40,83 @@ export class StoreSessionService {
     });
   }
 
-  async getActiveSession(store: Store) {
-    return this.em.find(StoreSession, {
-      store,
-      closedAt: null,
-    }, {
-      populate: ['openedBy'],
-      fields: [
-        'id',
-        'openingAmount',
-        'openingNote',
-        'openedAt',
-        'openedBy.id',
-        'openedBy.name',
-        'openedBy.email',
-      ],
-      orderBy: { openedAt: 'DESC' },
-    });
-  }
   async findOne(store: Store, id: string) {
     const session = await this.em.findOne(
       StoreSession,
       { id, store },
-      { populate: ['openedBy', 'closedBy', 'payments', 'cashMovements'] },
+      {
+        populate: ['openedBy', 'closedBy', 'payments', 'cashMovements'],
+        fields: [
+          'id',
+          'openingAmount',
+          'openingNote',
+          'closingAmount',
+          'expectedAmount',
+          'closingNote',
+          'openedAt',
+          'closedAt',
+          'openedBy.id',
+          'openedBy.name',
+          'openedBy.email',
+          'closedBy.id',
+          'closedBy.name',
+          'closedBy.email',
+          'payments.id',
+          'payments.amount',
+          'payments.note',
+          'payments.status',
+          'payments.createdAt',
+          'cashMovements.id',
+          'cashMovements.type',
+          'cashMovements.amount',
+          'cashMovements.note',
+          'cashMovements.status',
+          'cashMovements.createdAt',
+        ],
+      },
     );
+
     if (!session)
       throw new NotFoundException(`Session with id ${id} not found`);
 
     return session;
   }
 
+  async getActiveSession(store: Store) {
+    return this.em.find(
+      StoreSession,
+      { store, closedAt: null },
+      {
+        populate: ['openedBy'],
+        fields: [
+          'id',
+          'openingAmount',
+          'openingNote',
+          'openedAt',
+          'openedBy.id',
+          'openedBy.name',
+          'openedBy.email',
+        ],
+        orderBy: { openedAt: 'DESC' },
+      },
+    );
+  }
+
+  async getMyActiveSession(employeeId: string): Promise<StoreSession | null> {
+    return this.em.findOne(StoreSession, {
+      openedBy: { id: employeeId },
+      closedAt: null,
+    });
+  }
 
   async open(store: Store, employeeId: string, dto: OpenSessionDto) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
       throw new NotFoundException('Employee not found');
+
+    const existing = await this.getMyActiveSession(employeeId);
+    if (existing)
+      throw new BadRequestException('You already have an active session open.');
 
     const session = this.em.create(StoreSession, {
       store,
@@ -101,17 +142,15 @@ export class StoreSessionService {
     return { message: 'Session opened successfully.', id: session.id };
   }
 
-
   async close(store: Store, employeeId: string, dto: CloseSessionDto) {
-    // get active session automatically
     const session = await this.em.findOne(
       StoreSession,
-      { store, closedAt: null },
-      { populate: ['cashMovements'] },
+      { store, openedBy: { id: employeeId }, closedAt: null },
+      { populate: ['cashMovements', 'payments'] },
     );
 
     if (!session)
-      throw new NotFoundException('No active session found for this store.');
+      throw new NotFoundException('You have no active session to close.');
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
@@ -126,7 +165,11 @@ export class StoreSessionService {
       .filter(cm => cm.type === CashMovementType.CashOut)
       .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
 
-    const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut;
+    const salePayments = session.payments
+      .getItems()
+      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+
+    const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
 
     const before = {
       openingAmount: session.openingAmount,

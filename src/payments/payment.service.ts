@@ -7,8 +7,8 @@ import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
-import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
+import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class PaymentService {
@@ -44,6 +44,7 @@ export class PaymentService {
 
     const session = await this.em.findOne(StoreSession, {
       store,
+      openedBy: { id: employeeId },
       closedAt: null,
     });
 
