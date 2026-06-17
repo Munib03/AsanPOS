@@ -113,7 +113,7 @@ export class EmployeeService {
       AuditEntityType.Employee,
       employee.id,
       null,
-      { name: employee.name, email: employee.email, role: employee.role },
+      null
     );
 
     await this.em.flush();

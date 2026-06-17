@@ -134,7 +134,7 @@ export class StoreSessionService {
       AuditEntityType.StoreSession,
       session.id,
       null,
-      { openingAmount: dto.openingAmount, openingNote: dto.openingNote },
+      null
     );
 
     await this.em.flush();

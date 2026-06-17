@@ -128,7 +128,7 @@ export class InventoryService {
       AuditEntityType.Inventory,
       inventory.id,
       null,
-      { name: inventory.name, address: inventory.address },
+      null
     );
 
     await this.em.flush();

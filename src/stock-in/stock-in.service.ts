@@ -122,7 +122,7 @@ export class StockInService {
         AuditEntityType.StockIn,
         stockIn.id,
         null,
-        StockInStatus.PENDING,
+        null
       );
 
       await em.flush();

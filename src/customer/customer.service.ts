@@ -92,7 +92,7 @@ export class CustomerService {
         AuditEntityType.Customer,
         customer.id,
         null,
-        { name: customer.name, phone: customer.phone, address: customer.address },
+        null
       );
 
       await em.flush();

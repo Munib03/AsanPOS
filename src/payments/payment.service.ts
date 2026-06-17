@@ -71,7 +71,7 @@ export class PaymentService {
       AuditEntityType.Payment,
       payment.id,
       null,
-      { saleId: dto.saleId, amount: dto.amount, note: dto.note, status: PaymentStatus.Done },
+      null
     );
 
     await this.em.flush();

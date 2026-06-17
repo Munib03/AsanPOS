@@ -106,7 +106,7 @@ export class ProductService {
       AuditEntityType.Product,
       product.id,
       null,
-      { name: product.name, price: product.price, category: dto.categoryName },
+      null
     );
 
     await this.em.flush();

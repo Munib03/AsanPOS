@@ -55,7 +55,7 @@ export class CategoryService {
       AuditEntityType.Category,
       category.id,
       null,
-      { name: category.name },
+      null
     );
 
     await this.em.flush();

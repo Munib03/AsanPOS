@@ -200,7 +200,7 @@ export class PurchaseService {
         AuditEntityType.Purchase,
         purchase.id,
         null,
-        PurchaseStatus.DRAFT,
+        null
       );
 
       await em.flush();
