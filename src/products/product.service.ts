@@ -19,6 +19,7 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
 import { generateBarcode } from '../shared/utils/generate.barcode';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { StockQuantity } from '../database/entites/stock-quantity.entity';
 
 @Injectable()
 export class ProductService {
@@ -58,8 +59,27 @@ export class ProductService {
       },
     );
 
-    return serialize(product, { populate: ['images', 'categories'] });
+    const stockQuantities = await this.em.find(
+      StockQuantity,
+      { product: { id } },
+      {
+        populate: ['inventory'],
+        fields: ['quantity', 'inventory.id', 'inventory.name'],
+      },
+    );
+
+    const inventories = stockQuantities.map((sq) => ({
+      id: sq.inventory.id,
+      name: sq.inventory.name,
+      quantity: sq.quantity ?? 0,
+    }));
+
+    return {
+      ...serialize(product, { populate: ['images', 'categories'] }),
+      inventories,
+    };
   }
+  
 
   async create(store: Store, employeeId: string, dto: CreateProductDto) {
     const category = await this.em.findOne(Category, { name: dto.categoryName, store });
