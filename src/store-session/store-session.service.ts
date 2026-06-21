@@ -103,12 +103,14 @@ export class StoreSessionService {
     );
   }
 
+
   async getMyActiveSession(employeeId: string): Promise<StoreSession | null> {
     return this.em.findOne(StoreSession, {
       openedBy: { id: employeeId },
       closedAt: null,
     });
   }
+
 
   async open(store: Store, employeeId: string, dto: OpenSessionDto) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
@@ -134,7 +136,7 @@ export class StoreSessionService {
       employee,
       AuditEntityType.StoreSession,
       session.id,
-      AuditActionType.Create,
+      AuditActionType.Open,
       null,
       null
     );
@@ -190,7 +192,7 @@ export class StoreSessionService {
       employee,
       AuditEntityType.StoreSession,
       session.id,
-      AuditActionType.Update,
+      AuditActionType.Close,
       before,
       {
         closingAmount: dto.closingAmount,
