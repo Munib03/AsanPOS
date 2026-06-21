@@ -21,6 +21,7 @@ import { StockOutModule } from './stock-out/stock-out.module';
 import { CashMovementModule } from './cash-movements/cash-movement.module';
 import { PaymentModule } from './payments/payment.module';
 import { StoreSessionModule } from './store-session/store-session.module';
+import { ReceiptModule } from './receipt/receipt.module';
 
 
 @Module({
@@ -43,7 +44,8 @@ import { StoreSessionModule } from './store-session/store-session.module';
     StockOutModule,
     CashMovementModule,
     StoreSessionModule,
-    PaymentModule
+    PaymentModule,
+    ReceiptModule,
   ],
   controllers: [AppController],
   providers: [AppService],

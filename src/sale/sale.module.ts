@@ -14,6 +14,7 @@ import { StockOut } from '../database/entites/stock-out.entity';
 import { StockOutItem } from '../database/entites/stock-out-item.entity';
 import { Payment } from '../database/entites/payments.entity';
 import { AuditModule } from '../audit/audit.module';
+import { ReceiptService } from '../receipt/receipt.service';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuditModule } from '../audit/audit.module';
   controllers: [SaleController],
   providers: [
     SaleService,
+    ReceiptService,
     {
       provide: BaseRepository,
       useFactory: (em: EntityManager) => new BaseRepository(em, Sale),

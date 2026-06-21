@@ -32,6 +32,7 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { ReceiptService } from '../receipt/receipt.service';
 
 export interface SaleListItem {
   id: string;
@@ -56,6 +57,7 @@ export class SaleService {
     private readonly journalEntryService: JournalEntryService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
+    private readonly receiptService: ReceiptService,
   ) { }
 
   async findAll(
@@ -220,7 +222,7 @@ export class SaleService {
         employee,
         AuditEntityType.Sale,
         sale.id,
-        AuditActionType.Create,
+        AuditActionType.Update,
         SaleStatus.DRAFT,
         SaleStatus.DONE,
       );
@@ -326,6 +328,23 @@ export class SaleService {
         populate: ['items', 'items.product'],
       });
 
+      const receiptItems = {
+        saleId: sale.id,
+        sequenceId: this.sequenceService.formatSequence(sequence),
+        customerName: customer.name,
+        totalAmount,
+        items: serialized.items.map((item) => ({
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: (item.quantity ?? 0) * (item.unitPrice ?? 0),
+        })),
+      };
+
+      await this.receiptService.create(em, store, activeSession, receiptItems);
+
+      await em.flush();
+
       return {
         message: `Sale completed successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
         id: sale.id,
@@ -339,6 +358,7 @@ export class SaleService {
       };
     });
   }
+
 
   async update(store: Store, id: string, employeeId: string, dto: UpdateSaleDto) {
     return await this.em.transactional(async (em) => {

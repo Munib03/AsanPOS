@@ -1,0 +1,28 @@
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { ReceiptService } from './receipt.service';
+import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
+import { RolesGuard } from '../shared/guards/role.guard';
+import { Roles } from '../shared/decorators/role.decorator';
+import { Role } from '../shared/utils/role.enum';
+import { CurrentStore } from '../shared/decorators/store.decorator';
+import { Store } from '../database/entites/store.entity';
+
+@Controller('receipts')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.Admin, Role.Cashier)
+export class ReceiptController {
+  constructor(private readonly receiptService: ReceiptService) {}
+
+  @Get()
+  findAll(@CurrentStore() store: Store) {
+    return this.receiptService.findAll(store);
+  }
+
+  @Get(':id')
+  findOne(
+    @CurrentStore() store: Store,
+    @Param('id') id: string,
+  ) {
+    return this.receiptService.findOne(store, id);
+  }
+}
