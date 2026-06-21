@@ -19,6 +19,7 @@ import { StockInStatus } from '../shared/utils/stock-in-status.enum';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { CreateStockInDto, StockInItemDto } from './dto/create-stock-in.dto';
 import { UpdateStockInDto } from './dto/update-stock-in.dto';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 const STOCK_IN_POPULATE = [
   'inventory',
@@ -121,6 +122,7 @@ export class StockInService {
         employee,
         AuditEntityType.StockIn,
         stockIn.id,
+        AuditActionType.Create,
         null,
         null
       );
@@ -132,6 +134,8 @@ export class StockInService {
       };
     });
   }
+
+
   async update(
     store: Store,
     id: string,
@@ -219,6 +223,7 @@ export class StockInService {
           employee,
           AuditEntityType.StockIn,
           stockIn.id,
+          AuditActionType.Update,
           stockIn.status,
           dto.status,
         );

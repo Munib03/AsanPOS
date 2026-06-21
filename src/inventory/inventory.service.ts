@@ -12,6 +12,7 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { MinioService } from '../shared/services/minio.service';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class InventoryService {
@@ -20,7 +21,7 @@ export class InventoryService {
     private readonly inventoryRepository: BaseRepository<Inventory>,
     private readonly minioService: MinioService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store, query: PaginateQuery) {
     const [inventories, meta] = await this.inventoryRepository.findAndPaginate(
@@ -127,8 +128,9 @@ export class InventoryService {
       employee,
       AuditEntityType.Inventory,
       inventory.id,
+      AuditActionType.Create,
       null,
-      null
+      null,
     );
 
     await this.em.flush();
@@ -154,6 +156,7 @@ export class InventoryService {
       employee,
       AuditEntityType.Inventory,
       inventory.id,
+      AuditActionType.Update,
       before,
       { name: inventory.name, address: inventory.address },
     );
@@ -177,6 +180,7 @@ export class InventoryService {
       employee,
       AuditEntityType.Inventory,
       inventory.id,
+      AuditActionType.Delete,
       { name: inventory.name, address: inventory.address },
       null,
     );

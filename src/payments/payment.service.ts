@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class PaymentService {
@@ -70,6 +71,7 @@ export class PaymentService {
       employee,
       AuditEntityType.Payment,
       payment.id,
+      AuditActionType.Create,
       null,
       null
     );

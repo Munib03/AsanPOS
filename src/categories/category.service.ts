@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class CategoryService {
@@ -37,6 +38,7 @@ export class CategoryService {
     return category;
   }
 
+
   async create(store: Store, employeeId: string, dto: CreateCategoryDto) {
     const existing = await this.em.findOne(Category, { name: dto.name, store });
     if (existing)
@@ -54,6 +56,7 @@ export class CategoryService {
       employee,
       AuditEntityType.Category,
       category.id,
+      AuditActionType.Create,
       null,
       null
     );
@@ -82,6 +85,7 @@ export class CategoryService {
       employee,
       AuditEntityType.Category,
       category.id,
+      AuditActionType.Update,
       { name: oldName },
       { name: category.name },
     );
@@ -108,6 +112,7 @@ export class CategoryService {
       employee,
       AuditEntityType.Category,
       category.id,
+      AuditActionType.Delete,
       { name: category.name },
       null,
     );

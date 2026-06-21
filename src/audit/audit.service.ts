@@ -11,44 +11,17 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 export class AuditService {
   constructor(
     private readonly auditRepository: BaseRepository<AuditLog>,
-  ) { }
+  ) {}
 
-  logStatusChange(
-    em: EntityManager,
-    employee: Employee,
-    entityType: AuditEntityType,
-    entityId: string,
-    beforeStatus: string | null,
-    afterStatus: string | null,
-  ): void {
-    em.create(AuditLog, {
-      employee,
-      entityType,
-      entityId,
-      actionType: AuditActionType.Update,
-      before: beforeStatus ? { status: beforeStatus } : null,
-      after: afterStatus ? { status: afterStatus } : null,
-    });
-  }
-
-  
   log(
     em: EntityManager,
     employee: Employee,
     entityType: AuditEntityType,
     entityId: string,
+    actionType: AuditActionType,
     before: Record<string, any> | null,
     after: Record<string, any> | null,
   ): void {
-    let actionType: AuditActionType;
-
-    if (before === null && after !== null)
-      actionType = AuditActionType.Create;
-    else if (before !== null && after === null)
-      actionType = AuditActionType.Delete;
-    else
-      actionType = AuditActionType.Update;
-
     em.create(AuditLog, {
       employee,
       entityType,
@@ -56,6 +29,25 @@ export class AuditService {
       actionType,
       before,
       after,
+    });
+  }
+
+  logStatusChange(
+    em: EntityManager,
+    employee: Employee,
+    entityType: AuditEntityType,
+    entityId: string,
+    actionType: AuditActionType,
+    beforeStatus: string | null,
+    afterStatus: string | null,
+  ): void {
+    em.create(AuditLog, {
+      employee,
+      entityType,
+      entityId,
+      actionType,
+      before: beforeStatus ? { status: beforeStatus } : null,
+      after: afterStatus ? { status: afterStatus } : null,
     });
   }
 

@@ -18,6 +18,7 @@ import { Role } from '../shared/utils/role.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class EmployeeService {
@@ -112,6 +113,7 @@ export class EmployeeService {
       adminEmployee,
       AuditEntityType.Employee,
       employee.id,
+      AuditActionType.Create,
       null,
       null
     );
@@ -139,6 +141,7 @@ export class EmployeeService {
       adminEmployee,
       AuditEntityType.Employee,
       employee.id,
+      AuditActionType.Delete,
       { name: employee.name, email: employee.email, role: employee.role },
       null,
     );
@@ -233,6 +236,7 @@ export class EmployeeService {
       adminEmployee,
       AuditEntityType.Employee,
       employee.id,
+      AuditActionType.Update,
       before,
       {
         name: employee.name,

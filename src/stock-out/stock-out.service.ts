@@ -18,6 +18,7 @@ import { StockOutStatus } from '../shared/utils/stock-out-status.enum';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { CreateStockOutDto, StockOutItemDto } from './dto/create-stock-out.dto';
 import { UpdateStockOutDto } from './dto/update-stock-out.dto';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 const STOCK_OUT_POPULATE = [
   'inventory',
@@ -35,7 +36,7 @@ export class StockOutService {
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     const stockOuts = await this.em.findAll(StockOut, {
@@ -121,6 +122,7 @@ export class StockOutService {
         employee,
         AuditEntityType.StockOut,
         stockOut.id,
+        AuditActionType.Create,
         null,
         null
       );
@@ -133,6 +135,7 @@ export class StockOutService {
       };
     });
   }
+
 
   async update(
     store: Store,
@@ -204,6 +207,7 @@ export class StockOutService {
           employee,
           AuditEntityType.StockOut,
           stockOut.id,
+          AuditActionType.Delete,
           stockOut.status ?? '',
           dto.status!,
         );

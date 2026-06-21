@@ -25,6 +25,9 @@ import {
 import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
+import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
+import { StockIn } from '../database/entites/stock-in.entity';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class PurchaseService {
@@ -148,6 +151,7 @@ export class PurchaseService {
     return this.mapPurchaseToListItem(serialized, stockInsMap);
   }
 
+
   async create(store: Store, employeeId: string, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, { id: dto.customerId });
@@ -199,6 +203,7 @@ export class PurchaseService {
         employee,
         AuditEntityType.Purchase,
         purchase.id,
+        AuditActionType.Create,
         null,
         null
       );
@@ -211,6 +216,7 @@ export class PurchaseService {
     });
   }
 
+  
   async remove(store: Store, id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(
@@ -230,15 +236,23 @@ export class PurchaseService {
         employee,
         AuditEntityType.Purchase,
         purchase.id,
+        AuditActionType.Delete,
         null,
         'deleted',
       );
 
+      await em.nativeDelete(JournalEntryItem, { purchase: { id } });
+      await em.nativeDelete(StockInItem, { stockIn: { purchase: { id } } });
+      await em.nativeDelete(StockIn, { purchase: { id } });
+      await em.nativeDelete(PurchasedItem, { purchase: { id } });
+
       await em.flush();
-      await em.removeAndFlush(purchase);
+      await em.nativeDelete(Purchase, { id });
+
       return { message: `Purchase with id ${id} deleted successfully.` };
     });
   }
+  
 
   async update(store: Store, id: string, employeeId: string, dto: UpdatePurchaseDto) {
     return await this.em.transactional(async (em) => {
@@ -271,6 +285,7 @@ export class PurchaseService {
           employee,
           AuditEntityType.Purchase,
           purchase.id,
+          AuditActionType.Update,
           purchase.status,
           dto.status,
         );

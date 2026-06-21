@@ -18,6 +18,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
 import { generateBarcode } from '../shared/utils/generate.barcode';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class ProductService {
@@ -105,6 +106,7 @@ export class ProductService {
       employee,
       AuditEntityType.Product,
       product.id,
+      AuditActionType.Create,
       null,
       null
     );
@@ -175,6 +177,7 @@ export class ProductService {
       employee,
       AuditEntityType.Product,
       product.id,
+      AuditActionType.Update,
       before,
       {
         name: product.name,
@@ -207,6 +210,7 @@ export class ProductService {
         employee,
         AuditEntityType.Product,
         product.id,
+        AuditActionType.Delete,
         { name: product.name, price: product.price },
         null,
       );

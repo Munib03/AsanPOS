@@ -6,6 +6,7 @@ import { Employee } from '../database/entites/employee.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class StoresService {
@@ -44,6 +45,7 @@ export class StoresService {
       employee,
       AuditEntityType.Store,
       store.id,
+      AuditActionType.Update,
       before,
       { name: store.name, address: store.address },
     );
@@ -67,6 +69,7 @@ export class StoresService {
       employee,
       AuditEntityType.Store,
       store.id,
+      AuditActionType.Delete,
       { name: store.name, address: store.address },
       null,
     );

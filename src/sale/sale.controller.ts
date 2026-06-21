@@ -47,14 +47,6 @@ export class SaleController {
         return this.saleService.checkout(store, user.id, dto);
     }
 
-    @Post()
-    create(
-        @CurrentStore() store: Store,
-        @CurrentUser() user: { id: string; role: string },
-        @Body() dto: CreateSaleDto,
-    ) {
-        return this.saleService.create(store, user.id, dto);
-    }
 
     @Delete(':id')
     remove(

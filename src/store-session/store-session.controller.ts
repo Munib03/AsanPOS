@@ -12,7 +12,7 @@ import { CloseSessionDto } from './dto/close-session.dto';
 
 @Controller('store-session')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin)
+@Roles(Role.Admin, Role.Cashier)
 export class StoreSessionController {
   constructor(private readonly storeSessionService: StoreSessionService) {}
 

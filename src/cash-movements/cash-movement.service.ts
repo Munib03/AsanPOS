@@ -7,6 +7,7 @@ import { Store } from '../database/entites/store.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class CashMovementService {
@@ -65,6 +66,7 @@ export class CashMovementService {
       employee,
       AuditEntityType.CashMovement,
       cashMovement.id,
+      AuditActionType.Create,
       null,
       null
     );

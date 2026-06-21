@@ -13,7 +13,7 @@ import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class CashMovementController {
-  constructor(private readonly cashMovementService: CashMovementService) {}
+  constructor(private readonly cashMovementService: CashMovementService) { }
 
   @Get()
   findAll(@CurrentStore() store: Store) {

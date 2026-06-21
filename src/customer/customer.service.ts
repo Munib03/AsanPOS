@@ -20,6 +20,7 @@ import { StockInItem } from '../database/entites/stock-in-item.entity';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockOutItem } from '../database/entites/stock-out-item.entity';
 import { StockOut } from '../database/entites/stock-out.entity';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class CustomerService {
@@ -91,6 +92,7 @@ export class CustomerService {
         employee,
         AuditEntityType.Customer,
         customer.id,
+        AuditActionType.Create,
         null,
         null
       );
@@ -100,6 +102,7 @@ export class CustomerService {
       return { message: 'Customer created successfully.' };
     });
   }
+  
 
   async update(id: string, employeeId: string, dto: UpdateCustomerDto) {
     const customer = await this.customerRepository.findOneOrFail(
@@ -145,6 +148,7 @@ export class CustomerService {
         employee,
         AuditEntityType.Customer,
         customer.id,
+        AuditActionType.Update,
         before,
         after,
       );
@@ -175,6 +179,7 @@ export class CustomerService {
         employee,
         AuditEntityType.Customer,
         customer.id,
+        AuditActionType.Delete,
         { name: customer.name, phone: customer.phone, address: customer.address },
         null,
       );

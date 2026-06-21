@@ -31,6 +31,7 @@ import { DashboardStats } from './dto/dashboard.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 export interface SaleListItem {
   id: string;
@@ -104,6 +105,7 @@ export class SaleService {
     return { data, meta };
   }
 
+
   async findOne(store: Store, id: string): Promise<SaleListItem> {
     const sale = await this.em.findOne(
       Sale,
@@ -129,108 +131,6 @@ export class SaleService {
     };
   }
 
-  async create(store: Store, employeeId: string, dto: CreateSaleDto) {
-    return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id: dto.customerId });
-      if (!customer)
-        throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
-
-      const activeSession = await em.findOne(StoreSession, {
-        store,
-        openedBy: { id: employeeId },
-        closedAt: null,
-      });
-
-      if (!activeSession)
-        throw new BadRequestException('No active session found. Please open a session first.');
-
-      const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
-
-      const sale = em.create(Sale, {
-        customer,
-        store,
-        sequence,
-        status: SaleStatus.DRAFT,
-      });
-      await em.persistAndFlush(sale);
-
-      const products = await em.findAll(Product, {
-        where: { id: { $in: dto.items.map((item) => item.productId) } },
-      });
-
-      if (products.length !== dto.items.length)
-        throw new NotFoundException(`One or more products not found`);
-
-      const productMap = new Map(products.map((product) => [product.id, product]));
-
-      const inventory = await em.findOne(Inventory, { id: dto.inventoryId, store });
-      if (!inventory)
-        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
-
-      for (const item of dto.items) {
-        const product = productMap.get(item.productId);
-        if (!product)
-          throw new NotFoundException(`Product with id ${item.productId} not found`);
-
-        const stockRecord = await em.findOne(StockQuantity, {
-          product: { id: item.productId },
-          inventory: { id: dto.inventoryId },
-        });
-
-        const available = stockRecord?.quantity ?? 0;
-
-        if (available < item.quantity)
-          throw new BadRequestException(
-            `Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${available}.`,
-          );
-      }
-
-      const saleItems = dto.items.map((item) => {
-        const product = productMap.get(item.productId)!;
-        return em.create(SaleItem, {
-          sale,
-          product,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        });
-      });
-
-      await em.persistAndFlush(saleItems);
-
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
-
-      this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.Sale,
-        sale.id,
-        null,
-        SaleStatus.DRAFT,
-      );
-
-      const createdSale = await em.findOne(
-        Sale,
-        { id: sale.id },
-        { populate: ['items', 'items.product'] },
-      );
-      const serialized = serialize(createdSale!, {
-        populate: ['items', 'items.product'],
-      });
-
-      return {
-        message: `Sale created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
-        id: sale.id,
-        items: serialized.items.map((item) => ({
-          id: item.id,
-          productId: item.product.id,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-      };
-    });
-  }
 
   async checkout(store: Store, employeeId: string, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {
@@ -307,6 +207,7 @@ export class SaleService {
         employee,
         AuditEntityType.Sale,
         sale.id,
+        AuditActionType.Create,
         null,
         SaleStatus.DRAFT,
       );
@@ -319,6 +220,7 @@ export class SaleService {
         employee,
         AuditEntityType.Sale,
         sale.id,
+        AuditActionType.Create,
         SaleStatus.DRAFT,
         SaleStatus.DONE,
       );
@@ -348,6 +250,7 @@ export class SaleService {
         employee,
         AuditEntityType.StockOut,
         stockOut.id,
+        AuditActionType.Create,
         null,
         StockOutStatus.PENDING,
       );
@@ -369,6 +272,7 @@ export class SaleService {
         employee,
         AuditEntityType.StockOut,
         stockOut.id,
+        AuditActionType.Update,
         StockOutStatus.PENDING,
         StockOutStatus.DONE,
       );
@@ -392,6 +296,7 @@ export class SaleService {
         employee,
         AuditEntityType.Payment,
         payment.id,
+        AuditActionType.Create,
         null,
         { saleId: sale.id, amount: totalAmount, status: PaymentStatus.Done },
       );
@@ -402,10 +307,11 @@ export class SaleService {
           employee,
           AuditEntityType.JournalEntry,
           journalEntry.id,
+          AuditActionType.Update,
           JournalEntryStatus.PENDING,
           JournalEntryStatus.DONE,
         );
-        
+
         journalEntry.status = JournalEntryStatus.DONE;
       }
 
@@ -463,6 +369,7 @@ export class SaleService {
           employee,
           AuditEntityType.Sale,
           sale.id,
+          AuditActionType.Update,
           sale.status ?? '',
           dto.status,
         );
@@ -494,6 +401,7 @@ export class SaleService {
         employee,
         AuditEntityType.Sale,
         sale.id,
+        AuditActionType.Delete,
         null,
         'deleted',
       );

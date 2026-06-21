@@ -8,13 +8,14 @@ import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class StoreSessionService {
   constructor(
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store) {
     return this.em.findAll(StoreSession, {
@@ -133,6 +134,7 @@ export class StoreSessionService {
       employee,
       AuditEntityType.StoreSession,
       session.id,
+      AuditActionType.Create,
       null,
       null
     );
@@ -188,6 +190,7 @@ export class StoreSessionService {
       employee,
       AuditEntityType.StoreSession,
       session.id,
+      AuditActionType.Update,
       before,
       {
         closingAmount: dto.closingAmount,
