@@ -184,33 +184,6 @@ export class CustomerService {
         null,
       );
 
-      const purchases = await em.find(Purchase, { customer: { id } });
-      const purchaseIds = purchases.map(p => p.id);
-
-      if (purchaseIds.length > 0) {
-        await em.nativeDelete(JournalEntryItem, { purchase: { $in: purchaseIds } });
-        await em.nativeDelete(StockInItem, { stockIn: { purchase: { $in: purchaseIds } } });
-        await em.nativeDelete(StockIn, { purchase: { $in: purchaseIds } });
-        await em.nativeDelete(PurchasedItem, { purchase: { $in: purchaseIds } });
-        await em.nativeDelete(Purchase, { id: { $in: purchaseIds } });
-      }
-
-      const sales = await em.find(Sale, { customer: { id } });
-      const saleIds = sales.map(s => s.id);
-
-      if (saleIds.length > 0) {
-        const saleItems = await em.find(SaleItem, { sale: { $in: saleIds } });
-        const saleItemIds = saleItems.map(si => si.id);
-
-        await em.nativeDelete(JournalEntryItem, { sale: { $in: saleIds } });
-        if (saleItemIds.length > 0)
-          await em.nativeDelete(StockOutItem, { saleItem: { $in: saleItemIds } });
-
-        await em.nativeDelete(StockOut, { sale: { $in: saleIds } });
-        await em.nativeDelete(SaleItem, { sale: { $in: saleIds } });
-        await em.nativeDelete(Sale, { id: { $in: saleIds } });
-      }
-
       await em.flush();
       await em.nativeDelete(Customer, { id });
 

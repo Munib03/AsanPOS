@@ -343,7 +343,7 @@ export class SaleService {
         })),
       };
 
-      await this.receiptService.create(em, store, activeSession, receiptItems);
+      const receipt = await this.receiptService.create(em, store, activeSession, receiptItems);
 
       await em.flush();
 
@@ -357,6 +357,7 @@ export class SaleService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
+        receiptId: receipt.id,
       };
     });
   }
