@@ -14,11 +14,17 @@ import { CloseSessionDto } from './dto/close-session.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin, Role.Cashier)
 export class StoreSessionController {
-  constructor(private readonly storeSessionService: StoreSessionService) {}
+  constructor(private readonly storeSessionService: StoreSessionService) { }
 
   @Get()
   findAll(@CurrentStore() store: Store) {
     return this.storeSessionService.findAll(store);
+  }
+
+
+  @Get('my-session')
+  hasActiveSession(@CurrentUser() user: { id: string }) {
+    return this.storeSessionService.hasActiveSession(user.id);
   }
 
   @Get('active')
@@ -51,4 +57,5 @@ export class StoreSessionController {
   ) {
     return this.storeSessionService.close(store, user.id, dto);
   }
+
 }

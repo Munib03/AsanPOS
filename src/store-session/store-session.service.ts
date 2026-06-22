@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { StoreSession } from '../database/entites/store-session.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
@@ -106,14 +105,6 @@ export class StoreSessionService {
   }
 
 
-  async getMyActiveSession(employeeId: string): Promise<StoreSession | null> {
-    return this.em.findOne(StoreSession, {
-      openedBy: { id: employeeId },
-      closedAt: null,
-    });
-  }
-
-
   async open(store: Store, employeeId: string, dto: OpenSessionDto) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
@@ -163,87 +154,6 @@ export class StoreSessionService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const expectedAmount = this.closeSession(session, employee, {
-      closingAmount: dto.closingAmount,
-      closingNote: dto.closingNote,
-      autoClosed: false,
-    });
-
-    await this.em.flush();
-
-    return { message: 'Session closed successfully.', expectedAmount };
-  }
-
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async autoCloseStaleSessions(): Promise<void> {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const staleSessions = await this.em.find(
-      StoreSession,
-      { closedAt: null, openedAt: { $lte: cutoff } },
-      { populate: ['cashMovements', 'payments', 'openedBy'] },
-    );
-
-    for (const session of staleSessions) {
-      if (!session.openedBy) 
-        continue;
-
-      const expectedAmount = this.calculateExpectedAmount(session);
-
-      this.closeSession(session, session.openedBy, {
-        closingAmount: expectedAmount,
-        closingNote: 'Auto-closed by system after 24 hours of inactivity.',
-        autoClosed: true,
-      });
-    }
-
-    if (staleSessions.length > 0)
-      await this.em.flush();
-  }
-
-
-
-  private closeSession(
-    session: StoreSession,
-    closedBy: Employee,
-    options: { closingAmount: number; closingNote?: string; autoClosed: boolean },
-  ): number {
-    const expectedAmount = this.calculateExpectedAmount(session);
-
-    const before = {
-      openingAmount: session.openingAmount,
-      openingNote: session.openingNote,
-      openedAt: session.openedAt,
-    };
-
-    session.closedBy = closedBy;
-    session.closingAmount = options.closingAmount;
-    session.closingNote = options.closingNote;
-    session.expectedAmount = expectedAmount;
-    session.closedAt = new Date();
-
-    this.auditService.log(
-      this.em,
-      closedBy,
-      AuditEntityType.StoreSession,
-      session.id,
-      AuditActionType.Close,
-      before,
-      {
-        closingAmount: session.closingAmount,
-        closingNote: session.closingNote,
-        expectedAmount,
-        closedAt: session.closedAt,
-        autoClosed: options.autoClosed,
-      },
-    );
-
-    return expectedAmount;
-  }
-  
-
-  private calculateExpectedAmount(session: StoreSession): number {
     const cashMovements = session.cashMovements.getItems();
     const cashIn = cashMovements
       .filter(cm => cm.type === CashMovementType.CashIn)
@@ -257,6 +167,51 @@ export class StoreSessionService {
       .getItems()
       .reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
-    return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
+    const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
+
+    const before = {
+      openingAmount: session.openingAmount,
+      openingNote: session.openingNote,
+      openedAt: session.openedAt,
+    };
+
+    session.closedBy = employee;
+    session.closingAmount = dto.closingAmount;
+    session.closingNote = dto.closingNote;
+    session.expectedAmount = expectedAmount;
+    session.closedAt = new Date();
+
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.StoreSession,
+      session.id,
+      AuditActionType.Close,
+      before,
+      {
+        closingAmount: dto.closingAmount,
+        closingNote: dto.closingNote,
+        expectedAmount,
+        closedAt: session.closedAt,
+      },
+    );
+
+    await this.em.flush();
+
+    return { message: 'Session closed successfully.', expectedAmount };
+  }
+
+
+  async hasActiveSession(employeeId: string): Promise<boolean> {
+    const session = await this.getMyActiveSession(employeeId);
+    return !!session;
+  }
+
+
+  async getMyActiveSession(employeeId: string): Promise<StoreSession | null> {
+    return this.em.findOne(StoreSession, {
+      openedBy: { id: employeeId },
+      closedAt: null,
+    });
   }
 }
