@@ -1,9 +1,25 @@
+import { IsEnum, IsOptional } from 'class-validator';
+
+export enum DashboardRange {
+  TODAY = 'today',
+  YESTERDAY = 'yesterday',
+  LAST_WEEK = 'last-week',
+  MONTHLY = 'monthly',
+}
+
+export class DashboardQueryDto {
+  @IsOptional()
+  @IsEnum(DashboardRange)
+  range?: DashboardRange = DashboardRange.TODAY;
+}
+
 export interface DashboardStats {
-  todaySales: {
+  range: DashboardRange;
+  sales: {
     total: number;
     percentageChange: number;
   };
-  todayProfit: {
+  profit: {
     total: number;
     percentageChange: number;
   };

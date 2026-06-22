@@ -27,7 +27,7 @@ import { BaseRepository } from '../shared/repositories/base.repository';
 import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
-import { DashboardStats } from './dto/dashboard.dto';
+import { DashboardRange, DashboardStats } from './dto/dashboard.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
@@ -432,35 +432,39 @@ export class SaleService {
     });
   }
 
-  async getDashboardStats(store: Store): Promise<DashboardStats> {
-    const { todayStart, todayEnd, yesterdayStart, yesterdayEnd } = this.getDayRanges();
+  async getDashboardStats(
+    store: Store,
+    range: DashboardRange = DashboardRange.TODAY,
+  ): Promise<DashboardStats> {
+    const { currentStart, currentEnd, previousStart, previousEnd } =
+      this.getRangeBounds(range);
 
-    const [todaySales, yesterdaySales] = await Promise.all([
+    const [currentSales, previousSales] = await Promise.all([
       this.em.find(
         Sale,
-        { store, createdAt: { $gte: todayStart, $lte: todayEnd } },
+        { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
         { populate: ['items', 'items.product'] },
       ),
       this.em.find(
         Sale,
-        { store, createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd } },
+        { store, createdAt: { $gte: previousStart, $lte: previousEnd } },
         { populate: ['items', 'items.product'] },
       ),
     ]);
 
-    const todayTotalSales = this.calcTotalSales(todaySales);
-    const yesterdayTotalSales = this.calcTotalSales(yesterdaySales);
-    const salesPercentageChange = todayTotalSales + yesterdayTotalSales === 0
+    const currentTotalSales = this.calcTotalSales(currentSales);
+    const previousTotalSales = this.calcTotalSales(previousSales);
+    const salesPercentageChange = currentTotalSales + previousTotalSales === 0
       ? 0
-      : (todayTotalSales / (todayTotalSales + yesterdayTotalSales)) * 100;
+      : (currentTotalSales / (currentTotalSales + previousTotalSales)) * 100;
 
-    const costPriceMap = await this.buildCostPriceMap([...todaySales, ...yesterdaySales]);
+    const costPriceMap = await this.buildCostPriceMap([...currentSales, ...previousSales]);
 
-    const todayTotalProfit = this.calcTotalProfit(todaySales, costPriceMap);
-    const yesterdayTotalProfit = this.calcTotalProfit(yesterdaySales, costPriceMap);
-    const profitPercentageChange = todayTotalProfit + yesterdayTotalProfit === 0
+    const currentTotalProfit = this.calcTotalProfit(currentSales, costPriceMap);
+    const previousTotalProfit = this.calcTotalProfit(previousSales, costPriceMap);
+    const profitPercentageChange = currentTotalProfit + previousTotalProfit === 0
       ? 0
-      : (todayTotalProfit / (todayTotalProfit + yesterdayTotalProfit)) * 100;
+      : (currentTotalProfit / (currentTotalProfit + previousTotalProfit)) * 100;
 
     const lowStockRecords = await this.em.find(
       StockQuantity,
@@ -490,14 +494,14 @@ export class SaleService {
       inventoryName: record.inventory.name ?? '',
     }));
 
-
     return {
-      todaySales: {
-        total: todayTotalSales,
+      range,
+      sales: {
+        total: currentTotalSales,
         percentageChange: Math.round(salesPercentageChange * 100) / 100,
       },
-      todayProfit: {
-        total: todayTotalProfit,
+      profit: {
+        total: currentTotalProfit,
         percentageChange: Math.round(profitPercentageChange * 100) / 100,
       },
       lowStockProducts,
@@ -505,23 +509,75 @@ export class SaleService {
     };
   }
 
-  private getDayRanges() {
+  private getRangeBounds(range: DashboardRange) {
     const now = new Date();
 
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    switch (range) {
+      case DashboardRange.YESTERDAY: {
+        const currentStart = new Date(now);
+        currentStart.setDate(now.getDate() - 1);
+        currentStart.setHours(0, 0, 0, 0);
+        const currentEnd = new Date(now);
+        currentEnd.setDate(now.getDate() - 1);
+        currentEnd.setHours(23, 59, 59, 999);
 
-    const yesterdayStart = new Date(now);
-    yesterdayStart.setDate(now.getDate() - 1);
-    yesterdayStart.setHours(0, 0, 0, 0);
-    const yesterdayEnd = new Date(now);
-    yesterdayEnd.setDate(now.getDate() - 1);
-    yesterdayEnd.setHours(23, 59, 59, 999);
+        const previousStart = new Date(now);
+        previousStart.setDate(now.getDate() - 2);
+        previousStart.setHours(0, 0, 0, 0);
+        const previousEnd = new Date(now);
+        previousEnd.setDate(now.getDate() - 2);
+        previousEnd.setHours(23, 59, 59, 999);
 
-    return { todayStart, todayEnd, yesterdayStart, yesterdayEnd };
+        return { currentStart, currentEnd, previousStart, previousEnd };
+      }
+
+      case DashboardRange.LAST_WEEK: {
+        const currentEnd = new Date(now);
+        currentEnd.setHours(23, 59, 59, 999);
+        const currentStart = new Date(now);
+        currentStart.setDate(now.getDate() - 6);
+        currentStart.setHours(0, 0, 0, 0);
+
+        const previousEnd = new Date(currentStart);
+        previousEnd.setDate(currentStart.getDate() - 1);
+        previousEnd.setHours(23, 59, 59, 999);
+        const previousStart = new Date(previousEnd);
+        previousStart.setDate(previousEnd.getDate() - 6);
+        previousStart.setHours(0, 0, 0, 0);
+
+        return { currentStart, currentEnd, previousStart, previousEnd };
+      }
+
+      case DashboardRange.MONTHLY: {
+        const currentStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const currentEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+        const previousEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+        return { currentStart, currentEnd, previousStart, previousEnd };
+      }
+
+      case DashboardRange.TODAY:
+      default: {
+        const currentStart = new Date(now);
+        currentStart.setHours(0, 0, 0, 0);
+        const currentEnd = new Date(now);
+        currentEnd.setHours(23, 59, 59, 999);
+
+        const previousStart = new Date(now);
+        previousStart.setDate(now.getDate() - 1);
+        previousStart.setHours(0, 0, 0, 0);
+        const previousEnd = new Date(now);
+        previousEnd.setDate(now.getDate() - 1);
+        previousEnd.setHours(23, 59, 59, 999);
+
+        return { currentStart, currentEnd, previousStart, previousEnd };
+      }
+    }
   }
+
+
 
   private calcTotalSales(sales: Sale[]): number {
     return sales.reduce(

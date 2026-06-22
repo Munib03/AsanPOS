@@ -10,6 +10,7 @@ import { Role } from '../shared/utils/role.enum';
 import { Roles } from '../shared/decorators/role.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { DashboardQueryDto } from './dto/dashboard.dto';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,8 +27,11 @@ export class SaleController {
     }
 
     @Get('dashboard')
-    getDashboardStats(@CurrentStore() store: Store) {
-        return this.saleService.getDashboardStats(store);
+    getDashboardStats(
+        @CurrentStore() store: Store,
+        @Query() query: DashboardQueryDto,
+    ) {
+        return this.saleService.getDashboardStats(store, query.range);
     }
 
     @Get(':id')
