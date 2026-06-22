@@ -7,6 +7,7 @@ import { JournalEntryService } from './journal-entry.service';
 import { SequenceModule } from '../sequence/sequence.module';
 import { JournalEntryController } from './journal-entry.controller';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { AuditService } from '../audit/audit.service';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { BaseRepository } from '../shared/repositories/base.repository';
   ],
   providers: [
     JournalEntryService,
+    AuditService,
     {
       provide: BaseRepository,
       useFactory: (em: EntityManager) => new BaseRepository(em, JournalEntry),

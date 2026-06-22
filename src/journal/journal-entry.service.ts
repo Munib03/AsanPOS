@@ -5,10 +5,14 @@ import { JournalEntry } from '../database/entites/journal-entry.entity';
 import { Purchase } from '../database/entites/purchase.entity';
 import { Sale } from '../database/entites/sale.entity';
 import { Store } from '../database/entites/store.entity';
+import { Employee } from '../database/entites/employee.entity';
 import { SequenceService } from '../sequence/sequence.service';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
+import { AuditService } from '../audit/audit.service';
+import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
+import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
 export class JournalEntryService {
@@ -16,6 +20,7 @@ export class JournalEntryService {
     private readonly sequenceService: SequenceService,
     private readonly em: EntityManager,
     private readonly journalEntryRepository: BaseRepository<JournalEntry>,
+    private readonly auditService: AuditService,
   ) { }
 
   async findAll(store: Store, query: PaginateQuery) {
@@ -110,6 +115,7 @@ export class JournalEntryService {
     em: EntityManager,
     store: Store,
     purchase: Purchase,
+    employeeId: string,
   ): Promise<void> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
@@ -151,12 +157,34 @@ export class JournalEntryService {
       account: receivableAccount,
       credit: totalAmount,
     });
+
+    const employee = await em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      em,
+      employee,
+      AuditEntityType.JournalEntry,
+      journalEntry.id,
+      AuditActionType.Create,
+      null,
+      {
+        sequence: this.sequenceService.formatSequence(sequence),
+        store: store.id,
+        status: journalEntry.status,
+        source: 'Purchase',
+        sourceId: purchase.id,
+        totalAmount,
+      },
+    );
   }
 
   async createFromSale(
     em: EntityManager,
     store: Store,
     sale: Sale,
+    employeeId: string,
   ): Promise<JournalEntry> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
@@ -201,6 +229,27 @@ export class JournalEntryService {
       account: defaultAccount,
       credit: totalAmount,
     });
+
+    const employee = await em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+
+    this.auditService.log(
+      em,
+      employee,
+      AuditEntityType.JournalEntry,
+      journalEntry.id,
+      AuditActionType.Create,
+      null,
+      {
+        sequence: this.sequenceService.formatSequence(sequence),
+        store: store.id,
+        status: journalEntry.status,
+        source: 'Sale',
+        sourceId: sale.id,
+        totalAmount,
+      },
+    );
 
     return journalEntry;
   }

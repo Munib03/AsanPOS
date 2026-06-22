@@ -293,7 +293,7 @@ export class PurchaseService {
         purchase.status = dto.status;
 
         if (dto.status === PurchaseStatus.DONE)
-          await this.journalEntryService.createFromPurchase(em, store, purchase);
+          await this.journalEntryService.createFromPurchase(em, store, purchase, employeeId);
       }
 
       await em.flush();

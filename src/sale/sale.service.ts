@@ -215,7 +215,7 @@ export class SaleService {
       );
 
       await em.populate(sale, ['items', 'items.product', 'customer']);
-      const journalEntry = await this.journalEntryService.createFromSale(em, store, sale);
+      const journalEntry = await this.journalEntryService.createFromSale(em, store, sale, employeeId);
 
       this.auditService.logStatusChange(
         em,
@@ -381,7 +381,7 @@ export class SaleService {
 
         if (dto.status === SaleStatus.DONE) {
           await em.populate(sale, ['items', 'items.product', 'customer']);
-          await this.journalEntryService.createFromSale(em, store, sale);
+          await this.journalEntryService.createFromSale(em, store, sale, employeeId);
         }
 
         this.auditService.logStatusChange(
