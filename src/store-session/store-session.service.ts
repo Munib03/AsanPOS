@@ -174,11 +174,7 @@ export class StoreSessionService {
     return { message: 'Session closed successfully.', expectedAmount };
   }
 
-  /**
-   * Runs hourly. Any session left open for 24+ hours gets auto-closed
-   * since no employee is acting on it — the closing amount is set to
-   * the system-calculated expected amount (no physical cash count exists).
-   */
+
   @Cron(CronExpression.EVERY_HOUR)
   async autoCloseStaleSessions(): Promise<void> {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -190,7 +186,8 @@ export class StoreSessionService {
     );
 
     for (const session of staleSessions) {
-      if (!session.openedBy) continue;
+      if (!session.openedBy) 
+        continue;
 
       const expectedAmount = this.calculateExpectedAmount(session);
 
@@ -244,6 +241,7 @@ export class StoreSessionService {
 
     return expectedAmount;
   }
+  
 
   private calculateExpectedAmount(session: StoreSession): number {
     const cashMovements = session.cashMovements.getItems();
