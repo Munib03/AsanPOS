@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { StoreSession } from '../database/entites/store-session.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
@@ -83,6 +84,7 @@ export class StoreSessionService {
     return session;
   }
 
+
   async getActiveSession(store: Store) {
     return this.em.find(
       StoreSession,
@@ -146,6 +148,7 @@ export class StoreSessionService {
     return { message: 'Session opened successfully.', id: session.id };
   }
 
+
   async close(store: Store, employeeId: string, dto: CloseSessionDto) {
     const session = await this.em.findOne(
       StoreSession,
@@ -160,20 +163,7 @@ export class StoreSessionService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const cashMovements = session.cashMovements.getItems();
-    const cashIn = cashMovements
-      .filter(cm => cm.type === CashMovementType.CashIn)
-      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-
-    const cashOut = cashMovements
-      .filter(cm => cm.type === CashMovementType.CashOut)
-      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-
-    const salePayments = session.payments
-      .getItems()
-      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
-
-    const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
+    const expectedAmount = this.calculateExpectedAmount(session);
 
     const before = {
       openingAmount: session.openingAmount,
@@ -205,5 +195,68 @@ export class StoreSessionService {
     await this.em.flush();
 
     return { message: 'Session closed successfully.', expectedAmount };
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoCloseStaleSessions(): Promise<void> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const staleSessions = await this.em.find(
+      StoreSession,
+      { closedAt: null, openedAt: { $lte: cutoff } },
+      { populate: ['cashMovements', 'payments', 'openedBy'] },
+    );
+
+    for (const session of staleSessions) {
+      const expectedAmount = this.calculateExpectedAmount(session);
+
+      const before = {
+        openingAmount: session.openingAmount,
+        openingNote: session.openingNote,
+        openedAt: session.openedAt,
+      };
+
+      session.closedBy = session.openedBy;
+      session.closingAmount = expectedAmount;
+      session.closingNote = 'Auto-closed by system after 24 hours of inactivity.';
+      session.expectedAmount = expectedAmount;
+      session.closedAt = new Date();
+
+      this.auditService.log(
+        this.em,
+        session.openedBy!,
+        AuditEntityType.StoreSession,
+        session.id,
+        AuditActionType.Close,
+        before,
+        {
+          closingAmount: session.closingAmount,
+          closingNote: session.closingNote,
+          expectedAmount,
+          closedAt: session.closedAt,
+          autoClosed: true,
+        },
+      );
+    }
+
+    if (staleSessions.length > 0)
+      await this.em.flush();
+  }
+
+  private calculateExpectedAmount(session: StoreSession): number {
+    const cashMovements = session.cashMovements.getItems();
+    const cashIn = cashMovements
+      .filter(cm => cm.type === CashMovementType.CashIn)
+      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+
+    const cashOut = cashMovements
+      .filter(cm => cm.type === CashMovementType.CashOut)
+      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+
+    const salePayments = session.payments
+      .getItems()
+      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+
+    return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
   }
 }
