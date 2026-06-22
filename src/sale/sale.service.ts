@@ -458,7 +458,7 @@ export class SaleService {
       ? 0
       : (currentTotalSales / (currentTotalSales + previousTotalSales)) * 100;
 
-    const costPriceMap = await this.buildCostPriceMap([...currentSales, ...previousSales]);
+    const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
 
     const currentTotalProfit = this.calcTotalProfit(currentSales, costPriceMap);
     const previousTotalProfit = this.calcTotalProfit(previousSales, costPriceMap);
@@ -590,7 +590,8 @@ export class SaleService {
     );
   }
 
-  private async buildCostPriceMap(sales: Sale[]): Promise<Map<string, number>> {
+
+  private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
     const productIds = [
       ...new Set(
         sales.flatMap((sale) =>
@@ -605,7 +606,10 @@ export class SaleService {
 
     const latestPurchasedItems = await this.em.find(
       PurchasedItem,
-      { product: { id: { $in: productIds } } },
+      {
+        product: { id: { $in: productIds } },
+        purchase: { store },
+      },
       { orderBy: { createdAt: 'DESC' } },
     );
 
