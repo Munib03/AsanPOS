@@ -348,16 +348,21 @@ export class SaleService {
       await em.flush();
 
       return {
-        message: `Sale completed successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
-        id: sale.id,
-        totalAmount,
-        items: serialized.items.map((item) => ({
-          id: item.id,
-          productId: item.product.id,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        receiptId: receipt.id,
+        saleId: sale.id,
+        receipt: {
+          receiptId: receipt.id,
+          storeName: receipt.store.name,
+          sequenceId: this.sequenceService.formatSequence(sequence),
+          customerName: customer.name,
+          totalAmount,
+          items: serialized.items.map((item) => ({
+            productName: item.product.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subTotal: (item.quantity ?? 0) * (item.unitPrice ?? 0),
+          })),
+        },
+        createdAt: receipt.createdAt,
       };
     });
   }
