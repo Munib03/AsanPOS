@@ -51,13 +51,4 @@ export class PurchaseController {
   ) {
     return this.purchaseService.update(store, id, user.id, dto);
   }
-
-  @Delete(':id')
-  remove(
-    @CurrentStore() store: Store,
-    @CurrentUser() user: { id: string; role: string },
-    @Param('id') id: string,
-  ) {
-    return this.purchaseService.remove(store, id, user.id);
-  }
 }

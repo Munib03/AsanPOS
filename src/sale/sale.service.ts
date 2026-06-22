@@ -34,6 +34,7 @@ import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { ReceiptService } from '../receipt/receipt.service';
 
+
 export interface SaleListItem {
   id: string;
   sequenceId?: string;
@@ -47,6 +48,7 @@ export interface SaleListItem {
   }[];
   totalPrice: number;
 }
+
 
 @Injectable()
 export class SaleService {
@@ -402,35 +404,6 @@ export class SaleService {
     });
   }
 
-  async remove(store: Store, id: string, employeeId: string) {
-    return await this.em.transactional(async (em) => {
-      const sale = await em.findOne(
-        Sale,
-        { id, store },
-        { populate: ['items'] },
-      );
-      if (!sale)
-        throw new NotFoundException(`Sale with id ${id} not found`);
-
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
-
-      this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.Sale,
-        sale.id,
-        AuditActionType.Delete,
-        null,
-        'deleted',
-      );
-
-      await em.flush();
-      await em.removeAndFlush(sale);
-      return { message: `Sale with id ${id} deleted successfully.` };
-    });
-  }
 
   async getDashboardStats(
     store: Store,

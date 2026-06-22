@@ -32,9 +32,10 @@ export class ProductService {
     private readonly auditService: AuditService,
   ) { }
 
+
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
-      { store },
+      { store, deletedAt: null },
       {
         populate: ['images', 'categories'],
         fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
@@ -49,9 +50,10 @@ export class ProductService {
     };
   }
 
+
   async findOne(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
-      { id, store },
+      { id, store, deletedAt: null },
       {
         populate: ['images', 'categories'],
         fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
@@ -234,9 +236,8 @@ export class ProductService {
   async remove(store: Store, id: string, employeeId: string) {
     await this.em.transactional(async (em) => {
       const product = await this.productRepository.findOneOrFail(
-        { id, store },
+        { id, store, deletedAt: null },
         {
-          populate: ['categories', 'images'],
           notFoundMessage: `Product with id ${id} not found`,
         },
       );
@@ -255,22 +256,9 @@ export class ProductService {
         null,
       );
 
+      product.deletedAt = new Date();
+
       await em.flush();
-
-      for (const image of product.images.getItems())
-        if (image.imageUrl)
-          await this.minioService.deleteFile(image.imageUrl);
-
-      const attachments = await em.findAll(Attachment, {
-        where: { entityId: id, entityType: AttachmentEntityType.PRODUCT },
-      });
-
-      for (const attachment of attachments)
-        if (attachment.imageUrl)
-          await this.minioService.deleteFile(attachment.imageUrl);
-
-      await em.removeAndFlush(attachments);
-      await em.removeAndFlush(product);
     });
 
     return { message: `Product ${id} deleted successfully` };

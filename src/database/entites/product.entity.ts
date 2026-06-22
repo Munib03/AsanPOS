@@ -47,4 +47,7 @@ export class Product {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true, fieldName: 'updated_at' })
   updatedAt?: Date;
+
+  @Property({ type: 'datetime', nullable: true })
+  deletedAt: Date | null = null;
 }

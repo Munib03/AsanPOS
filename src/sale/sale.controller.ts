@@ -52,15 +52,6 @@ export class SaleController {
     }
 
 
-    @Delete(':id')
-    remove(
-        @CurrentStore() store: Store,
-        @CurrentUser() user: { id: string; role: string },
-        @Param('id') id: string,
-    ) {
-        return this.saleService.remove(store, id, user.id);
-    }
-
     @Put(':id')
     update(
         @CurrentStore() store: Store,

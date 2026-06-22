@@ -215,43 +215,6 @@ export class PurchaseService {
       };
     });
   }
-
-  
-  async remove(store: Store, id: string, employeeId: string) {
-    return await this.em.transactional(async (em) => {
-      const purchase = await em.findOne(
-        Purchase,
-        { id, store },
-        { populate: ['items'] },
-      );
-      if (!purchase)
-        throw new NotFoundException(`Purchase with id ${id} not found`);
-
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
-
-      this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.Purchase,
-        purchase.id,
-        AuditActionType.Delete,
-        null,
-        'deleted',
-      );
-
-      await em.nativeDelete(JournalEntryItem, { purchase: { id } });
-      await em.nativeDelete(StockInItem, { stockIn: { purchase: { id } } });
-      await em.nativeDelete(StockIn, { purchase: { id } });
-      await em.nativeDelete(PurchasedItem, { purchase: { id } });
-
-      await em.flush();
-      await em.nativeDelete(Purchase, { id });
-
-      return { message: `Purchase with id ${id} deleted successfully.` };
-    });
-  }
   
 
   async update(store: Store, id: string, employeeId: string, dto: UpdatePurchaseDto) {
