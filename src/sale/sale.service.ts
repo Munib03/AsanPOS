@@ -348,6 +348,7 @@ export class SaleService {
       await em.flush();
 
       return {
+        message: "Sale is created successfully!",
         saleId: sale.id,
         receipt: {
           receiptId: receipt.id,
