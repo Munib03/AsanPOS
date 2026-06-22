@@ -15,7 +15,7 @@ import { Role } from '../shared/utils/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(private readonly productService: ProductService) { }
 
   @Get()
   findAll(
@@ -62,7 +62,10 @@ export class ProductController {
   }
 
   @Delete('images/:imageId')
-  deleteProductImage(@Param('imageId') imageId: string) {
-    return this.productService.deleteProductImage(imageId);
+  deleteProductImage(
+    @CurrentUser() user: { id: string },
+    @Param('imageId') imageId: string,
+  ) {
+    return this.productService.deleteProductImage(imageId, user.id);
   }
 }

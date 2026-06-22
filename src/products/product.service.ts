@@ -79,7 +79,7 @@ export class ProductService {
       inventories,
     };
   }
-  
+
 
   async create(store: Store, employeeId: string, dto: CreateProductDto) {
     const category = await this.em.findOne(Category, { name: dto.categoryName, store });
@@ -136,6 +136,7 @@ export class ProductService {
     return { message: 'Product created Successfully!' };
   }
 
+
   async update(store: Store, id: string, employeeId: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
@@ -145,11 +146,24 @@ export class ProductService {
       },
     );
 
-    const before = {
-      name: product.name,
-      price: product.price,
-      category: product.categories.getItems().map(c => c.name).join(', '),
-    };
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+
+    if (dto.name !== undefined && dto.name !== product.name) {
+      before.name = product.name;
+      after.name = dto.name;
+    }
+
+    if (dto.price !== undefined && dto.price !== product.price) {
+      before.price = product.price;
+      after.price = dto.price;
+    }
+
+    const currentCategoryName = product.categories.getItems().map(c => c.name).join(', ');
+    if (dto.categoryName && dto.categoryName !== currentCategoryName) {
+      before.category = currentCategoryName;
+      after.category = dto.categoryName;
+    }
 
     this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
 
@@ -171,6 +185,8 @@ export class ProductService {
     }
 
     if (dto.attachmentIds?.length) {
+      const beforeImages = product.images.getItems().map((i) => i.imageUrl);
+
       await this.attachmentService.claimAttachments(
         dto.attachmentIds,
         product.id,
@@ -184,6 +200,11 @@ export class ProductService {
       attachments.map((attachment) =>
         this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
       );
+
+      const afterImages = product.images.getItems().map((i) => i.imageUrl);
+
+      before.images = beforeImages.length ? beforeImages : null;
+      after.images = afterImages.length ? afterImages : null;
     }
 
     product.updatedAt = new Date();
@@ -192,24 +213,23 @@ export class ProductService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    this.auditService.log(
-      this.em,
-      employee,
-      AuditEntityType.Product,
-      product.id,
-      AuditActionType.Update,
-      before,
-      {
-        name: product.name,
-        price: product.price,
-        category: dto.categoryName ?? before.category,
-      },
-    );
+    if (Object.keys(before).length > 0) {
+      this.auditService.log(
+        this.em,
+        employee,
+        AuditEntityType.Product,
+        product.id,
+        AuditActionType.Update,
+        before,
+        after,
+      );
+    }
 
     await this.em.flush();
 
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
+
 
   async remove(store: Store, id: string, employeeId: string) {
     await this.em.transactional(async (em) => {
@@ -256,16 +276,35 @@ export class ProductService {
     return { message: `Product ${id} deleted successfully` };
   }
 
-  async deleteProductImage(imageId: string): Promise<{ message: string }> {
-    const image = await this.em.findOne(ProductImage, { id: imageId });
+
+  async deleteProductImage(imageId: string, employeeId: string): Promise<{ message: string }> {
+    const image = await this.em.findOne(
+      ProductImage,
+      { id: imageId },
+      { populate: ['product'] },
+    );
     if (!image)
       throw new NotFoundException('Image not found');
+
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
 
     if (image.imageUrl)
       await this.attachmentService.deleteAttachmentByUrl(
         image.imageUrl,
         AttachmentEntityType.PRODUCT,
       );
+
+    this.auditService.log(
+      this.em,
+      employee,
+      AuditEntityType.Product,
+      image.product.id,
+      AuditActionType.Delete,
+      { imageUrl: image.imageUrl },
+      null,
+    );
 
     await this.em.removeAndFlush(image);
 

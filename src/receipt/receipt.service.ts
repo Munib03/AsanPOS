@@ -4,6 +4,7 @@ import { Receipt } from '../database/entites/receipt.entity';
 import { Store } from '../database/entites/store.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
 
+
 @Injectable()
 export class ReceiptService {
   constructor(private readonly em: EntityManager) {}
@@ -15,6 +16,7 @@ export class ReceiptService {
     });
   }
 
+
   async findOne(store: Store, id: string) {
     const receipt = await this.em.findOne(Receipt, { id, store });
     if (!receipt)
@@ -22,6 +24,7 @@ export class ReceiptService {
 
     return receipt;
   }
+
 
   async create(
     em: EntityManager,
