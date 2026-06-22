@@ -163,40 +163,22 @@ export class StoreSessionService {
     if (!employee)
       throw new NotFoundException('Employee not found');
 
-    const expectedAmount = this.calculateExpectedAmount(session);
-
-    const before = {
-      openingAmount: session.openingAmount,
-      openingNote: session.openingNote,
-      openedAt: session.openedAt,
-    };
-
-    session.closedBy = employee;
-    session.closingAmount = dto.closingAmount;
-    session.closingNote = dto.closingNote;
-    session.expectedAmount = expectedAmount;
-    session.closedAt = new Date();
-
-    this.auditService.log(
-      this.em,
-      employee,
-      AuditEntityType.StoreSession,
-      session.id,
-      AuditActionType.Close,
-      before,
-      {
-        closingAmount: dto.closingAmount,
-        closingNote: dto.closingNote,
-        expectedAmount,
-        closedAt: session.closedAt,
-      },
-    );
+    const expectedAmount = this.closeSession(session, employee, {
+      closingAmount: dto.closingAmount,
+      closingNote: dto.closingNote,
+      autoClosed: false,
+    });
 
     await this.em.flush();
 
     return { message: 'Session closed successfully.', expectedAmount };
   }
 
+  /**
+   * Runs hourly. Any session left open for 24+ hours gets auto-closed
+   * since no employee is acting on it — the closing amount is set to
+   * the system-calculated expected amount (no physical cash count exists).
+   */
   @Cron(CronExpression.EVERY_HOUR)
   async autoCloseStaleSessions(): Promise<void> {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -208,39 +190,59 @@ export class StoreSessionService {
     );
 
     for (const session of staleSessions) {
+      if (!session.openedBy) continue;
+
       const expectedAmount = this.calculateExpectedAmount(session);
 
-      const before = {
-        openingAmount: session.openingAmount,
-        openingNote: session.openingNote,
-        openedAt: session.openedAt,
-      };
-
-      session.closedBy = session.openedBy;
-      session.closingAmount = expectedAmount;
-      session.closingNote = 'Auto-closed by system after 24 hours of inactivity.';
-      session.expectedAmount = expectedAmount;
-      session.closedAt = new Date();
-
-      this.auditService.log(
-        this.em,
-        session.openedBy!,
-        AuditEntityType.StoreSession,
-        session.id,
-        AuditActionType.Close,
-        before,
-        {
-          closingAmount: session.closingAmount,
-          closingNote: session.closingNote,
-          expectedAmount,
-          closedAt: session.closedAt,
-          autoClosed: true,
-        },
-      );
+      this.closeSession(session, session.openedBy, {
+        closingAmount: expectedAmount,
+        closingNote: 'Auto-closed by system after 24 hours of inactivity.',
+        autoClosed: true,
+      });
     }
 
     if (staleSessions.length > 0)
       await this.em.flush();
+  }
+
+
+
+  private closeSession(
+    session: StoreSession,
+    closedBy: Employee,
+    options: { closingAmount: number; closingNote?: string; autoClosed: boolean },
+  ): number {
+    const expectedAmount = this.calculateExpectedAmount(session);
+
+    const before = {
+      openingAmount: session.openingAmount,
+      openingNote: session.openingNote,
+      openedAt: session.openedAt,
+    };
+
+    session.closedBy = closedBy;
+    session.closingAmount = options.closingAmount;
+    session.closingNote = options.closingNote;
+    session.expectedAmount = expectedAmount;
+    session.closedAt = new Date();
+
+    this.auditService.log(
+      this.em,
+      closedBy,
+      AuditEntityType.StoreSession,
+      session.id,
+      AuditActionType.Close,
+      before,
+      {
+        closingAmount: session.closingAmount,
+        closingNote: session.closingNote,
+        expectedAmount,
+        closedAt: session.closedAt,
+        autoClosed: options.autoClosed,
+      },
+    );
+
+    return expectedAmount;
   }
 
   private calculateExpectedAmount(session: StoreSession): number {
