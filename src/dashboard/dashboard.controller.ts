@@ -12,13 +12,13 @@ import { DashboardQueryDto } from './dto/dashboard.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class DashboardController {
-    constructor(private readonly dashboardService: DashboardService) { }
+  constructor(private readonly dashboardService: DashboardService) {}
 
-    @Get()
-    getDashboardStats(
-        @CurrentStore() store: Store,
-        @Query() query: DashboardQueryDto,
-    ) {
-        return this.dashboardService.getDashboardStats(store, query);
-    }
+  @Get()
+  getDashboardStats(
+    @CurrentStore() store: Store,
+    @Query() query: DashboardQueryDto,
+  ) {
+    return this.dashboardService.getDashboardStats(store, query);
+  }
 }
