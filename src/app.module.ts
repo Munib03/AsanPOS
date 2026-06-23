@@ -22,6 +22,7 @@ import { CashMovementModule } from './cash-movements/cash-movement.module';
 import { PaymentModule } from './payments/payment.module';
 import { StoreSessionModule } from './store-session/store-session.module';
 import { ReceiptModule } from './receipt/receipt.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 
 @Module({
@@ -46,6 +47,7 @@ import { ReceiptModule } from './receipt/receipt.module';
     StoreSessionModule,
     PaymentModule,
     ReceiptModule,
+    DashboardModule
   ],
   controllers: [AppController],
   providers: [AppService],
