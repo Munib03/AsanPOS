@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne, Cascade, OneToOne } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, OneToMany, ManyToOne, Cascade, OneToOne, Filter } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from './category.entity';
 import { ProductImage } from './product-image.entity';
@@ -7,6 +7,12 @@ import { Inventory } from './inventory.entity';
 import { BaseRepository } from '../../shared/repositories/base.repository';
 import { PurchasedItem } from './purchased_item.entity';
 import { Sequence } from './sequence.entity';
+
+@Filter({
+  name: 'notDeleted',
+  cond: { deletedAt: null },
+  default: true, 
+})
 
 
 @Entity({ tableName: 'products', repository: () => BaseRepository })

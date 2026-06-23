@@ -35,7 +35,7 @@ export class ProductService {
 
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
-      { store, deletedAt: null },
+      { store },
       {
         populate: ['images', 'categories'],
         fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
@@ -53,7 +53,7 @@ export class ProductService {
 
   async findOne(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
-      { id, store, deletedAt: null },
+      { id, store },
       {
         populate: ['images', 'categories'],
         fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
@@ -236,7 +236,7 @@ export class ProductService {
   async remove(store: Store, id: string, employeeId: string) {
     await this.em.transactional(async (em) => {
       const product = await this.productRepository.findOneOrFail(
-        { id, store, deletedAt: null },
+        { id, store },
         {
           notFoundMessage: `Product with id ${id} not found`,
         },

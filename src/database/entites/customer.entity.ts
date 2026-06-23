@@ -1,9 +1,17 @@
-import { Entity, PrimaryKey, Property, OneToMany, Collection, ManyToOne } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, OneToMany, Collection, ManyToOne, Filter } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { Purchase } from "./purchase.entity";
 import { Sale } from "./sale.entity";
 import { Store } from "./store.entity";
 import { Account } from "./account.entity";
+
+
+@Filter({
+  name: 'notDeleted',
+  cond: { deletedAt: null },
+  default: true, 
+})
+
 
 @Entity({ tableName: "customer" })
 export class Customer {

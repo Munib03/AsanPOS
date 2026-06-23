@@ -31,7 +31,7 @@ export class EmployeeService {
 
   async findAll(store: Store) {
     const employees = await this.em.findAll(Employee, {
-      where: { store, deletedAt: null },
+      where: { store },
       fields: [
         'id', 'email', 'name', 'phone', 'role',
         'firstName', 'lastName', 'imageUrl', 'dob', 'gender', 'verifiedAt',
@@ -42,7 +42,7 @@ export class EmployeeService {
   }
 
   async findOne(id: string) {
-    const employee = await this.em.findOne(Employee, { id, deletedAt: null }, { populate: ['store'] });
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee) throw new NotFoundException('Employee not found');
 
     return {
@@ -62,7 +62,7 @@ export class EmployeeService {
   }
 
   async employeeRegister(dto: CreateEmployeeDto, store: Store, employeeId: string) {
-    const existing = await this.em.findOne(Employee, { email: dto.email, deletedAt: null });
+    const existing = await this.em.findOne(Employee, { email: dto.email });
 
     if (existing) {
       if (existing.verifiedAt)
@@ -128,7 +128,7 @@ export class EmployeeService {
   }
 
   async remove(id: string, employeeId: string) {
-    const employee = await this.em.findOne(Employee, { id, deletedAt: null });
+    const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
@@ -156,7 +156,7 @@ export class EmployeeService {
   async updateEmployeeInfo(id: string, employeeId: string, dto: UpdateEmployeeDto) {
     if (!dto) return { message: 'No changes to update' };
 
-    const employee = await this.em.findOne(Employee, { id, deletedAt: null }, { populate: ['store'] });
+    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
@@ -204,7 +204,7 @@ export class EmployeeService {
       if (dto.email === employee.email)
         throw new BadRequestException('New email is the same as the current one');
 
-      const existing = await this.em.findOne(Employee, { email: dto.email, deletedAt: null });
+      const existing = await this.em.findOne(Employee, { email: dto.email });
       if (existing) throw new BadRequestException('Email already in use');
 
       emailChange = true;
@@ -268,7 +268,7 @@ export class EmployeeService {
   }
 
   async deleteEmployeeImage(id: string) {
-    const employee = await this.em.findOne(Employee, { id, deletedAt: null });
+    const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 

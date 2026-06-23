@@ -43,4 +43,5 @@ export interface PurchaseListItem {
   items: PurchaseItemType[];
   stockIns: StockInDetail[]; 
   totalPrice: number;
+  inventoryId: string | null;
 }

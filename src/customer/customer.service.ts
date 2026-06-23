@@ -23,7 +23,7 @@ export class CustomerService {
 
   async findAll(store: Store, query: PaginateQuery) {
     const [customers, meta] = await this.customerRepository.findAndPaginate(
-      { store, deletedAt: null },
+      { store },
       { fields: ['id', 'name', 'phone', 'address'] },
       { searchable: ['name', 'phone', 'address'] },
       query,
@@ -39,14 +39,14 @@ export class CustomerService {
 
   async findOne(id: string) {
     return this.customerRepository.findOneOrFail(
-      { id, deletedAt: null },
+      { id },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
   }
 
   async create(store: Store, employeeId: string, dto: CreateCustomerDto) {
     return await this.em.transactional(async (em) => {
-      const existing = await em.findOne(Customer, { phone: dto.phone, store, deletedAt: null });
+      const existing = await em.findOne(Customer, { phone: dto.phone, store });
       if (existing)
         throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
 
@@ -97,7 +97,7 @@ export class CustomerService {
 
   async update(id: string, employeeId: string, dto: UpdateCustomerDto) {
     const customer = await this.customerRepository.findOneOrFail(
-      { id, deletedAt: null },
+      { id },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
 
@@ -105,7 +105,6 @@ export class CustomerService {
       const phone = await this.em.findOne(Customer, {
         phone: dto.phone,
         store: customer.store,
-        deletedAt: null,
       });
       if (phone && phone.id !== id)
         throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
@@ -154,7 +153,7 @@ export class CustomerService {
 
   async remove(id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id, deletedAt: null });
+      const customer = await em.findOne(Customer, { id });
 
       if (!customer)
         throw new NotFoundException(`Customer with id ${id} not found`);

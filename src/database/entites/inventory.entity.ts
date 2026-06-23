@@ -1,8 +1,15 @@
-import { Entity, PrimaryKey, Property, ManyToMany, Collection, ManyToOne, OneToMany } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, ManyToMany, Collection, ManyToOne, OneToMany, Filter } from "@mikro-orm/core";
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from "./product.entity";
 import { Store } from "./store.entity";
 import { StockQuantity } from "./stock-quantity.entity";
+
+@Filter({
+  name: 'notDeleted',
+  cond: { deletedAt: null },
+  default: true, 
+})
+
 
 @Entity({ tableName: "inventory" })
 export class Inventory {

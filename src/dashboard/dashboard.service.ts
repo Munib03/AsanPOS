@@ -38,12 +38,12 @@ export class DashboardService {
 
         const currentTotalSales = this.calcTotalSales(currentSales);
         const previousTotalSales = this.calcTotalSales(previousSales);
-        const salesPercentageChange = this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales);
+        const salesPercentageChange = this.calcSignedPercentageChange(currentTotalSales, previousTotalSales);
 
         const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
-        const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
+        const profitPercentageChange = this.calcSignedPercentageChange(currentNetProfit, previousNetProfit);
 
         const response: DashboardStats = {
             range,
@@ -285,13 +285,13 @@ export class DashboardService {
     }
 
 
-    private calcBoundedSignedPercentage(current: number, previous: number): number {
-        const denom = Math.abs(current) + Math.abs(previous);
-        if (denom === 0) return 0;
+    private calcSignedPercentageChange(current: number, previous: number): number {
+        if (previous === 0) {
+            if (current === 0) return 0;
+            return current > 0 ? 100 : -100;
+        }
 
-        const shareMagnitude = (Math.abs(current) / denom) * 100;
-        const signed = Math.sign(current) * shareMagnitude;
-
-        return Math.round(signed * 100) / 100;
+        const change = ((current - previous) / Math.abs(previous)) * 100;
+        return Math.round(change * 100) / 100;
     }
 }
