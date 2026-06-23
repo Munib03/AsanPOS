@@ -1,15 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { SaleService } from './sale.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
-import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 import { RolesGuard } from '../shared/guards/role.guard';
 import { Role } from '../shared/utils/role.enum';
 import { Roles } from '../shared/decorators/role.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 
 
 @Controller('sales')
@@ -17,6 +17,14 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 @Roles(Role.Admin, Role.Cashier)
 export class SaleController {
     constructor(private readonly saleService: SaleService) { }
+
+    @Get()
+    findAll(
+        @CurrentStore() store: Store,
+        @Query() query: paginateQueryTypes.PaginateQuery,
+    ) {
+        return this.saleService.findAll(store, query);
+    }
 
     @Post('checkout')
     checkout(

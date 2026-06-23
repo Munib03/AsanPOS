@@ -23,14 +23,14 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { SaleStatus } from '../shared/utils/sale-status.enum';
 import { StockOutStatus } from '../shared/utils/stock-out-status.enum';
-import { BaseRepository } from '../shared/repositories/base.repository';
-import { Meta, PaginateQuery } from '../shared/types/paginate-query.types';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { ReceiptService } from '../receipt/receipt.service';
+import { PaginateQuery, Meta } from '../shared/types/paginate-query.types';
+import { BaseRepository } from '../shared/repositories/base.repository';
 
 
 export interface SaleListItem {
@@ -52,13 +52,62 @@ export interface SaleListItem {
 export class SaleService {
   constructor(
     private readonly em: EntityManager,
-    private readonly saleRepository: BaseRepository<Sale>,
     private readonly sequenceService: SequenceService,
     private readonly journalEntryService: JournalEntryService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
     private readonly receiptService: ReceiptService,
+    private readonly saleRepository: BaseRepository<Sale>
+    
   ) { }
+
+
+  async findAll(
+    store: Store,
+    query: PaginateQuery,
+  ): Promise<{ data: SaleListItem[]; meta: Meta }> {
+    const [sales, meta] = await this.saleRepository.findAndPaginate(
+      { store },
+      {
+        populate: ['customer', 'items', 'items.product', 'sequence'],
+        fields: [
+          'id',
+          'createdAt',
+          'status',
+          'sequence.prefix',
+          'sequence.lastIndex',
+          'sequence.entity',
+          'customer.id',
+          'customer.name',
+          'items.id',
+          'items.quantity',
+          'items.unitPrice',
+          'items.product.id',
+          'items.product.name',
+          'items.product.price',
+        ],
+      },
+      {
+        searchable: ['customer.name'],
+      },
+      query,
+    );
+
+    const serialized = serialize(sales, {
+      populate: ['customer', 'items', 'items.product', 'sequence'],
+    });
+
+    const data: SaleListItem[] = sales.map((sale, index) => ({
+      ...serialized[index],
+      sequenceId: this.sequenceService.formatSequence(sale.sequence),
+      totalPrice: serialized[index].items.reduce(
+        (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
+        0,
+      ),
+    }));
+
+    return { data, meta };
+  }
 
 
   async checkout(store: Store, employeeId: string, dto: CreateSaleDto) {

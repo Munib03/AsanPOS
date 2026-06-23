@@ -211,6 +211,7 @@ export class PurchaseService {
       await em.flush();
 
       return {
+        purchaseId: purchase.id,
         message: `Purchase created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
       };
     });
