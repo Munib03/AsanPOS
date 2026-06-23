@@ -18,23 +18,6 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 export class SaleController {
     constructor(private readonly saleService: SaleService) { }
 
-    @Get()
-    findAll(
-        @CurrentStore() store: Store,
-        @Query() query: paginateQueryTypes.PaginateQuery,
-    ) {
-        return this.saleService.findAll(store, query);
-    }
-
-
-    @Get(':id')
-    findOne(
-        @CurrentStore() store: Store,
-        @Param('id') id: string,
-    ) {
-        return this.saleService.findOne(store, id);
-    }
-
     @Post('checkout')
     checkout(
         @CurrentStore() store: Store,
