@@ -32,6 +32,9 @@ export class Customer {
   @Property({ onUpdate: () => new Date(), nullable: true })
   updatedAt?: Date;
 
+  @Property({ type: 'datetime', nullable: true })
+  deletedAt: Date | null = null;
+  
   @ManyToOne(() => Store, { fieldName: 'store_id', nullable: true })
   store?: Store;
 

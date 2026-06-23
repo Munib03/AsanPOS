@@ -37,7 +37,7 @@ export class Employee {
   imageUrl?: string | null;
 
 
-  @Property({ persist: false})
+  @Property({ persist: false })
   imageUrlSigned?: string | null;
 
   @OnLoad()
@@ -64,4 +64,7 @@ export class Employee {
 
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
   updatedAt?: Date;
+
+  @Property({ type: 'datetime', nullable: true })
+  deletedAt: Date | null = null;
 }

@@ -30,4 +30,7 @@ export class Inventory {
 
   @Property({ fieldName: "updated_at", defaultRaw: "now()", onUpdate: () => new Date(), nullable: true })
   updatedAt?: Date;
+
+  @Property({ type: 'datetime', nullable: true })
+  deletedAt: Date | null = null;
 }

@@ -17,11 +17,11 @@ export class CategoryService {
     private readonly em: EntityManager,
     private readonly categoryRepository: BaseRepository<Category>,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store, query: PaginateQuery) {
     const [categories, meta] = await this.categoryRepository.findAndPaginate(
-      { store },
+      { store, deletedAt: null },
       { fields: ['id', 'name'] },
       { searchable: ['name'], sortable: ['name'] },
       query,
@@ -31,7 +31,7 @@ export class CategoryService {
   }
 
   async findOne(store: Store, name: string) {
-    const category = await this.em.findOne(Category, { name, store });
+    const category = await this.em.findOne(Category, { name, store, deletedAt: null });
     if (!category)
       throw new NotFoundException(`Category with name ${name} not found`);
 
@@ -40,7 +40,7 @@ export class CategoryService {
 
 
   async create(store: Store, employeeId: string, dto: CreateCategoryDto) {
-    const existing = await this.em.findOne(Category, { name: dto.name, store });
+    const existing = await this.em.findOne(Category, { name: dto.name, store, deletedAt: null });
     if (existing)
       throw new BadRequestException(`Category with name ${dto.name} already exists in your store`);
 
@@ -67,7 +67,7 @@ export class CategoryService {
   }
 
   async update(store: Store, id: string, employeeId: string, dto: UpdateCategoryDto) {
-    const category = await this.em.findOne(Category, { id, store });
+    const category = await this.em.findOne(Category, { id, store, deletedAt: null });
     if (!category)
       throw new NotFoundException(`Category with id ${id} not found`);
 
@@ -96,7 +96,7 @@ export class CategoryService {
   }
 
   async remove(store: Store, id: string, employeeId: string) {
-    const category = await this.em.findOne(Category, { id, store }, { populate: ['products'] });
+    const category = await this.em.findOne(Category, { id, store, deletedAt: null }, { populate: ['products'] });
     if (!category)
       throw new NotFoundException(`Category with id ${id} not found`);
 
@@ -117,8 +117,9 @@ export class CategoryService {
       null,
     );
 
+    category.deletedAt = new Date();
+
     await this.em.flush();
-    await this.em.removeAndFlush(category);
 
     return { message: `Category ${id} deleted successfully` };
   }

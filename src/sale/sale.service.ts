@@ -440,11 +440,10 @@ export class SaleService {
 
     const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
 
-    const currentTotalProfit = this.calcTotalProfit(currentSales, costPriceMap);
-    const previousTotalProfit = this.calcTotalProfit(previousSales, costPriceMap);
-    const profitPercentageChange = currentTotalProfit + previousTotalProfit === 0
-      ? 0
-      : (currentTotalProfit / (currentTotalProfit + previousTotalProfit)) * 100;
+    const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
+    const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
+
+    const { profit, loss } = this.calcProfitAndLoss(currentNetProfit, previousNetProfit);
 
     const lowStockRecords = await this.em.find(
       StockQuantity,
@@ -480,15 +479,49 @@ export class SaleService {
         total: currentTotalSales,
         percentageChange: Math.round(salesPercentageChange * 100) / 100,
       },
-      profit: {
-        total: currentTotalProfit,
-        percentageChange: Math.round(profitPercentageChange * 100) / 100,
-      },
+      profit,
+      loss,
       lowStockProducts,
       outOfStockProducts,
     };
   }
 
+
+  private calcProfitAndLoss(
+    currentNetProfit: number,
+    previousNetProfit: number,
+  ): {
+    profit: { total: number; percentageChange: number };
+    loss: { total: number; percentageChange: number };
+  } {
+    const profitSum = currentNetProfit + previousNetProfit;
+    const profitPercentageChange = profitSum === 0
+      ? 0
+      : (currentNetProfit / profitSum) * 100;
+
+    const profitTotal = currentNetProfit > 0 ? currentNetProfit : 0;
+
+    const currentLoss = currentNetProfit < 0 ? Math.abs(currentNetProfit) : 0;
+    const previousLoss = previousNetProfit < 0 ? Math.abs(previousNetProfit) : 0;
+
+    const lossSum = currentLoss + previousLoss;
+    const lossPercentageChange = lossSum === 0
+      ? 0
+      : (currentLoss / lossSum) * 100;
+
+    return {
+      profit: {
+        total: Math.round(profitTotal * 100) / 100,
+        percentageChange: Math.round(profitPercentageChange * 100) / 100,
+      },
+      loss: {
+        total: Math.round(currentLoss * 100) / 100,
+        percentageChange: Math.round(lossPercentageChange * 100) / 100,
+      },
+    };
+  }
+
+  
   private getRangeBounds(range: DashboardRange) {
     const now = new Date();
 

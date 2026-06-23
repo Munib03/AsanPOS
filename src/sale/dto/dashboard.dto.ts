@@ -23,6 +23,10 @@ export interface DashboardStats {
     total: number;
     percentageChange: number;
   };
+  loss: {
+    total: number;
+    percentageChange: number;
+  };
   lowStockProducts: {
     id: string;
     name: string;

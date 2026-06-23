@@ -11,15 +11,6 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { Account } from '../database/entites/account.entity';
-import { Purchase } from '../database/entites/purchase.entity';
-import { PurchasedItem } from '../database/entites/purchased_item.entity';
-import { SaleItem } from '../database/entites/sale-item.entity';
-import { Sale } from '../database/entites/sale.entity';
-import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
-import { StockInItem } from '../database/entites/stock-in-item.entity';
-import { StockIn } from '../database/entites/stock-in.entity';
-import { StockOutItem } from '../database/entites/stock-out-item.entity';
-import { StockOut } from '../database/entites/stock-out.entity';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
 @Injectable()
@@ -32,7 +23,7 @@ export class CustomerService {
 
   async findAll(store: Store, query: PaginateQuery) {
     const [customers, meta] = await this.customerRepository.findAndPaginate(
-      { store },
+      { store, deletedAt: null },
       { fields: ['id', 'name', 'phone', 'address'] },
       { searchable: ['name', 'phone', 'address'] },
       query,
@@ -48,14 +39,14 @@ export class CustomerService {
 
   async findOne(id: string) {
     return this.customerRepository.findOneOrFail(
-      { id },
+      { id, deletedAt: null },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
   }
 
   async create(store: Store, employeeId: string, dto: CreateCustomerDto) {
     return await this.em.transactional(async (em) => {
-      const existing = await em.findOne(Customer, { phone: dto.phone, store });
+      const existing = await em.findOne(Customer, { phone: dto.phone, store, deletedAt: null });
       if (existing)
         throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
 
@@ -102,11 +93,11 @@ export class CustomerService {
       return { message: 'Customer created successfully.' };
     });
   }
-  
+
 
   async update(id: string, employeeId: string, dto: UpdateCustomerDto) {
     const customer = await this.customerRepository.findOneOrFail(
-      { id },
+      { id, deletedAt: null },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
 
@@ -114,6 +105,7 @@ export class CustomerService {
       const phone = await this.em.findOne(Customer, {
         phone: dto.phone,
         store: customer.store,
+        deletedAt: null,
       });
       if (phone && phone.id !== id)
         throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
@@ -162,7 +154,7 @@ export class CustomerService {
 
   async remove(id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id });
+      const customer = await em.findOne(Customer, { id, deletedAt: null });
 
       if (!customer)
         throw new NotFoundException(`Customer with id ${id} not found`);
@@ -184,8 +176,9 @@ export class CustomerService {
         null,
       );
 
+      customer.deletedAt = new Date();
+
       await em.flush();
-      await em.nativeDelete(Customer, { id });
 
       return { message: `Customer with id ${id} deleted successfully.` };
     });
