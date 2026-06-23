@@ -1,12 +1,11 @@
-import { IsString, IsUUID, IsArray, IsNumber, IsOptional, ValidateNested, Min } from "class-validator";
-import { Type } from "class-transformer";
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
-class CreatePurchasedItemDto {
+export class CreatePurchaseItemDto {
   @IsUUID()
   productId!: string;
 
   @IsNumber()
-  @Min(1)
   quantity!: number;
 
   @IsNumber()
@@ -17,12 +16,18 @@ export class CreatePurchaseDto {
   @IsUUID()
   customerId!: string;
 
+  @IsUUID()                                                   
+  inventoryId!: string;                                       
 
   @IsOptional()
-  customDate?: Date;
+  @IsDateString()
+  customDate?: string;
 
-  @IsArray()
+  @IsOptional()
+  @IsString()
+  note?: string;
+
   @ValidateNested({ each: true })
-  @Type(() => CreatePurchasedItemDto)
-  items!: CreatePurchasedItemDto[];
+  @Type(() => CreatePurchaseItemDto)
+  items!: CreatePurchaseItemDto[];
 }

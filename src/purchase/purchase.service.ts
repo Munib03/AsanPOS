@@ -20,6 +20,7 @@ import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { Inventory } from '../database/entites/inventory.entity';
 
 @Injectable()
 export class PurchaseService {
@@ -62,27 +63,53 @@ export class PurchaseService {
       Purchase,
       { id, store },
       {
-        populate: ['customer', 'items', 'items.product', 'sequence'],
+        populate: ['customer', 'inventory', 'items', 'items.product', 'sequence'],
         fields: [
-          'id', 'status', 'customDate',
-          'sequence.prefix', 'sequence.lastIndex',
-          'customer.id', 'customer.name', 'customer.phone', 'customer.address',
-          'items.id', 'items.quantity', 'items.unitPrice', 'items.received',
-          'items.product.id', 'items.product.name', 'items.product.price',
+          'id',
+          'status',
+          'customDate',
+
+          'inventory.id',
+          'inventory.name',
+          'inventory.address',
+
+          'sequence.prefix',
+          'sequence.lastIndex',
+
+          'customer.id',
+          'customer.name',
+          'customer.phone',
+          'customer.address',
+
+          'items.id',
+          'items.quantity',
+          'items.unitPrice',
+          'items.received',
+
+          'items.product.id',
+          'items.product.name',
+          'items.product.price',
         ],
       },
     );
 
-    if (!purchase) throw new NotFoundException(`Purchase with id ${id} not found`);
+    if (!purchase) {
+      throw new NotFoundException(`Purchase with id ${id} not found`);
+    }
 
     const purchasedItems = purchase.items.getItems();
     const purchasedItemIds = purchasedItems.map((item) => item.id);
 
     if (purchasedItemIds.length === 0) {
       const serialized = serialize(purchase, {
-        populate: ['customer', 'items', 'items.product', 'sequence'],
+        populate: ['customer', 'inventory', 'items', 'items.product', 'sequence'],
       });
-      return this.mapPurchaseToListItem(serialized);
+
+      return this.mapPurchaseToListItem(
+        serialized,
+        undefined,
+        purchase.inventory?.id ?? null,
+      );
     }
 
     let stockInsMap: Map<string, StockInDetail> = new Map();
@@ -101,17 +128,23 @@ export class PurchaseService {
           ],
         },
       );
+
       stockInsMap = this.buildStockInsMap(stockInItems);
     } catch (error) {
       console.error('Error fetching stock-in items:', error);
     }
 
-    const inventoryId = Array.from(stockInsMap.values())[0]?.inventoryId ?? null;
+    const inventoryId = purchase.inventory?.id ?? null;
 
     const serialized = serialize(purchase, {
-      populate: ['customer', 'items', 'items.product', 'sequence'],
+      populate: ['customer', 'inventory', 'items', 'items.product', 'sequence'],
     });
-    return this.mapPurchaseToListItem(serialized, stockInsMap, inventoryId);
+
+    return this.mapPurchaseToListItem(
+      serialized,
+      stockInsMap,
+      inventoryId,
+    );
   }
 
 
@@ -119,36 +152,102 @@ export class PurchaseService {
 
   async create(store: Store, employeeId: string, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id: dto.customerId });
-      if (!customer) throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
+      const customer = await em.findOne(Customer, {
+        id: dto.customerId,
+      });
 
-      const sequence = await this.sequenceService.generateSequence('Purchase', 'PUR');
+      if (!customer) {
+        throw new NotFoundException(
+          `Customer with id ${dto.customerId} not found`,
+        );
+      }
 
-      const purchase = em.create(Purchase, { customer, store, customDate: dto.customDate, status: PurchaseStatus.DRAFT, sequence });
+      const inventory = await em.findOne(Inventory, {
+        id: dto.inventoryId,
+        store,
+      });
+
+      if (!inventory) {
+        throw new NotFoundException(
+          `Inventory with id ${dto.inventoryId} not found`,
+        );
+      }
+
+      const sequence = await this.sequenceService.generateSequence(
+        'Purchase',
+        'PUR',
+      );
+
+      const purchase = em.create(Purchase, {
+        customer,
+        store,
+        inventory,
+        customDate: dto.customDate,
+        status: PurchaseStatus.DRAFT,
+        sequence,
+      });
+
       await em.persistAndFlush(purchase);
 
-      const products = await em.findAll(Product, { where: { id: { $in: dto.items.map((item) => item.productId) } } });
-      if (products.length !== dto.items.length) throw new NotFoundException(`One or more products not found`);
+      const products = await em.findAll(Product, {
+        where: {
+          id: {
+            $in: dto.items.map((item) => item.productId),
+          },
+        },
+      });
 
-      const productMap = new Map(products.map((product) => [product.id, product]));
+      if (products.length !== dto.items.length) {
+        throw new NotFoundException('One or more products not found');
+      }
+
+      const productMap = new Map(
+        products.map((product) => [product.id, product]),
+      );
 
       const purchasedItems = dto.items.map((item) => {
         const product = productMap.get(item.productId);
-        if (!product) throw new NotFoundException(`Product with id ${item.productId} not found`);
 
-        return em.create(PurchasedItem, { purchase, product, quantity: item.quantity, unitPrice: item.unitPrice });
+        if (!product) {
+          throw new NotFoundException(
+            `Product with id ${item.productId} not found`,
+          );
+        }
+
+        return em.create(PurchasedItem, {
+          purchase,
+          product,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        });
       });
 
       await em.persistAndFlush(purchasedItems);
 
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee) throw new NotFoundException('Employee not found');
+      const employee = await em.findOne(Employee, {
+        id: employeeId,
+      });
 
-      this.auditService.logStatusChange(em, employee, AuditEntityType.Purchase, purchase.id, AuditActionType.Create, null, null);
+      if (!employee) {
+        throw new NotFoundException('Employee not found');
+      }
+
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Purchase,
+        purchase.id,
+        AuditActionType.Create,
+        null,
+        null,
+      );
 
       await em.flush();
 
-      return { purchaseId: purchase.id, message: `Purchase created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.` };
+      return {
+        purchaseId: purchase.id,
+        message: `Purchase created successfully with sequence ${this.sequenceService.formatSequence(sequence)}.`,
+      };
     });
   }
 
@@ -180,7 +279,7 @@ export class PurchaseService {
     });
   }
 
-  
+
   private buildStockInsMap(stockInItems: StockInItem[]): Map<string, StockInDetail> {
     const stockInsMap = new Map<string, StockInDetail>();
 
