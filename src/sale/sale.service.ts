@@ -279,14 +279,7 @@ export class SaleService {
         { saleId: sale.id, amount: totalAmount, status: PaymentStatus.Done },
       );
 
-      
-      const journalItems = journalEntry.items.getItems();
-      const journalDebitTotal = journalItems.reduce((sum, item) => sum + (item.debit ?? 0), 0);
-      const journalCreditTotal = journalItems.reduce((sum, item) => sum + (item.credit ?? 0), 0);
-
-      const isFullyPaid = journalDebitTotal === journalCreditTotal && payment.amount >= journalDebitTotal;
-
-      if (isFullyPaid) {
+      if (payment.amount === totalAmount) {
         this.auditService.logStatusChange(
           em,
           employee,
