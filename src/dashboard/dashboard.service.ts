@@ -97,6 +97,7 @@ export class DashboardService {
         return response;
     }
 
+
     private parseAndValidateDateRange(
         from: string | undefined,
         to: string | undefined,
@@ -207,6 +208,7 @@ export class DashboardService {
         }
     }
 
+
     private buildDailyBreakdown(
         sales: Sale[],
         costPriceMap: Map<string, number>,
@@ -246,6 +248,7 @@ export class DashboardService {
         return days;
     }
 
+
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
@@ -253,6 +256,7 @@ export class DashboardService {
             0,
         );
     }
+
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
@@ -273,6 +277,7 @@ export class DashboardService {
         return costPriceMap;
     }
 
+    
     private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
