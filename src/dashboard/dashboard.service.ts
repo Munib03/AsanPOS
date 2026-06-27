@@ -38,12 +38,12 @@ export class DashboardService {
 
         const currentTotalSales = this.calcTotalSales(currentSales);
         const previousTotalSales = this.calcTotalSales(previousSales);
-        const salesPercentageChange = this.calcSignedPercentageChange(currentTotalSales, previousTotalSales);
+        const salesPercentageChange = this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales);
 
         const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
-        const profitPercentageChange = this.calcSignedPercentageChange(currentNetProfit, previousNetProfit);
+        const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
 
         const response: DashboardStats = {
             range,
@@ -125,12 +125,13 @@ export class DashboardService {
         return { from: fromDate, to: toDate };
     }
 
+
     private getCustomRangeBounds(from: Date, to: Date) {
         const currentStart = new Date(from);
-        currentStart.setHours(0, 0, 0, 0);
+        currentStart.setUTCHours(0, 0, 0, 0);
 
         const currentEnd = new Date(to);
-        currentEnd.setHours(23, 59, 59, 999);
+        currentEnd.setUTCHours(23, 59, 59, 999);
 
         const lengthMs = currentEnd.getTime() - currentStart.getTime();
         const previousEnd = new Date(currentStart.getTime() - 1);
@@ -145,44 +146,44 @@ export class DashboardService {
         switch (range) {
             case DashboardRange.YESTERDAY: {
                 const currentStart = new Date(now);
-                currentStart.setDate(now.getDate() - 1);
-                currentStart.setHours(0, 0, 0, 0);
+                currentStart.setUTCDate(now.getUTCDate() - 1);
+                currentStart.setUTCHours(0, 0, 0, 0);
                 const currentEnd = new Date(now);
-                currentEnd.setDate(now.getDate() - 1);
-                currentEnd.setHours(23, 59, 59, 999);
+                currentEnd.setUTCDate(now.getUTCDate() - 1);
+                currentEnd.setUTCHours(23, 59, 59, 999);
 
                 const previousStart = new Date(now);
-                previousStart.setDate(now.getDate() - 2);
-                previousStart.setHours(0, 0, 0, 0);
+                previousStart.setUTCDate(now.getUTCDate() - 2);
+                previousStart.setUTCHours(0, 0, 0, 0);
                 const previousEnd = new Date(now);
-                previousEnd.setDate(now.getDate() - 2);
-                previousEnd.setHours(23, 59, 59, 999);
+                previousEnd.setUTCDate(now.getUTCDate() - 2);
+                previousEnd.setUTCHours(23, 59, 59, 999);
 
                 return { currentStart, currentEnd, previousStart, previousEnd };
             }
 
             case DashboardRange.LAST_WEEK: {
                 const currentEnd = new Date(now);
-                currentEnd.setHours(23, 59, 59, 999);
+                currentEnd.setUTCHours(23, 59, 59, 999);
                 const currentStart = new Date(now);
-                currentStart.setDate(now.getDate() - 6);
-                currentStart.setHours(0, 0, 0, 0);
+                currentStart.setUTCDate(now.getUTCDate() - 6);
+                currentStart.setUTCHours(0, 0, 0, 0);
 
                 const previousEnd = new Date(currentStart);
-                previousEnd.setDate(currentStart.getDate() - 1);
-                previousEnd.setHours(23, 59, 59, 999);
+                previousEnd.setUTCDate(currentStart.getUTCDate() - 1);
+                previousEnd.setUTCHours(23, 59, 59, 999);
                 const previousStart = new Date(previousEnd);
-                previousStart.setDate(previousEnd.getDate() - 6);
-                previousStart.setHours(0, 0, 0, 0);
+                previousStart.setUTCDate(previousEnd.getUTCDate() - 6);
+                previousStart.setUTCHours(0, 0, 0, 0);
 
                 return { currentStart, currentEnd, previousStart, previousEnd };
             }
 
             case DashboardRange.MONTHLY: {
-                const currentStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-                const currentEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-                const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-                const previousEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                const currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+                const currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+                const previousStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0));
+                const previousEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999));
 
                 return { currentStart, currentEnd, previousStart, previousEnd };
             }
@@ -190,16 +191,16 @@ export class DashboardService {
             case DashboardRange.TODAY:
             default: {
                 const currentStart = new Date(now);
-                currentStart.setHours(0, 0, 0, 0);
+                currentStart.setUTCHours(0, 0, 0, 0);
                 const currentEnd = new Date(now);
-                currentEnd.setHours(23, 59, 59, 999);
+                currentEnd.setUTCHours(23, 59, 59, 999);
 
                 const previousStart = new Date(now);
-                previousStart.setDate(now.getDate() - 1);
-                previousStart.setHours(0, 0, 0, 0);
+                previousStart.setUTCDate(now.getUTCDate() - 1);
+                previousStart.setUTCHours(0, 0, 0, 0);
                 const previousEnd = new Date(now);
-                previousEnd.setDate(now.getDate() - 1);
-                previousEnd.setHours(23, 59, 59, 999);
+                previousEnd.setUTCDate(now.getUTCDate() - 1);
+                previousEnd.setUTCHours(23, 59, 59, 999);
 
                 return { currentStart, currentEnd, previousStart, previousEnd };
             }
@@ -223,9 +224,9 @@ export class DashboardService {
 
         const days: DailyStats[] = [];
         const cursor = new Date(start);
-        cursor.setHours(0, 0, 0, 0);
+        cursor.setUTCHours(0, 0, 0, 0);
         const endDay = new Date(end);
-        endDay.setHours(23, 59, 59, 999);
+        endDay.setUTCHours(23, 59, 59, 999);
 
         while (cursor.getTime() <= endDay.getTime()) {
             const dateStr = cursor.toISOString().split('T')[0];
@@ -234,12 +235,12 @@ export class DashboardService {
 
             days.push({
                 date: dateStr,
-                dayName: cursor.toLocaleDateString('en-US', { weekday: 'long' }),
+                dayName: cursor.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
                 sales: { total: Math.round(this.calcTotalSales(daySales) * 100) / 100 },
                 profit: { total: Math.round(netProfit * 100) / 100 },
             });
 
-            cursor.setDate(cursor.getDate() + 1);
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
 
         return days;
@@ -285,13 +286,14 @@ export class DashboardService {
     }
 
 
-    private calcSignedPercentageChange(current: number, previous: number): number {
-        if (previous === 0) {
-            if (current === 0) return 0;
-            return current > 0 ? 100 : -100;
-        }
 
-        const change = ((current - previous) / Math.abs(previous)) * 100;
-        return Math.round(change * 100) / 100;
+    private calcBoundedSignedPercentage(current: number, previous: number): number {
+        const denom = Math.abs(current) + Math.abs(previous);
+        if (denom === 0) return 0;
+
+        const shareMagnitude = (Math.abs(current) / denom) * 100;
+        const signed = Math.sign(current) * shareMagnitude;
+
+        return Math.round(signed * 100) / 100;
     }
 }

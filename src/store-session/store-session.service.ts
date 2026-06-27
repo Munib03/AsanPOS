@@ -10,6 +10,7 @@ import { CloseSessionDto } from './dto/close-session.dto';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
+
 @Injectable()
 export class StoreSessionService {
   constructor(
