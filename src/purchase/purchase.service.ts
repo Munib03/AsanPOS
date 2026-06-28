@@ -21,6 +21,7 @@ import { JournalEntryItem } from '../database/entites/journal-entry-item.entity'
 import { StockIn } from '../database/entites/stock-in.entity';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { Inventory } from '../database/entites/inventory.entity';
+import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 
 @Injectable()
 export class PurchaseService {
@@ -148,8 +149,6 @@ export class PurchaseService {
   }
 
 
-
-
   async create(store: Store, employeeId: string, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const customer = await em.findOne(Customer, {
@@ -257,8 +256,10 @@ export class PurchaseService {
       const purchase = await em.findOne(Purchase, { id, store }, { populate: ['items', 'items.product', 'customer'] });
       if (!purchase) throw new NotFoundException(`Purchase with id ${id} not found`);
 
-      if (purchase.status === PurchaseStatus.CANCELLED) throw new BadRequestException(`Cannot update a cancelled purchase.`);
-      if (purchase.status === PurchaseStatus.DONE) throw new BadRequestException(`Cannot update a completed purchase.`);
+      if (purchase.status === PurchaseStatus.CANCELLED) 
+        throw new BadRequestException(`Cannot update a cancelled purchase.`);
+      if (purchase.status === PurchaseStatus.DONE) 
+        throw new BadRequestException(`Cannot update a completed purchase.`);
 
       if (dto.status) {
         this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
@@ -270,8 +271,28 @@ export class PurchaseService {
 
         purchase.status = dto.status;
 
-        if (dto.status === PurchaseStatus.DONE)
-          await this.journalEntryService.createFromPurchase(em, store, purchase, employeeId);
+        if (dto.status === PurchaseStatus.DONE) {
+          const journalEntry = await this.journalEntryService.createFromPurchase(em, store, purchase, employeeId);
+
+       
+          const journalItems = journalEntry.items.getItems();
+          const journalDebitTotal = journalItems.reduce((sum, item) => sum + (item.debit ?? 0), 0);
+          const journalCreditTotal = journalItems.reduce((sum, item) => sum + (item.credit ?? 0), 0);
+
+          if (journalDebitTotal === journalCreditTotal) {
+            this.auditService.logStatusChange(
+              em,
+              employee,
+              AuditEntityType.JournalEntry,
+              journalEntry.id,
+              AuditActionType.Update,
+              JournalEntryStatus.PENDING,
+              JournalEntryStatus.DONE,
+            );
+
+            journalEntry.status = JournalEntryStatus.DONE;
+          }
+        }
       }
 
       await em.flush();

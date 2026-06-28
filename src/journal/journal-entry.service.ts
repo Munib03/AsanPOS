@@ -116,7 +116,7 @@ export class JournalEntryService {
     store: Store,
     purchase: Purchase,
     employeeId: string,
-  ): Promise<void> {
+  ): Promise<JournalEntry> {
     await em.populate(store, ['storeSettings', 'storeSettings.defaultAccount']);
     const defaultAccount = store.storeSettings?.defaultAccount;
     if (!defaultAccount)
@@ -178,6 +178,8 @@ export class JournalEntryService {
         totalAmount,
       },
     );
+
+    return journalEntry;
   }
 
   async createFromSale(

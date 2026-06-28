@@ -19,7 +19,7 @@ export class CreatePurchaseDto {
   @IsUUID()                                                   
   inventoryId!: string;                                       
 
-  @IsOptional()
+  @IsOptional() 
   @IsDateString()
   customDate?: string;
 
