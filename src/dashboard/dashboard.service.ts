@@ -8,7 +8,6 @@ import { StoreSession } from '../database/entites/store-session.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
 
-
 type RangeBounds = {
     currentStart: Date;
     currentEnd: Date;
@@ -19,21 +18,18 @@ type RangeBounds = {
 function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
-
     return d;
 }
 
 function endOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(23, 59, 59, 999);
-
     return d;
 }
 
 function addDays(date: Date, days: number): Date {
     const d = new Date(date);
     d.setUTCDate(d.getUTCDate() + days);
-    
     return d;
 }
 
@@ -75,11 +71,9 @@ const RANGE_STRATEGIES: Record<DashboardRange, (now: Date) => RangeBounds> = {
     }),
 };
 
-
 @Injectable()
 export class DashboardService {
     constructor(private readonly em: EntityManager) { }
-
 
     async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
         const customRange = this.parseAndValidateDateRange(query.from, query.to);
@@ -108,6 +102,7 @@ export class DashboardService {
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
 
         const profitTotal = Math.max(currentNetProfit, 0);
+
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
 
         const response: DashboardStats = {
@@ -123,7 +118,6 @@ export class DashboardService {
                 this.em.find(StockQuantity, { inventory: { store }, quantity: { $gte: 1, $lte: 10 } }, { populate: ['product', 'inventory'], refresh: true }),
                 this.em.find(StockQuantity, { inventory: { store }, quantity: 0 }, { populate: ['product', 'inventory'], refresh: true }),
             ];
-
 
             if (range === DashboardRange.TODAY) {
                 queries.push(this.getSessionStats(store, employeeId));
@@ -159,12 +153,10 @@ export class DashboardService {
         return response;
     }
 
-
     private getEnumRangeBounds(range: DashboardRange): RangeBounds {
         const strategy = RANGE_STRATEGIES[range] ?? RANGE_STRATEGIES[DashboardRange.TODAY];
         return strategy(new Date());
     }
-
 
     private getCustomRangeBounds(from: Date, to: Date): RangeBounds {
         const currentStart = startOfUtcDay(from);
@@ -175,26 +167,33 @@ export class DashboardService {
         return { currentStart, currentEnd, previousStart, previousEnd };
     }
 
-
     private async getSessionStats(store: Store, employeeId: string): Promise<DashboardStats['session']> {
-        const activeSession = await this.em.findOne(
+        // employeeId intentionally ignored — we aggregate across ALL sessions in the store
+        // so the admin sees cashier activity too
+
+        const openSessions = await this.em.find(
             StoreSession,
-            { store, openedBy: { id: employeeId }, closedAt: null },
+            { store, closedAt: null },
             { populate: ['cashMovements', 'payments'], refresh: true },
         );
 
-        if (activeSession) {
-            const expectedAmount = this.calculateExpectedAmount(activeSession);
+        if (openSessions.length > 0) {
+            let totalOpening = 0;
+            let totalExpected = 0;
+            for (const session of openSessions) {
+                totalOpening += session.openingAmount ?? 0;
+                totalExpected += this.calculateExpectedAmount(session);
+            }
             return {
                 status: 'open',
-                openingAmount: activeSession.openingAmount ?? 0,
-                expectedAmount: Math.round(expectedAmount * 100) / 100,
+                openingAmount: totalOpening,
+                expectedAmount: Math.round(totalExpected * 100) / 100,
             };
         }
 
         const lastClosedSession = await this.em.findOne(
             StoreSession,
-            { store, openedBy: { id: employeeId }, closedAt: { $ne: null } },
+            { store, closedAt: { $ne: null } },
             { orderBy: { closedAt: 'DESC' }, refresh: true },
         );
 
@@ -207,7 +206,6 @@ export class DashboardService {
         };
     }
 
-
     private calculateExpectedAmount(session: StoreSession): number {
         const cashMovements = session.cashMovements.getItems();
         const cashIn = cashMovements.filter((cm) => cm.type === CashMovementType.CashIn).reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
@@ -215,7 +213,6 @@ export class DashboardService {
         const salePayments = session.payments.getItems().reduce((sum, p) => sum + (p.amount ?? 0), 0);
         return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
     }
-
 
     private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
         if (from === undefined && to === undefined) return null;
@@ -241,7 +238,6 @@ export class DashboardService {
 
         return { from: fromDate, to: toDate };
     }
-
 
     private buildDailyBreakdown(sales: Sale[], costPriceMap: Map<string, number>, start: Date, end: Date): DailyStats[] {
         const salesByDay = new Map<string, Sale[]>();
@@ -275,7 +271,6 @@ export class DashboardService {
         return days;
     }
 
-
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
@@ -283,7 +278,6 @@ export class DashboardService {
             0,
         );
     }
-
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
@@ -304,7 +298,6 @@ export class DashboardService {
         return costPriceMap;
     }
 
-
     private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
@@ -316,7 +309,6 @@ export class DashboardService {
             0,
         );
     }
-
 
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);
