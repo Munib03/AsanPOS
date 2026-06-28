@@ -200,7 +200,7 @@ export class AuthService {
 
       const walkInCustomer = this.em.create(Customer, {
         name: 'Walk-in Customer',
-        phone: '0000000000',
+        phone: this.generateWalkInPhone(),
         address: 'N/A',
         store,
         payable,
@@ -242,6 +242,15 @@ export class AuthService {
     await this.queueService.sendVerificationEmail(dto.email, code);
 
     return { message: 'OTP sent to your email. Please verify to complete registration.' };
+  }
+
+
+  private generateWalkInPhone(): string {
+    let phone = '0';
+    for (let i = 0; i < 9; i++) {
+      phone += Math.floor(Math.random() * 10).toString();
+    }
+    return phone;
   }
 
 

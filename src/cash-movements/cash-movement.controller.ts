@@ -11,7 +11,7 @@ import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 
 @Controller('cash-movement')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin)
+@Roles(Role.Admin, Role.Cashier)
 export class CashMovementController {
   constructor(private readonly cashMovementService: CashMovementService) { }
 

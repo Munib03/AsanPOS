@@ -4,6 +4,8 @@ import { Sale } from '../database/entites/sale.entity';
 import { Store } from '../database/entites/store.entity';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { PurchasedItem } from '../database/entites/purchased_item.entity';
+import { StoreSession } from '../database/entites/store-session.entity';
+import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
 
 @Injectable()
@@ -43,7 +45,11 @@ export class DashboardService {
         const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
+
+        // a negative percentage, never positive, regardless of trend).
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
+
+        const profitTotal = Math.max(currentNetProfit, 0);
 
         const response: DashboardStats = {
             range,
@@ -52,7 +58,7 @@ export class DashboardService {
                 percentageChange: salesPercentageChange,
             },
             profit: {
-                total: Math.round(currentNetProfit * 100) / 100,
+                total: Math.round(profitTotal * 100) / 100,
                 percentageChange: profitPercentageChange,
             },
         };
@@ -60,7 +66,7 @@ export class DashboardService {
         if (customRange) {
             response.customRange = { from: currentStart.toISOString(), to: currentEnd.toISOString() };
         } else {
-            const [lowStockRecords, outOfStockRecords] = await Promise.all([
+            const [lowStockRecords, outOfStockRecords, sessionStats] = await Promise.all([
                 this.em.find(
                     StockQuantity,
                     { inventory: { store }, quantity: { $gte: 1, $lte: 10 } },
@@ -71,6 +77,7 @@ export class DashboardService {
                     { inventory: { store }, quantity: 0 },
                     { populate: ['product', 'inventory'] },
                 ),
+                this.getSessionStats(store),
             ]);
 
             response.lowStockProducts = lowStockRecords.map((record) => ({
@@ -88,6 +95,10 @@ export class DashboardService {
                 quantity: record.quantity ?? 0,
                 inventoryName: record.inventory.name ?? '',
             }));
+
+            if (sessionStats) {
+                response.session = sessionStats;
+            }
         }
 
         if (range === DashboardRange.LAST_WEEK) {
@@ -97,6 +108,52 @@ export class DashboardService {
         return response;
     }
 
+    
+    private async getSessionStats(store: Store): Promise<DashboardStats['session']> {
+        const activeSession = await this.em.findOne(
+            StoreSession,
+            { store, closedAt: null },
+            { populate: ['cashMovements', 'payments'], orderBy: { openedAt: 'DESC' } },
+        );
+
+        if (activeSession) {
+            const expectedAmount = this.calculateExpectedAmount(activeSession);
+            return {
+                status: 'open',
+                openingAmount: activeSession.openingAmount ?? 0,
+                expectedAmount: Math.round(expectedAmount * 100) / 100,
+            };
+        }
+
+        const lastClosedSession = await this.em.findOne(
+            StoreSession,
+            { store, closedAt: { $ne: null } },
+            { orderBy: { closedAt: 'DESC' } },
+        );
+
+        if (!lastClosedSession) return undefined;
+
+        return {
+            status: 'closed',
+            closingAmount: lastClosedSession.closingAmount ?? 0,
+            expectedAmount: lastClosedSession.expectedAmount ?? 0,
+        };
+    }
+
+    private calculateExpectedAmount(session: StoreSession): number {
+        const cashMovements = session.cashMovements.getItems();
+        const cashIn = cashMovements
+            .filter((cm) => cm.type === CashMovementType.CashIn)
+            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+
+        const cashOut = cashMovements
+            .filter((cm) => cm.type === CashMovementType.CashOut)
+            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+
+        const salePayments = session.payments.getItems().reduce((sum, p) => sum + (p.amount ?? 0), 0);
+
+        return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
+    }
 
     private parseAndValidateDateRange(
         from: string | undefined,
@@ -125,7 +182,6 @@ export class DashboardService {
 
         return { from: fromDate, to: toDate };
     }
-
 
     private getCustomRangeBounds(from: Date, to: Date) {
         const currentStart = new Date(from);
@@ -208,7 +264,6 @@ export class DashboardService {
         }
     }
 
-
     private buildDailyBreakdown(
         sales: Sale[],
         costPriceMap: Map<string, number>,
@@ -239,7 +294,7 @@ export class DashboardService {
                 date: dateStr,
                 dayName: cursor.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
                 sales: { total: Math.round(this.calcTotalSales(daySales) * 100) / 100 },
-                profit: { total: Math.round(netProfit * 100) / 100 },
+                profit: { total: Math.round(Math.max(netProfit, 0) * 100) / 100 },
             });
 
             cursor.setUTCDate(cursor.getUTCDate() + 1);
@@ -248,7 +303,6 @@ export class DashboardService {
         return days;
     }
 
-
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
@@ -256,7 +310,6 @@ export class DashboardService {
             0,
         );
     }
-
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
@@ -277,7 +330,6 @@ export class DashboardService {
         return costPriceMap;
     }
 
-    
     private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
@@ -289,8 +341,6 @@ export class DashboardService {
             0,
         );
     }
-
-
 
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);

@@ -34,6 +34,9 @@ export interface DashboardStats {
   customRange?: { from: string; to: string };
   sales: { total: number; percentageChange: number };
   profit: { total: number; percentageChange: number };
+  session?:
+  | { status: 'open'; openingAmount: number; expectedAmount: number }
+  | { status: 'closed'; closingAmount: number; expectedAmount: number };
   lowStockProducts?: {
     id: string;
     name: string;
