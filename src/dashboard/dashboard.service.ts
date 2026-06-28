@@ -8,9 +8,74 @@ import { StoreSession } from '../database/entites/store-session.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
 
+type RangeBounds = {
+    currentStart: Date;
+    currentEnd: Date;
+    previousStart: Date;
+    previousEnd: Date;
+};
+
+function startOfUtcDay(date: Date): Date {
+    const d = new Date(date);
+    d.setUTCHours(0, 0, 0, 0);
+    return d;
+}
+
+function endOfUtcDay(date: Date): Date {
+    const d = new Date(date);
+    d.setUTCHours(23, 59, 59, 999);
+    return d;
+}
+
+function addDays(date: Date, days: number): Date {
+    const d = new Date(date);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d;
+}
+
+const RANGE_STRATEGIES: Record<DashboardRange, (now: Date) => RangeBounds> = {
+    [DashboardRange.TODAY]: (now) => ({
+        currentStart: startOfUtcDay(now),
+        currentEnd: endOfUtcDay(now),
+        previousStart: startOfUtcDay(addDays(now, -1)),
+        previousEnd: endOfUtcDay(addDays(now, -1)),
+    }),
+
+    [DashboardRange.YESTERDAY]: (now) => ({
+        currentStart: startOfUtcDay(addDays(now, -1)),
+        currentEnd: endOfUtcDay(addDays(now, -1)),
+        previousStart: startOfUtcDay(addDays(now, -2)),
+        previousEnd: endOfUtcDay(addDays(now, -2)),
+    }),
+
+    [DashboardRange.LAST_WEEK]: (now) => {
+        const currentEnd = endOfUtcDay(now);
+        const currentStart = startOfUtcDay(addDays(now, -6));
+        const previousEnd = endOfUtcDay(addDays(currentStart, -1));
+        const previousStart = startOfUtcDay(addDays(previousEnd, -6));
+        return { currentStart, currentEnd, previousStart, previousEnd };
+    },
+
+    [DashboardRange.MONTHLY]: (now) => ({
+        currentStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)),
+        currentEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)),
+        previousStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0)),
+        previousEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999)),
+    }),
+
+    [DashboardRange.CUSTOM]: (now) => ({
+        currentStart: startOfUtcDay(now),
+        currentEnd: endOfUtcDay(now),
+        previousStart: startOfUtcDay(addDays(now, -1)),
+        previousEnd: endOfUtcDay(addDays(now, -1)),
+    }),
+};
+
+
 @Injectable()
 export class DashboardService {
     constructor(private readonly em: EntityManager) { }
+
 
     async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
         const customRange = this.parseAndValidateDateRange(query.from, query.to);
@@ -26,16 +91,8 @@ export class DashboardService {
             : this.getEnumRangeBounds(range);
 
         const [currentSales, previousSales] = await Promise.all([
-            this.em.find(
-                Sale,
-                { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
-                { populate: ['items', 'items.product'], refresh: true },
-            ),
-            this.em.find(
-                Sale,
-                { store, createdAt: { $gte: previousStart, $lte: previousEnd } },
-                { populate: ['items', 'items.product'], refresh: true },
-            ),
+            this.em.find(Sale, { store, createdAt: { $gte: currentStart, $lte: currentEnd } }, { populate: ['items', 'items.product'], refresh: true }),
+            this.em.find(Sale, { store, createdAt: { $gte: previousStart, $lte: previousEnd } }, { populate: ['items', 'items.product'], refresh: true }),
         ]);
 
         const currentTotalSales = this.calcTotalSales(currentSales);
@@ -46,37 +103,29 @@ export class DashboardService {
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
 
-        const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
         const profitTotal = Math.max(currentNetProfit, 0);
+        const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
 
         const response: DashboardStats = {
             range,
-            sales: {
-                total: Math.round(currentTotalSales * 100) / 100,
-                percentageChange: salesPercentageChange,
-            },
-            profit: {
-                total: Math.round(profitTotal * 100) / 100,
-                percentageChange: profitPercentageChange,
-            },
+            sales: { total: Math.round(currentTotalSales * 100) / 100, percentageChange: salesPercentageChange },
+            profit: { total: Math.round(profitTotal * 100) / 100, percentageChange: profitPercentageChange },
         };
 
         if (customRange) {
             response.customRange = { from: currentStart.toISOString(), to: currentEnd.toISOString() };
         } else {
-            const [lowStockRecords, outOfStockRecords, sessionStats] = await Promise.all([
-                this.em.find(
-                    StockQuantity,
-                    { inventory: { store }, quantity: { $gte: 1, $lte: 10 } },
-                    { populate: ['product', 'inventory'], refresh: true },
-                ),
-                this.em.find(
-                    StockQuantity,
-                    { inventory: { store }, quantity: 0 },
-                    { populate: ['product', 'inventory'], refresh: true },
-                ),
-                this.getSessionStats(store, employeeId),
-            ]);
+            const queries: Promise<any>[] = [
+                this.em.find(StockQuantity, { inventory: { store }, quantity: { $gte: 1, $lte: 10 } }, { populate: ['product', 'inventory'], refresh: true }),
+                this.em.find(StockQuantity, { inventory: { store }, quantity: 0 }, { populate: ['product', 'inventory'], refresh: true }),
+            ];
+
+
+            if (range === DashboardRange.TODAY) {
+                queries.push(this.getSessionStats(store, employeeId));
+            }
+
+            const [lowStockRecords, outOfStockRecords, sessionStats] = await Promise.all(queries);
 
             response.lowStockProducts = lowStockRecords.map((record) => ({
                 id: record.product.id,
@@ -105,6 +154,23 @@ export class DashboardService {
 
         return response;
     }
+
+
+    private getEnumRangeBounds(range: DashboardRange): RangeBounds {
+        const strategy = RANGE_STRATEGIES[range] ?? RANGE_STRATEGIES[DashboardRange.TODAY];
+        return strategy(new Date());
+    }
+
+
+    private getCustomRangeBounds(from: Date, to: Date): RangeBounds {
+        const currentStart = startOfUtcDay(from);
+        const currentEnd = endOfUtcDay(to);
+        const lengthMs = currentEnd.getTime() - currentStart.getTime();
+        const previousEnd = new Date(currentStart.getTime() - 1);
+        const previousStart = new Date(previousEnd.getTime() - lengthMs);
+        return { currentStart, currentEnd, previousStart, previousEnd };
+    }
+
 
     private async getSessionStats(store: Store, employeeId: string): Promise<DashboardStats['session']> {
         const activeSession = await this.em.findOne(
@@ -137,25 +203,17 @@ export class DashboardService {
         };
     }
 
+
     private calculateExpectedAmount(session: StoreSession): number {
         const cashMovements = session.cashMovements.getItems();
-        const cashIn = cashMovements
-            .filter((cm) => cm.type === CashMovementType.CashIn)
-            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-
-        const cashOut = cashMovements
-            .filter((cm) => cm.type === CashMovementType.CashOut)
-            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-
+        const cashIn = cashMovements.filter((cm) => cm.type === CashMovementType.CashIn).reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+        const cashOut = cashMovements.filter((cm) => cm.type === CashMovementType.CashOut).reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
         const salePayments = session.payments.getItems().reduce((sum, p) => sum + (p.amount ?? 0), 0);
-
         return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
     }
 
-    private parseAndValidateDateRange(
-        from: string | undefined,
-        to: string | undefined,
-    ): { from: Date; to: Date } | null {
+
+    private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
         if (from === undefined && to === undefined) return null;
 
         if (from === undefined || to === undefined) {
@@ -180,93 +238,8 @@ export class DashboardService {
         return { from: fromDate, to: toDate };
     }
 
-    private getCustomRangeBounds(from: Date, to: Date) {
-        const currentStart = new Date(from);
-        currentStart.setUTCHours(0, 0, 0, 0);
 
-        const currentEnd = new Date(to);
-        currentEnd.setUTCHours(23, 59, 59, 999);
-
-        const lengthMs = currentEnd.getTime() - currentStart.getTime();
-        const previousEnd = new Date(currentStart.getTime() - 1);
-        const previousStart = new Date(previousEnd.getTime() - lengthMs);
-
-        return { currentStart, currentEnd, previousStart, previousEnd };
-    }
-
-    private getEnumRangeBounds(range: DashboardRange) {
-        const now = new Date();
-
-        switch (range) {
-            case DashboardRange.YESTERDAY: {
-                const currentStart = new Date(now);
-                currentStart.setUTCDate(now.getUTCDate() - 1);
-                currentStart.setUTCHours(0, 0, 0, 0);
-                const currentEnd = new Date(now);
-                currentEnd.setUTCDate(now.getUTCDate() - 1);
-                currentEnd.setUTCHours(23, 59, 59, 999);
-
-                const previousStart = new Date(now);
-                previousStart.setUTCDate(now.getUTCDate() - 2);
-                previousStart.setUTCHours(0, 0, 0, 0);
-                const previousEnd = new Date(now);
-                previousEnd.setUTCDate(now.getUTCDate() - 2);
-                previousEnd.setUTCHours(23, 59, 59, 999);
-
-                return { currentStart, currentEnd, previousStart, previousEnd };
-            }
-
-            case DashboardRange.LAST_WEEK: {
-                const currentEnd = new Date(now);
-                currentEnd.setUTCHours(23, 59, 59, 999);
-                const currentStart = new Date(now);
-                currentStart.setUTCDate(now.getUTCDate() - 6);
-                currentStart.setUTCHours(0, 0, 0, 0);
-
-                const previousEnd = new Date(currentStart);
-                previousEnd.setUTCDate(currentStart.getUTCDate() - 1);
-                previousEnd.setUTCHours(23, 59, 59, 999);
-                const previousStart = new Date(previousEnd);
-                previousStart.setUTCDate(previousEnd.getUTCDate() - 6);
-                previousStart.setUTCHours(0, 0, 0, 0);
-
-                return { currentStart, currentEnd, previousStart, previousEnd };
-            }
-
-            case DashboardRange.MONTHLY: {
-                const currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-                const currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
-                const previousStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0));
-                const previousEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999));
-
-                return { currentStart, currentEnd, previousStart, previousEnd };
-            }
-
-            case DashboardRange.TODAY:
-            default: {
-                const currentStart = new Date(now);
-                currentStart.setUTCHours(0, 0, 0, 0);
-                const currentEnd = new Date(now);
-                currentEnd.setUTCHours(23, 59, 59, 999);
-
-                const previousStart = new Date(now);
-                previousStart.setUTCDate(now.getUTCDate() - 1);
-                previousStart.setUTCHours(0, 0, 0, 0);
-                const previousEnd = new Date(now);
-                previousEnd.setUTCDate(now.getUTCDate() - 1);
-                previousEnd.setUTCHours(23, 59, 59, 999);
-
-                return { currentStart, currentEnd, previousStart, previousEnd };
-            }
-        }
-    }
-
-    private buildDailyBreakdown(
-        sales: Sale[],
-        costPriceMap: Map<string, number>,
-        start: Date,
-        end: Date,
-    ): DailyStats[] {
+    private buildDailyBreakdown(sales: Sale[], costPriceMap: Map<string, number>, start: Date, end: Date): DailyStats[] {
         const salesByDay = new Map<string, Sale[]>();
         for (const sale of sales) {
             if (sale.createdAt === undefined) continue;
@@ -277,10 +250,8 @@ export class DashboardService {
         }
 
         const days: DailyStats[] = [];
-        const cursor = new Date(start);
-        cursor.setUTCHours(0, 0, 0, 0);
-        const endDay = new Date(end);
-        endDay.setUTCHours(23, 59, 59, 999);
+        const cursor = startOfUtcDay(start);
+        const endDay = endOfUtcDay(end);
 
         while (cursor.getTime() <= endDay.getTime()) {
             const dateStr = cursor.toISOString().split('T')[0];
@@ -300,6 +271,7 @@ export class DashboardService {
         return days;
     }
 
+
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
@@ -307,6 +279,7 @@ export class DashboardService {
             0,
         );
     }
+
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
@@ -327,6 +300,7 @@ export class DashboardService {
         return costPriceMap;
     }
 
+
     private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
@@ -338,6 +312,7 @@ export class DashboardService {
             0,
         );
     }
+
 
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);
