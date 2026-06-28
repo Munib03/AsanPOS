@@ -277,7 +277,7 @@ export class AuthService {
     await this.em.flush();
 
     return { 
-      message: 'Registration verified successfully', 
+      message: 'Email verified successfully', 
       token: this.generateJWT(employee) 
     };
   }
