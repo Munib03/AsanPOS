@@ -22,20 +22,6 @@ import { Role } from '../shared/utils/role.enum';
 import { Customer } from '../database/entites/customer.entity';
 
 
-export interface EmployeeDetail {
-  id: string;
-  email: string;
-  name: string;
-  firstName: string | null;
-  lastName: string | null;
-  phone: string | null;
-  role: string | null;
-  imageUrl: string | null;
-  dob: Date | null;
-  gender: string | null;
-  storeName: string | null;
-  createdAt: Date | null;
-}
 
 @Injectable()
 export class AuthService {
@@ -47,29 +33,6 @@ export class AuthService {
     @Inject('REDIS_CLIENT')
     private readonly redis: Redis,
   ) { }
-
-
-  async findOne(store: Store, id: string): Promise<EmployeeDetail> {
-    const employee = await this.em.findOne(Employee, { id, store }, { populate: ['store'] });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
-
-    return {
-      id: employee.id,
-      email: employee.email,
-      name: employee.name,
-      firstName: employee.firstName ?? null,
-      lastName: employee.lastName ?? null,
-      phone: employee.phone ?? null,
-      role: employee.role ?? null,
-      imageUrl: employee.imageUrlSigned ?? null,
-      dob: employee.dob ?? null,
-      gender: employee.gender ?? null,
-      storeName: employee.store?.name ?? null,
-      createdAt: employee.createdAt ?? null,
-    };
-  }
-
 
 
   async enableTwoFactor(employeeId: string) {

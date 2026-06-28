@@ -20,6 +20,22 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
+
+export interface EmployeeDetail {
+  id: string;
+  email: string;
+  name: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  role: string | null;
+  imageUrl: string | null;
+  dob: Date | null;
+  gender: string | null;
+  storeName: string | null;
+  createdAt: Date | null;
+}
+
 @Injectable()
 export class EmployeeService {
   constructor(
@@ -41,9 +57,11 @@ export class EmployeeService {
     return serialize(employees, { forceObject: true });
   }
 
-  async findOne(id: string) {
-    const employee = await this.em.findOne(Employee, { id }, { populate: ['store'] });
-    if (!employee) throw new NotFoundException('Employee not found');
+
+  async findOne(store: Store, id: string): Promise<EmployeeDetail> {
+    const employee = await this.em.findOne(Employee, { id, store }, { populate: ['store'] });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
 
     return {
       id: employee.id,
@@ -53,13 +71,14 @@ export class EmployeeService {
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
       role: employee.role ?? null,
-      imageUrl: employee.imageUrlSigned,
+      imageUrl: employee.imageUrlSigned ?? null,
       dob: employee.dob ?? null,
       gender: employee.gender ?? null,
       storeName: employee.store?.name ?? null,
       createdAt: employee.createdAt ?? null,
     };
   }
+
 
   async employeeRegister(dto: CreateEmployeeDto, store: Store, employeeId: string) {
     const existing = await this.em.findOne(Employee, { email: dto.email });

@@ -15,19 +15,10 @@ import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
-import { Store } from '../database/entites/store.entity';
-import { CurrentStore } from '../shared/decorators/store.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
-
-  @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  @Get('me')
-  getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
-    return this.authService.findOne(store, user.id);
-  }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {

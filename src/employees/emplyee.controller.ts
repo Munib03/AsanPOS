@@ -44,11 +44,13 @@ export class EmployeeController {
     return this.employeeService.findAll(store);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.employeeService.findOne(id);
+
+  @Get('me')
+  getMe(@CurrentStore() store: Store, @CurrentUser() user: { id: string; email: string }) {
+    return this.employeeService.findOne(store, user.id);
   }
 
+  
   @Put('info')
   updateEmployeeInfo(
     @CurrentUser() user: { id: string },
