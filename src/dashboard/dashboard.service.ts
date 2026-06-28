@@ -12,7 +12,7 @@ import { DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from '.
 export class DashboardService {
     constructor(private readonly em: EntityManager) { }
 
-    async getDashboardStats(store: Store, query: DashboardQueryDto): Promise<DashboardStats> {
+    async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
         const customRange = this.parseAndValidateDateRange(query.from, query.to);
 
         if (query.range === DashboardRange.CUSTOM && !customRange) {
@@ -29,12 +29,12 @@ export class DashboardService {
             this.em.find(
                 Sale,
                 { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
-                { populate: ['items', 'items.product'] },
+                { populate: ['items', 'items.product'], refresh: true },
             ),
             this.em.find(
                 Sale,
                 { store, createdAt: { $gte: previousStart, $lte: previousEnd } },
-                { populate: ['items', 'items.product'] },
+                { populate: ['items', 'items.product'], refresh: true },
             ),
         ]);
 
@@ -46,9 +46,7 @@ export class DashboardService {
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
 
-        // a negative percentage, never positive, regardless of trend).
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
-
         const profitTotal = Math.max(currentNetProfit, 0);
 
         const response: DashboardStats = {
@@ -70,14 +68,14 @@ export class DashboardService {
                 this.em.find(
                     StockQuantity,
                     { inventory: { store }, quantity: { $gte: 1, $lte: 10 } },
-                    { populate: ['product', 'inventory'] },
+                    { populate: ['product', 'inventory'], refresh: true },
                 ),
                 this.em.find(
                     StockQuantity,
                     { inventory: { store }, quantity: 0 },
-                    { populate: ['product', 'inventory'] },
+                    { populate: ['product', 'inventory'], refresh: true },
                 ),
-                this.getSessionStats(store),
+                this.getSessionStats(store, employeeId),
             ]);
 
             response.lowStockProducts = lowStockRecords.map((record) => ({
@@ -108,12 +106,11 @@ export class DashboardService {
         return response;
     }
 
-    
-    private async getSessionStats(store: Store): Promise<DashboardStats['session']> {
+    private async getSessionStats(store: Store, employeeId: string): Promise<DashboardStats['session']> {
         const activeSession = await this.em.findOne(
             StoreSession,
-            { store, closedAt: null },
-            { populate: ['cashMovements', 'payments'], orderBy: { openedAt: 'DESC' } },
+            { store, openedBy: { id: employeeId }, closedAt: null },
+            { populate: ['cashMovements', 'payments'], refresh: true },
         );
 
         if (activeSession) {
@@ -127,8 +124,8 @@ export class DashboardService {
 
         const lastClosedSession = await this.em.findOne(
             StoreSession,
-            { store, closedAt: { $ne: null } },
-            { orderBy: { closedAt: 'DESC' } },
+            { store, openedBy: { id: employeeId }, closedAt: { $ne: null } },
+            { orderBy: { closedAt: 'DESC' }, refresh: true },
         );
 
         if (!lastClosedSession) return undefined;
@@ -320,7 +317,7 @@ export class DashboardService {
         const latestPurchasedItems = await this.em.find(
             PurchasedItem,
             { product: { id: { $in: productIds } }, purchase: { store } },
-            { orderBy: { createdAt: 'DESC' } },
+            { orderBy: { createdAt: 'DESC' }, refresh: true },
         );
 
         for (const item of latestPurchasedItems) {
