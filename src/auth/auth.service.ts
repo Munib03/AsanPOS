@@ -276,7 +276,10 @@ export class AuthService {
     await this.em.removeAndFlush(securityAction);
     await this.em.flush();
 
-    return { message: 'Registration successful', employee_id: employee.id };
+    return { 
+      message: 'Registration verified successfully', 
+      token: this.generateJWT(employee) 
+    };
   }
 
 

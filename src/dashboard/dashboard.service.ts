@@ -8,6 +8,7 @@ import { StoreSession } from '../database/entites/store-session.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
 
+
 type RangeBounds = {
     currentStart: Date;
     currentEnd: Date;
@@ -18,18 +19,21 @@ type RangeBounds = {
 function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
+
     return d;
 }
 
 function endOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(23, 59, 59, 999);
+
     return d;
 }
 
 function addDays(date: Date, days: number): Date {
     const d = new Date(date);
     d.setUTCDate(d.getUTCDate() + days);
+    
     return d;
 }
 
