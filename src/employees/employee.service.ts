@@ -141,8 +141,8 @@ export class EmployeeService {
 
     return {
       message: 'Employee registered successfully',
-      email: employee.email,
-      password: dto.password,
+      name: employee.name,
+      email: employee.email
     };
   }
 

@@ -33,7 +33,7 @@ function endOfUtcDay(date: Date): Date {
 function addDays(date: Date, days: number): Date {
     const d = new Date(date);
     d.setUTCDate(d.getUTCDate() + days);
-    
+
     return d;
 }
 
@@ -81,7 +81,7 @@ export class DashboardService {
     constructor(private readonly em: EntityManager) { }
 
 
-    async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
+    async getDashboardStats(store: Store, query: DashboardQueryDto): Promise<DashboardStats> {
         const customRange = this.parseAndValidateDateRange(query.from, query.to);
 
         if (query.range === DashboardRange.CUSTOM && !customRange) {
@@ -124,9 +124,8 @@ export class DashboardService {
                 this.em.find(StockQuantity, { inventory: { store }, quantity: 0 }, { populate: ['product', 'inventory'], refresh: true }),
             ];
 
-
             if (range === DashboardRange.TODAY) {
-                queries.push(this.getSessionStats(store, employeeId));
+                queries.push(this.getSessionStats(store));
             }
 
             const [lowStockRecords, outOfStockRecords, sessionStats] = await Promise.all(queries);
@@ -176,25 +175,39 @@ export class DashboardService {
     }
 
 
-    private async getSessionStats(store: Store, employeeId: string): Promise<DashboardStats['session']> {
-        const activeSession = await this.em.findOne(
+    /**
+     * Store-wide, not scoped to a single employee. A store can have one
+     * Admin and several Cashiers, each opening their OWN StoreSession
+     * (StoreSession.openedBy is per-employee, and store-session.service's
+     * own open() already enforces one active session per employee at a
+     * time). The Admin viewing this dashboard never opens a session
+     * themselves, so filtering by the requesting employee's id (the old
+     * behavior) always found nothing once a Cashier — not the Admin — was
+     * the one who opened the till. Aggregating across every currently open
+     * session for the store is what makes a Cashier's sale, cash-in, or
+     * cash-out actually show up on the Admin's dashboard.
+     */
+    private async getSessionStats(store: Store): Promise<DashboardStats['session']> {
+        const openSessions = await this.em.find(
             StoreSession,
-            { store, openedBy: { id: employeeId }, closedAt: null },
+            { store, closedAt: null },
             { populate: ['cashMovements', 'payments'], refresh: true },
         );
 
-        if (activeSession) {
-            const expectedAmount = this.calculateExpectedAmount(activeSession);
+        if (openSessions.length > 0) {
+            const openingAmount = openSessions.reduce((sum, s) => sum + (s.openingAmount ?? 0), 0);
+            const expectedAmount = openSessions.reduce((sum, s) => sum + this.calculateExpectedAmount(s), 0);
+
             return {
                 status: 'open',
-                openingAmount: activeSession.openingAmount ?? 0,
+                openingAmount: Math.round(openingAmount * 100) / 100,
                 expectedAmount: Math.round(expectedAmount * 100) / 100,
             };
         }
 
         const lastClosedSession = await this.em.findOne(
             StoreSession,
-            { store, openedBy: { id: employeeId }, closedAt: { $ne: null } },
+            { store, closedAt: { $ne: null } },
             { orderBy: { closedAt: 'DESC' }, refresh: true },
         );
 
