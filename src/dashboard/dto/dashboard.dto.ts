@@ -27,16 +27,20 @@ export interface DailyStats {
   dayName: string;
   sales: { total: number };
   profit: { total: number };
+  sessionsOpened: number;
+  sessionsClosed: number;
+  cashIn: number;
+  cashOut: number;
 }
 
 export interface CashierStats {
-  sessionId: string | null;
+  sessionId: string;
   employeeId: string;
   employeeName: string;
   totalSales: number;
   openingAmount: number;
   closingAmount: number | null;
-  status: 'open' | 'closed' | null;
+  status: 'open' | 'closed';
   cashIn: number;
   cashOut: number;
 }

@@ -22,20 +22,6 @@ type RangeBounds = {
     previousEnd: Date;
 };
 
-type SessionInfo = {
-    openingAmount: number;
-    closingAmount: number | null;
-    status: 'open' | 'closed';
-    cashIn: number;
-    cashOut: number;
-};
-
-type Attribution = {
-    sessionId: string | null;
-    employeeId: string;
-    employeeName: string;
-};
-
 function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
@@ -93,21 +79,26 @@ export class DashboardService {
             range === DashboardRange.MONTHLY ||
             range === DashboardRange.CUSTOM;
 
-        const [currentSales, previousSales] = await Promise.all([
-            this.em.find(Sale, { store, createdAt: { $gte: currentStart, $lte: currentEnd } }, { populate: ['items', 'items.product'], refresh: true }),
-            this.em.find(Sale, { store, createdAt: { $gte: previousStart, $lte: previousEnd } }, { populate: ['items', 'items.product'], refresh: true }),
-        ]);
+        const currentSales = await this.em.find(
+            Sale,
+            { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
+            { populate: ['items', 'items.product'], refresh: true },
+        );
+        const previousSales = await this.em.find(
+            Sale,
+            { store, createdAt: { $gte: previousStart, $lte: previousEnd } },
+            { populate: ['items', 'items.product'], refresh: true },
+        );
 
         const currentTotalSales = this.calcTotalSales(currentSales);
         const previousTotalSales = this.calcTotalSales(previousSales);
         const salesPercentageChange = this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales);
 
-        const costPriceMapPromise = this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
-        const cashierBreakdownPromise = includeCashierBreakdown
-            ? this.getCashierBreakdown(store, currentSales)
-            : Promise.resolve([] as CashierStats[]);
+        const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
 
-        const [costPriceMap, cashierBreakdown] = await Promise.all([costPriceMapPromise, cashierBreakdownPromise]);
+        const cashierBreakdown = includeCashierBreakdown
+            ? await this.getCashierBreakdown(store, currentStart, currentEnd)
+            : ([] as CashierStats[]);
 
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
@@ -152,103 +143,124 @@ export class DashboardService {
         }
 
         if (includeDailyBreakdown) {
-            response.dailyBreakdown = this.buildDailyBreakdown(currentSales, costPriceMap, currentStart, currentEnd);
+            response.dailyBreakdown = await this.buildDailyBreakdown(
+                store,
+                currentSales,
+                costPriceMap,
+                currentStart,
+                currentEnd,
+            );
         }
 
         return response;
     }
 
-    private async getCashierBreakdown(store: Store, currentSales: Sale[]): Promise<CashierStats[]> {
-        if (currentSales.length === 0) return [];
-
-        const saleIds = currentSales.map((s) => s.id);
-
-        const payments = await this.em.find(
-            Payment,
-            { sale: { id: { $in: saleIds } }, storeSession: { store } },
-            { populate: ['sale', 'storeSession', 'storeSession.openedBy'], refresh: true },
+    /**
+     * PER-SESSION breakdown. The previous version aggregated everything by
+     * employee.id, so a freshly-opened session with zero sales got glued to
+     * the old closed session's row and looked like nothing changed.
+     *
+     * Now each session produces its own row, with openingAmount / cashIn /
+     * cashOut read directly from StoreSession + CashMovement — independent
+     * of whether any sale has been recorded.
+     */
+    private async getCashierBreakdown(
+        store: Store,
+        currentStart: Date,
+        currentEnd: Date,
+    ): Promise<CashierStats[]> {
+        // 1. Fetch every session that touches today: still open, opened today, or closed today.
+        const sessions = await this.em.find(
+            StoreSession,
+            {
+                store,
+                $or: [
+                    { closedAt: null },
+                    { openedAt: { $gte: currentStart, $lte: currentEnd } },
+                    { closedAt: { $gte: currentStart, $lte: currentEnd } },
+                ],
+            },
+            { populate: ['cashMovements', 'openedBy'], refresh: true, orderBy: { openedAt: 'ASC' } },
         );
 
-        const attributionBySaleId = new Map<string, Attribution>();
+        // Safety net — force-load the collections so .getItems() is never empty.
+        await this.em.populate(sessions, ['cashMovements', 'openedBy'], { refresh: true });
+
+        if (sessions.length === 0) return [];
+
+        // 2. Fetch today's sales and link them to sessions via Payment.
+        const sales = await this.em.find(
+            Sale,
+            { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
+            { populate: ['items'], refresh: true },
+        );
+
+        const saleIds = sales.map((s) => s.id);
+
+        const payments = saleIds.length
+            ? await this.em.find(
+                Payment,
+                { sale: { id: { $in: saleIds } }, storeSession: { store } },
+                { populate: ['sale', 'storeSession'], refresh: true },
+            )
+            : [];
+
+        const saleById = new Map(sales.map((s) => [s.id, s]));
+        const salesBySessionId = new Map<string, Sale[]>();
         for (const payment of payments) {
-            if (!payment.sale) continue;
-            const session = payment.storeSession;
-            const employee = session?.openedBy;
-            if (!session || !employee) continue;
-            attributionBySaleId.set(payment.sale.id, {
-                sessionId: session.id,
-                employeeId: employee.id,
-                employeeName: employee.name,
-            });
+            if (!payment.sale || !payment.storeSession) continue;
+            const sale = saleById.get(payment.sale.id);
+            if (!sale) continue;
+
+            const bucket = salesBySessionId.get(payment.storeSession.id);
+            if (bucket) bucket.push(sale);
+            else salesBySessionId.set(payment.storeSession.id, [sale]);
         }
 
-        type Bucket = { sessionId: string | null; employeeId: string; employeeName: string; sales: Sale[] };
-        const buckets = new Map<string, Bucket>();
+        // 3. Build ONE entry per session.
+        const breakdown: CashierStats[] = sessions
+            .filter((session) => session.openedBy != null)
+            .map((session) => {
+                const employee = session.openedBy!;
 
-        for (const sale of currentSales) {
-            const attr = attributionBySaleId.get(sale.id);
-            if (!attr) continue;
-
-            const existing = buckets.get(`session:${attr.sessionId}`);
-            if (existing) existing.sales.push(sale);
-            else buckets.set(`session:${attr.sessionId}`, {
-                sessionId: attr.sessionId,
-                employeeId: attr.employeeId,
-                employeeName: attr.employeeName,
-                sales: [sale],
-            });
-        }
-
-        const sessionIds = Array.from(buckets.values())
-            .map((b) => b.sessionId)
-            .filter((id): id is string => id !== null);
-
-        const sessionInfoById = new Map<string, SessionInfo>();
-        if (sessionIds.length > 0) {
-            const sessions = await this.em.find(
-                StoreSession,
-                { id: { $in: sessionIds }, store },
-                { populate: ['cashMovements'], refresh: true },
-            );
-
-            for (const session of sessions) {
-                const isClosed = session.closedAt != null;
                 const cashMovements = session.cashMovements.getItems();
                 const cashIn = cashMovements
-                    .filter((cm) => cm.type === CashMovementType.CashIn)
+                    .filter((cm) => {
+                        if (cm.type !== CashMovementType.CashIn) return false;
+                        const ts = cm.createdAt;
+                        if (!ts) return true;
+                        return ts >= currentStart && ts <= currentEnd;
+                    })
                     .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
                 const cashOut = cashMovements
-                    .filter((cm) => cm.type === CashMovementType.CashOut)
+                    .filter((cm) => {
+                        if (cm.type !== CashMovementType.CashOut) return false;
+                        const ts = cm.createdAt;
+                        if (!ts) return true;
+                        return ts >= currentStart && ts <= currentEnd;
+                    })
                     .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
 
-                sessionInfoById.set(session.id, {
-                    openingAmount: session.openingAmount ?? 0,
-                    closingAmount: isClosed ? (session.closingAmount ?? 0) : null,
-                    status: isClosed ? 'closed' : 'open',
-                    cashIn: Math.round(cashIn * 100) / 100,
-                    cashOut: Math.round(cashOut * 100) / 100,
-                });
-            }
-        }
-
-        return Array.from(buckets.values())
-            .map((bucket) => {
-                const total = this.calcTotalSales(bucket.sales);
-                const sessionInfo = bucket.sessionId ? sessionInfoById.get(bucket.sessionId) : undefined;
+                const sessionSales = salesBySessionId.get(session.id) ?? [];
+                const totalSales = this.calcTotalSales(sessionSales);
 
                 return {
-                    sessionId: bucket.sessionId,
-                    employeeId: bucket.employeeId,
-                    employeeName: bucket.employeeName,
-                    totalSales: Math.round(total * 100) / 100,
-                    openingAmount: sessionInfo?.openingAmount ?? 0,
-                    closingAmount: sessionInfo?.closingAmount ?? null,
-                    status: sessionInfo?.status ?? null,
-                    cashIn: sessionInfo?.cashIn ?? 0,
-                    cashOut: sessionInfo?.cashOut ?? 0,
+                    sessionId: session.id,
+                    employeeId: employee.id,
+                    employeeName: employee.name ?? '',
+                    totalSales: Math.round(totalSales * 100) / 100,
+                    openingAmount: Math.round((session.openingAmount ?? 0) * 100) / 100,
+                    closingAmount:
+                        session.closedAt != null
+                            ? Math.round((session.closingAmount ?? 0) * 100) / 100
+                            : null,
+                    status: session.closedAt != null ? ('closed' as const) : ('open' as const),
+                    cashIn: Math.round(cashIn * 100) / 100,
+                    cashOut: Math.round(cashOut * 100) / 100,
                 };
-            })
-            .sort((a, b) => b.totalSales - a.totalSales);
+            });
+
+        return breakdown.sort((a, b) => b.totalSales - a.totalSales);
     }
 
     private calculateExpectedAmount(session: StoreSession): number {
@@ -278,7 +290,18 @@ export class DashboardService {
         return { currentStart, currentEnd, previousStart, previousEnd };
     }
 
-    private buildDailyBreakdown(sales: Sale[], costPriceMap: Map<string, number>, start: Date, end: Date): DailyStats[] {
+    /**
+     * Now also reflects session lifecycle activity per day — opens, closes,
+     * cash-in, cash-out — so dashboard updates the moment those events
+     * happen, not only when a sale is recorded.
+     */
+    private async buildDailyBreakdown(
+        store: Store,
+        sales: Sale[],
+        costPriceMap: Map<string, number>,
+        start: Date,
+        end: Date,
+    ): Promise<DailyStats[]> {
         const salesByDay = new Map<string, Sale[]>();
         for (const sale of sales) {
             if (sale.createdAt === undefined) continue;
@@ -288,20 +311,66 @@ export class DashboardService {
             else salesByDay.set(day, [sale]);
         }
 
+        const sessions = await this.em.find(
+            StoreSession,
+            {
+                store,
+                $or: [
+                    { openedAt: { $gte: start, $lte: end } },
+                    { closedAt: { $gte: start, $lte: end } },
+                ],
+            },
+            { populate: ['cashMovements'], refresh: true },
+        );
+        await this.em.populate(sessions, ['cashMovements'], { refresh: true });
+
+        const startDay = new Date(start).toISOString().split('T')[0];
+        const endDay = new Date(end).toISOString().split('T')[0];
+
+        type DayBucket = { opened: number; closed: number; cashIn: number; cashOut: number };
+        const sessionsByDay = new Map<string, DayBucket>();
+
+        const bump = (
+            date: Date | string | null | undefined,
+            key: keyof DayBucket,
+            value: number,
+        ) => {
+            if (!date) return;
+            const d = new Date(date).toISOString().split('T')[0];
+            if (d < startDay || d > endDay) return;
+            const bucket = sessionsByDay.get(d) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
+            bucket[key] = (bucket[key] ?? 0) + value;
+            sessionsByDay.set(d, bucket);
+        };
+
+        for (const session of sessions) {
+            if (session.openedAt) bump(session.openedAt, 'opened', 1);
+            if (session.closedAt) bump(session.closedAt, 'closed', 1);
+            for (const cm of session.cashMovements.getItems()) {
+                if (cm.type === CashMovementType.CashIn) bump(cm.createdAt, 'cashIn', cm.amount ?? 0);
+                if (cm.type === CashMovementType.CashOut) bump(cm.createdAt, 'cashOut', cm.amount ?? 0);
+            }
+        }
+
         const days: DailyStats[] = [];
         const cursor = startOfUtcDay(start);
-        const endDay = endOfUtcDay(end);
+        const endCursor = endOfUtcDay(end);
 
-        while (cursor.getTime() <= endDay.getTime()) {
+        while (cursor.getTime() <= endCursor.getTime()) {
             const dateStr = cursor.toISOString().split('T')[0];
             const daySales = salesByDay.get(dateStr) ?? [];
             const netProfit = this.calcTotalProfit(daySales, costPriceMap);
+            const sessionInfo = sessionsByDay.get(dateStr) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
 
             days.push({
                 date: dateStr,
                 dayName: cursor.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
                 sales: { total: Math.round(this.calcTotalSales(daySales) * 100) / 100 },
                 profit: { total: Math.round(netProfit * 100) / 100 },
+                sessionsOpened: sessionInfo.opened,
+                sessionsClosed: sessionInfo.closed,
+                cashIn: Math.round(sessionInfo.cashIn * 100) / 100,
+                cashOut: Math.round(sessionInfo.cashOut * 100) / 100,
             });
 
             cursor.setUTCDate(cursor.getUTCDate() + 1);
@@ -312,13 +381,19 @@ export class DashboardService {
 
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
-            (sum, sale) => sum + sale.items.getItems().reduce((s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
+            (sum, sale) =>
+                sum +
+                sale.items
+                    .getItems()
+                    .reduce((s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
             0,
         );
     }
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
-        const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
+        const productIds = [
+            ...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id))),
+        ];
         const costPriceMap = new Map<string, number>();
 
         if (productIds.length === 0) return costPriceMap;
@@ -358,7 +433,10 @@ export class DashboardService {
         return Math.round(signed * 100) / 100;
     }
 
-    private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
+    private parseAndValidateDateRange(
+        from: string | undefined,
+        to: string | undefined,
+    ): { from: Date; to: Date } | null {
         if (from === undefined && to === undefined) return null;
 
         if (from === undefined || to === undefined) {
@@ -369,7 +447,9 @@ export class DashboardService {
         const toDate = new Date(to);
 
         if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-            throw new BadRequestException('Invalid date format. Use ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)');
+            throw new BadRequestException(
+                'Invalid date format. Use ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)',
+            );
         }
         if (fromDate > toDate) {
             throw new BadRequestException('"from" must be on or before "to"');
