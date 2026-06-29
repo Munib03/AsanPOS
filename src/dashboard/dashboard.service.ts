@@ -13,7 +13,6 @@ import {
     DashboardQueryDto,
     DashboardRange,
     DashboardStats,
-    SessionDetail,
 } from './dto/dashboard.dto';
 
 type RangeBounds = {
@@ -106,7 +105,7 @@ export class DashboardService {
 
         const [costPriceMap, cashierBreakdown] = await Promise.all([
             this.buildCostPriceMap(store, [...currentSales, ...previousSales]),
-            this.getCashierBreakdown(store, currentSales, currentTotalSales, includeSessionInfo),
+            this.getCashierBreakdown(store, currentSales, includeSessionInfo),
         ]);
 
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
@@ -127,17 +126,11 @@ export class DashboardService {
         }
 
         if (includeSessionInfo) {
-            const todayStart = startOfUtcDay(new Date());
-            const todayEnd = endOfUtcDay(new Date());
-
-            const [stockRecords, adminSessions] = await Promise.all([
-                this.em.find(
-                    StockQuantity,
-                    { inventory: { store }, quantity: { $lte: 10 } },
-                    { populate: ['product', 'inventory'], refresh: true },
-                ),
-                this.getAdminSessions(store, employeeId, todayStart, todayEnd),
-            ]);
+            const stockRecords = await this.em.find(
+                StockQuantity,
+                { inventory: { store }, quantity: { $lte: 10 } },
+                { populate: ['product', 'inventory'], refresh: true },
+            );
 
             const toStockSummary = (record: StockQuantity) => ({
                 id: record.product.id,
@@ -149,7 +142,6 @@ export class DashboardService {
 
             response.lowStockProducts = stockRecords.filter((r) => (r.quantity ?? 0) >= 1).map(toStockSummary);
             response.outOfStockProducts = stockRecords.filter((r) => (r.quantity ?? 0) === 0).map(toStockSummary);
-            response.adminSessions = adminSessions;
         }
 
         if (range === DashboardRange.LAST_WEEK) {
@@ -159,10 +151,10 @@ export class DashboardService {
         return response;
     }
 
+
     private async getCashierBreakdown(
         store: Store,
         currentSales: Sale[],
-        storeTotal: number,
         includeSessionInfo: boolean,
     ): Promise<CashierStats[]> {
         if (currentSales.length === 0) return [];
@@ -241,50 +233,12 @@ export class DashboardService {
                     employeeId: bucket.employeeId,
                     employeeName: bucket.employeeName,
                     totalSales: Math.round(total * 100) / 100,
-                    percentage: storeTotal === 0 ? 0 : Math.round((total / storeTotal) * 10000) / 100,
                     openingAmount: sessionInfo?.openingAmount ?? 0,
                     closingAmount: sessionInfo?.closingAmount ?? null,
                     status: sessionInfo?.status ?? null,
                 };
             })
             .sort((a, b) => b.totalSales - a.totalSales);
-    }
-
-
-    private async getAdminSessions(
-        store: Store,
-        employeeId: string,
-        todayStart: Date,
-        todayEnd: Date,
-    ): Promise<SessionDetail[]> {
-        if (!employeeId) return [];
-
-        const sessions = await this.em.find(
-            StoreSession,
-            {
-                store,
-                openedBy: { id: employeeId },
-                $or: [{ closedAt: null }, { closedAt: { $gte: todayStart, $lte: todayEnd } }],
-            },
-            { populate: ['cashMovements', 'payments', 'openedBy'], orderBy: { openedAt: 'DESC' }, refresh: true },
-        );
-
-        return sessions.map((session) => {
-            const expectedAmount = this.calculateExpectedAmount(session);
-            const isClosed = session.closedAt != null;
-
-            return {
-                sessionId: session.id,
-                employeeId: session.openedBy?.id ?? '',
-                employeeName: session.openedBy?.name ?? '',
-                status: isClosed ? 'closed' : 'open',
-                openingAmount: session.openingAmount ?? 0,
-                closingAmount: isClosed ? (session.closingAmount ?? 0) : null,
-                expectedAmount: Math.round(expectedAmount * 100) / 100,
-                openedAt: session.openedAt,
-                closedAt: session.closedAt ?? null,
-            };
-        });
     }
 
 
@@ -300,7 +254,7 @@ export class DashboardService {
 
         return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
     }
-    
+
 
     private getEnumRangeBounds(range: DashboardRange): RangeBounds {
         if (range === DashboardRange.MONTHLY) return monthlyBounds(new Date());
