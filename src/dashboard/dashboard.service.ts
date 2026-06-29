@@ -52,7 +52,6 @@ function addDays(date: Date, days: number): Date {
     return d;
 }
 
-
 function dayWindow(now: Date, windowDays: number, endOffsetDays: number): RangeBounds {
     const currentEnd = endOfUtcDay(addDays(now, -endOffsetDays));
     const currentStart = startOfUtcDay(addDays(currentEnd, -(windowDays - 1)));
@@ -65,7 +64,6 @@ const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; en
     [DashboardRange.TODAY]: { windowDays: 1, endOffsetDays: 0 },
     [DashboardRange.YESTERDAY]: { windowDays: 1, endOffsetDays: 1 },
     [DashboardRange.LAST_WEEK]: { windowDays: 7, endOffsetDays: 0 },
-    // Rolling 30 days ending today — same shape as last-week, just wider.
     [DashboardRange.MONTHLY]: { windowDays: 30, endOffsetDays: 0 },
 };
 
@@ -89,7 +87,9 @@ export class DashboardService {
         const includeCashierBreakdown = range === DashboardRange.TODAY;
         const includeSessionInfo = range === DashboardRange.TODAY;
         const includeDailyBreakdown =
-            range === DashboardRange.LAST_WEEK || range === DashboardRange.MONTHLY;
+            range === DashboardRange.LAST_WEEK ||
+            range === DashboardRange.MONTHLY ||
+            range === DashboardRange.CUSTOM;
 
         const [currentSales, previousSales] = await Promise.all([
             this.em.find(Sale, { store, createdAt: { $gte: currentStart, $lte: currentEnd } }, { populate: ['items', 'items.product'], refresh: true }),
@@ -110,13 +110,16 @@ export class DashboardService {
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
 
-        const profitTotal = Math.max(currentNetProfit, 0);
+        const profitTotal = currentNetProfit;
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
 
         const response: DashboardStats = {
             range,
             sales: { total: Math.round(currentTotalSales * 100) / 100, percentageChange: salesPercentageChange },
-            profit: { total: Math.round(profitTotal * 100) / 100, percentageChange: profitPercentageChange },
+            profit: {
+                total: Math.round(profitTotal * 100) / 100,
+                percentageChange: profitPercentageChange,
+            },
         };
 
         if (includeCashierBreakdown) {
@@ -152,7 +155,6 @@ export class DashboardService {
 
         return response;
     }
-
 
     private async getCashierBreakdown(store: Store, currentSales: Sale[]): Promise<CashierStats[]> {
         if (currentSales.length === 0) return [];
@@ -285,7 +287,7 @@ export class DashboardService {
                 date: dateStr,
                 dayName: cursor.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
                 sales: { total: Math.round(this.calcTotalSales(daySales) * 100) / 100 },
-                profit: { total: Math.round(Math.max(netProfit, 0) * 100) / 100 },
+                profit: { total: Math.round(netProfit * 100) / 100 },
             });
 
             cursor.setUTCDate(cursor.getUTCDate() + 1);
