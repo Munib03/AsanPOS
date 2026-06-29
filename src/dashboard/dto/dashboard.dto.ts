@@ -44,7 +44,7 @@ export interface DashboardStats {
   customRange?: { from: string; to: string };
   sales: { total: number; percentageChange: number };
   profit: { total: number; percentageChange: number };
-  cashierBreakdown: CashierStats[];
+  cashierBreakdown?: CashierStats[];
   lowStockProducts?: {
     id: string;
     name: string;

@@ -52,6 +52,7 @@ function addDays(date: Date, days: number): Date {
     return d;
 }
 
+
 function dayWindow(now: Date, windowDays: number, endOffsetDays: number): RangeBounds {
     const currentEnd = endOfUtcDay(addDays(now, -endOffsetDays));
     const currentStart = startOfUtcDay(addDays(currentEnd, -(windowDays - 1)));
@@ -60,19 +61,12 @@ function dayWindow(now: Date, windowDays: number, endOffsetDays: number): RangeB
     return { currentStart, currentEnd, previousStart, previousEnd };
 }
 
-function monthlyBounds(now: Date): RangeBounds {
-    return {
-        currentStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)),
-        currentEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)),
-        previousStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0)),
-        previousEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999)),
-    };
-}
-
 const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; endOffsetDays: number }>> = {
     [DashboardRange.TODAY]: { windowDays: 1, endOffsetDays: 0 },
     [DashboardRange.YESTERDAY]: { windowDays: 1, endOffsetDays: 1 },
     [DashboardRange.LAST_WEEK]: { windowDays: 7, endOffsetDays: 0 },
+    // Rolling 30 days ending today — same shape as last-week, just wider.
+    [DashboardRange.MONTHLY]: { windowDays: 30, endOffsetDays: 0 },
 };
 
 @Injectable()
@@ -92,7 +86,10 @@ export class DashboardService {
             ? this.getCustomRangeBounds(customRange.from, customRange.to)
             : this.getEnumRangeBounds(range);
 
+        const includeCashierBreakdown = range === DashboardRange.TODAY;
         const includeSessionInfo = range === DashboardRange.TODAY;
+        const includeDailyBreakdown =
+            range === DashboardRange.LAST_WEEK || range === DashboardRange.MONTHLY;
 
         const [currentSales, previousSales] = await Promise.all([
             this.em.find(Sale, { store, createdAt: { $gte: currentStart, $lte: currentEnd } }, { populate: ['items', 'items.product'], refresh: true }),
@@ -103,10 +100,12 @@ export class DashboardService {
         const previousTotalSales = this.calcTotalSales(previousSales);
         const salesPercentageChange = this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales);
 
-        const [costPriceMap, cashierBreakdown] = await Promise.all([
-            this.buildCostPriceMap(store, [...currentSales, ...previousSales]),
-            this.getCashierBreakdown(store, currentSales, includeSessionInfo),
-        ]);
+        const costPriceMapPromise = this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
+        const cashierBreakdownPromise = includeCashierBreakdown
+            ? this.getCashierBreakdown(store, currentSales)
+            : Promise.resolve([] as CashierStats[]);
+
+        const [costPriceMap, cashierBreakdown] = await Promise.all([costPriceMapPromise, cashierBreakdownPromise]);
 
         const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
         const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
@@ -118,8 +117,11 @@ export class DashboardService {
             range,
             sales: { total: Math.round(currentTotalSales * 100) / 100, percentageChange: salesPercentageChange },
             profit: { total: Math.round(profitTotal * 100) / 100, percentageChange: profitPercentageChange },
-            cashierBreakdown,
         };
+
+        if (includeCashierBreakdown) {
+            response.cashierBreakdown = cashierBreakdown;
+        }
 
         if (customRange) {
             response.customRange = { from: currentStart.toISOString(), to: currentEnd.toISOString() };
@@ -144,7 +146,7 @@ export class DashboardService {
             response.outOfStockProducts = stockRecords.filter((r) => (r.quantity ?? 0) === 0).map(toStockSummary);
         }
 
-        if (range === DashboardRange.LAST_WEEK) {
+        if (includeDailyBreakdown) {
             response.dailyBreakdown = this.buildDailyBreakdown(currentSales, costPriceMap, currentStart, currentEnd);
         }
 
@@ -152,11 +154,7 @@ export class DashboardService {
     }
 
 
-    private async getCashierBreakdown(
-        store: Store,
-        currentSales: Sale[],
-        includeSessionInfo: boolean,
-    ): Promise<CashierStats[]> {
+    private async getCashierBreakdown(store: Store, currentSales: Sale[]): Promise<CashierStats[]> {
         if (currentSales.length === 0) return [];
 
         const saleIds = currentSales.map((s) => s.id);
@@ -187,11 +185,9 @@ export class DashboardService {
             const attr = attributionBySaleId.get(sale.id);
             if (!attr) continue;
 
-            const bucketKey = includeSessionInfo ? `session:${attr.sessionId}` : `employee:${attr.employeeId}`;
-
-            const existing = buckets.get(bucketKey);
+            const existing = buckets.get(`session:${attr.sessionId}`);
             if (existing) existing.sales.push(sale);
-            else buckets.set(bucketKey, {
+            else buckets.set(`session:${attr.sessionId}`, {
                 sessionId: attr.sessionId,
                 employeeId: attr.employeeId,
                 employeeName: attr.employeeName,
@@ -199,27 +195,25 @@ export class DashboardService {
             });
         }
 
+        const sessionIds = Array.from(buckets.values())
+            .map((b) => b.sessionId)
+            .filter((id): id is string => id !== null);
+
         const sessionInfoById = new Map<string, SessionInfo>();
-        if (includeSessionInfo) {
-            const sessionIds = Array.from(buckets.values())
-                .map((b) => b.sessionId)
-                .filter((id): id is string => id !== null);
+        if (sessionIds.length > 0) {
+            const sessions = await this.em.find(
+                StoreSession,
+                { id: { $in: sessionIds }, store },
+                { refresh: true },
+            );
 
-            if (sessionIds.length > 0) {
-                const sessions = await this.em.find(
-                    StoreSession,
-                    { id: { $in: sessionIds }, store },
-                    { refresh: true },
-                );
-
-                for (const session of sessions) {
-                    const isClosed = session.closedAt != null;
-                    sessionInfoById.set(session.id, {
-                        openingAmount: session.openingAmount ?? 0,
-                        closingAmount: isClosed ? (session.closingAmount ?? 0) : null,
-                        status: isClosed ? 'closed' : 'open',
-                    });
-                }
+            for (const session of sessions) {
+                const isClosed = session.closedAt != null;
+                sessionInfoById.set(session.id, {
+                    openingAmount: session.openingAmount ?? 0,
+                    closingAmount: isClosed ? (session.closingAmount ?? 0) : null,
+                    status: isClosed ? 'closed' : 'open',
+                });
             }
         }
 
@@ -241,7 +235,6 @@ export class DashboardService {
             .sort((a, b) => b.totalSales - a.totalSales);
     }
 
-
     private calculateExpectedAmount(session: StoreSession): number {
         const cashMovements = session.cashMovements.getItems();
         const cashIn = cashMovements
@@ -255,14 +248,10 @@ export class DashboardService {
         return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
     }
 
-
     private getEnumRangeBounds(range: DashboardRange): RangeBounds {
-        if (range === DashboardRange.MONTHLY) return monthlyBounds(new Date());
-
         const config = DAY_WINDOW_CONFIG[range] ?? DAY_WINDOW_CONFIG[DashboardRange.TODAY]!;
         return dayWindow(new Date(), config.windowDays, config.endOffsetDays);
     }
-
 
     private getCustomRangeBounds(from: Date, to: Date): RangeBounds {
         const currentStart = startOfUtcDay(from);
@@ -272,7 +261,6 @@ export class DashboardService {
         const previousStart = new Date(previousEnd.getTime() - lengthMs);
         return { currentStart, currentEnd, previousStart, previousEnd };
     }
-
 
     private buildDailyBreakdown(sales: Sale[], costPriceMap: Map<string, number>, start: Date, end: Date): DailyStats[] {
         const salesByDay = new Map<string, Sale[]>();
@@ -306,14 +294,12 @@ export class DashboardService {
         return days;
     }
 
-
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) => sum + sale.items.getItems().reduce((s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
             0,
         );
     }
-
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id)))];
@@ -334,7 +320,6 @@ export class DashboardService {
         return costPriceMap;
     }
 
-
     private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
@@ -347,7 +332,6 @@ export class DashboardService {
         );
     }
 
-
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);
         if (denom === 0) return 0;
@@ -357,7 +341,6 @@ export class DashboardService {
 
         return Math.round(signed * 100) / 100;
     }
-
 
     private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
         if (from === undefined && to === undefined) return null;
