@@ -26,6 +26,8 @@ type SessionInfo = {
     openingAmount: number;
     closingAmount: number | null;
     status: 'open' | 'closed';
+    cashIn: number;
+    cashOut: number;
 };
 
 type Attribution = {
@@ -206,15 +208,25 @@ export class DashboardService {
             const sessions = await this.em.find(
                 StoreSession,
                 { id: { $in: sessionIds }, store },
-                { refresh: true },
+                { populate: ['cashMovements'], refresh: true },
             );
 
             for (const session of sessions) {
                 const isClosed = session.closedAt != null;
+                const cashMovements = session.cashMovements.getItems();
+                const cashIn = cashMovements
+                    .filter((cm) => cm.type === CashMovementType.CashIn)
+                    .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+                const cashOut = cashMovements
+                    .filter((cm) => cm.type === CashMovementType.CashOut)
+                    .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+
                 sessionInfoById.set(session.id, {
                     openingAmount: session.openingAmount ?? 0,
                     closingAmount: isClosed ? (session.closingAmount ?? 0) : null,
                     status: isClosed ? 'closed' : 'open',
+                    cashIn: Math.round(cashIn * 100) / 100,
+                    cashOut: Math.round(cashOut * 100) / 100,
                 });
             }
         }
@@ -232,6 +244,8 @@ export class DashboardService {
                     openingAmount: sessionInfo?.openingAmount ?? 0,
                     closingAmount: sessionInfo?.closingAmount ?? null,
                     status: sessionInfo?.status ?? null,
+                    cashIn: sessionInfo?.cashIn ?? 0,
+                    cashOut: sessionInfo?.cashOut ?? 0,
                 };
             })
             .sort((a, b) => b.totalSales - a.totalSales);
