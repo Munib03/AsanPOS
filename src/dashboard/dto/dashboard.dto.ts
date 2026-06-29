@@ -29,14 +29,36 @@ export interface DailyStats {
   profit: { total: number };
 }
 
+export interface CashierStats {
+  sessionId: string | null;
+  employeeId: string;
+  employeeName: string;
+  totalSales: number;
+  percentage: number;
+  openingAmount: number;
+  closingAmount: number | null;
+  status: 'open' | 'closed' | null;
+}
+
+export interface SessionDetail {
+  sessionId: string;
+  employeeId: string;
+  employeeName: string;
+  status: 'open' | 'closed';
+  openingAmount: number;
+  closingAmount: number | null;
+  expectedAmount: number;
+  openedAt?: Date;
+  closedAt: Date | null;
+}
+
 export interface DashboardStats {
   range: DashboardRange;
   customRange?: { from: string; to: string };
   sales: { total: number; percentageChange: number };
   profit: { total: number; percentageChange: number };
-  session?:
-  | { status: 'open'; openingAmount: number; expectedAmount: number }
-  | { status: 'closed'; closingAmount: number; expectedAmount: number };
+  cashierBreakdown: CashierStats[];
+  adminSessions?: SessionDetail[];
   lowStockProducts?: {
     id: string;
     name: string;
