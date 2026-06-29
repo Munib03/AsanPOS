@@ -136,6 +136,7 @@ export class PurchaseService {
     }
 
     const inventoryId = purchase.inventory?.id ?? null;
+    const inventoryName = purchase.inventory?.name;
 
     const serialized = serialize(purchase, {
       populate: ['customer', 'inventory', 'items', 'items.product', 'sequence'],
@@ -145,6 +146,7 @@ export class PurchaseService {
       serialized,
       stockInsMap,
       inventoryId,
+      inventoryName
     );
   }
 
@@ -354,7 +356,8 @@ export class PurchaseService {
   private mapPurchaseToListItem(
     serialized: any,
     stockInsMap?: Map<string, StockInDetail>,
-    inventoryId?: string | null,
+    inventoryId?: string,
+    inventoryName?: string
   ): PurchaseListItem {
     const { sequence, createdAt, updatedAt, ...rest } = serialized;
 
@@ -369,7 +372,8 @@ export class PurchaseService {
       totalPrice: serialized.items.reduce((sum: number, item: any) => sum + item.unitPrice * item.quantity, 0),
       items,
       stockIns: stockInsMap ? Array.from(stockInsMap.values()) : [],
-      inventoryId: inventoryId ?? null,
+      inventoryId: inventoryId,
+      inventoryName: inventoryName
     };
   }
 }
