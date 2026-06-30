@@ -16,6 +16,8 @@ import {
 } from './dto/dashboard.dto';
 import { SaleItem } from '../database/entites/sale-item.entity';
 
+
+
 type RangeBounds = {
     currentStart: Date;
     currentEnd: Date;
@@ -58,6 +60,9 @@ const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; en
 
 @Injectable()
 export class DashboardService {
+    private static readonly TAX_RATE = 0.10;
+
+
     constructor(private readonly em: EntityManager) { }
 
 
@@ -430,8 +435,10 @@ export class DashboardService {
             (sum, sale) =>
                 sum +
                 sale.items.getItems().reduce((s, item) => {
+                    const taxInclusivePrice = item.unitPrice ?? 0;
+                    const basePrice = taxInclusivePrice / (1 + DashboardService.TAX_RATE);
                     const costPrice = costBySaleItemId.get(item.id) ?? 0;
-                    return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
+                    return s + (basePrice - costPrice) * (item.quantity ?? 0);
                 }, 0),
             0,
         );
