@@ -14,6 +14,7 @@ import {
     DashboardRange,
     DashboardStats,
 } from './dto/dashboard.dto';
+import { SaleItem } from '../database/entites/sale-item.entity';
 
 type RangeBounds = {
     currentStart: Date;
@@ -95,14 +96,21 @@ export class DashboardService {
         const previousTotalSales = this.calcTotalSales(previousSales);
         const salesPercentageChange = this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales);
 
-        const costPriceMap = await this.buildCostPriceMap(store, [...currentSales, ...previousSales]);
+        const productIds = [
+            ...new Set(
+                [...currentSales, ...previousSales].flatMap((sale) =>
+                    sale.items.getItems().map((item) => item.product.id),
+                ),
+            ),
+        ];
+        const costPriceMap = await this.buildFifoSaleItemCostMap(store, productIds, currentEnd);
 
         const cashierBreakdown = includeCashierBreakdown
             ? await this.getCashierBreakdown(store, currentStart, currentEnd)
             : ([] as CashierStats[]);
 
-        const currentNetProfit = this.calcTotalProfit(currentSales);
-        const previousNetProfit = this.calcTotalProfit(previousSales);
+        const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
+        const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
 
         const profitTotal = currentNetProfit;
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
@@ -334,7 +342,7 @@ export class DashboardService {
         while (cursor.getTime() <= endCursor.getTime()) {
             const dateStr = cursor.toISOString().split('T')[0];
             const daySales = salesByDay.get(dateStr) ?? [];
-            const netProfit = this.calcTotalProfit(daySales);
+            const netProfit = this.calcTotalProfit(daySales, costPriceMap);
             const sessionInfo = sessionsByDay.get(dateStr) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
 
             days.push({
@@ -367,33 +375,64 @@ export class DashboardService {
     }
 
 
-    private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
-        const productIds = [
-            ...new Set(sales.flatMap((sale) => sale.items.getItems().map((item) => item.product.id))),
-        ];
-        const costPriceMap = new Map<string, number>();
+    private async buildFifoSaleItemCostMap(
+        store: Store,
+        productIds: string[],
+        upTo: Date,
+    ): Promise<Map<string, number>> {
+        const costBySaleItemId = new Map<string, number>();
+        if (productIds.length === 0) return costBySaleItemId;
 
-        if (productIds.length === 0) return costPriceMap;
-
-        const latestPurchasedItems = await this.em.find(
+        const purchasedItems = await this.em.find(
             PurchasedItem,
             { product: { id: { $in: productIds } }, purchase: { store } },
-            { orderBy: { createdAt: 'DESC' }, refresh: true },
+            { orderBy: { createdAt: 'ASC' }, refresh: true },
         );
 
-        for (const item of latestPurchasedItems) {
-            if (!costPriceMap.has(item.product.id)) costPriceMap.set(item.product.id, item.unitPrice);
+        const batchesByProduct = new Map<string, { remaining: number; unitPrice: number }[]>();
+        for (const pi of purchasedItems) {
+            const productId = pi.product.id;
+            const list = batchesByProduct.get(productId) ?? [];
+            list.push({ remaining: pi.quantity, unitPrice: pi.unitPrice });
+            batchesByProduct.set(productId, list);
         }
 
-        return costPriceMap;
+        const saleItems = await this.em.find(
+            SaleItem,
+            { product: { id: { $in: productIds } }, sale: { store, createdAt: { $lte: upTo } } },
+            { populate: ['sale', 'product'], orderBy: { sale: { createdAt: 'ASC' } }, refresh: true },
+        );
+
+        for (const item of saleItems) {
+            const batches = batchesByProduct.get(item.product.id) ?? [];
+            let qtyToConsume = item.quantity ?? 0;
+            let totalCost = 0;
+
+            for (const batch of batches) {
+                if (qtyToConsume <= 0) break;
+                if (batch.remaining <= 0) continue;
+                const take = Math.min(batch.remaining, qtyToConsume);
+                totalCost += take * batch.unitPrice;
+                batch.remaining -= take;
+                qtyToConsume -= take;
+            }
+
+            const consumedQty = (item.quantity ?? 0) - qtyToConsume;
+            costBySaleItemId.set(item.id, consumedQty > 0 ? totalCost / consumedQty : 0);
+        }
+
+        return costBySaleItemId;
     }
 
 
-    private calcTotalProfit(sales: Sale[]): number {
+    private calcTotalProfit(sales: Sale[], costBySaleItemId: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
                 sum +
-                sale.items.getItems().reduce((s, item) => s + (item.unitPrice ?? 0) * (item.quantity ?? 0), 0),
+                sale.items.getItems().reduce((s, item) => {
+                    const costPrice = costBySaleItemId.get(item.id) ?? 0;
+                    return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
+                }, 0),
             0,
         );
     }
