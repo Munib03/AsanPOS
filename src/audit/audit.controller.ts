@@ -5,6 +5,7 @@ import { RolesGuard } from '../shared/guards/role.guard';
 import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+import { AuditQueryDto } from './dto/audit-query.dto';
 
 @Controller('audit')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,7 +14,10 @@ export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  findAll(@Query() query: paginateQueryTypes.PaginateQuery) {
-    return this.auditService.findAll(query);
+  findAll(
+    @Query() query: paginateQueryTypes.PaginateQuery,
+    @Query() filterQuery: AuditQueryDto,
+  ) {
+    return this.auditService.findAll(query, filterQuery.type);
   }
 }

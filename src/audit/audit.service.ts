@@ -11,7 +11,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 export class AuditService {
   constructor(
     private readonly auditRepository: BaseRepository<AuditLog>,
-  ) {}
+  ) { }
 
   log(
     em: EntityManager,
@@ -51,9 +51,9 @@ export class AuditService {
     });
   }
 
-  async findAll(query: PaginateQuery) {
+  async findAll(query: PaginateQuery, type?: AuditEntityType) {
     const [logs, meta] = await this.auditRepository.findAndPaginate(
-      {},
+      type ? { entityType: type } : {},
       {
         populate: ['employee'],
         orderBy: { createdAt: 'DESC' },
