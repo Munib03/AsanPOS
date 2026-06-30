@@ -59,6 +59,7 @@ const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; en
 export class DashboardService {
     constructor(private readonly em: EntityManager) { }
 
+
     async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
         const customRange = this.parseAndValidateDateRange(query.from, query.to);
 
@@ -100,8 +101,8 @@ export class DashboardService {
             ? await this.getCashierBreakdown(store, currentStart, currentEnd)
             : ([] as CashierStats[]);
 
-        const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
-        const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
+        const currentNetProfit = this.calcTotalProfit(currentSales);
+        const previousNetProfit = this.calcTotalProfit(previousSales);
 
         const profitTotal = currentNetProfit;
         const profitPercentageChange = this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit);
@@ -155,21 +156,12 @@ export class DashboardService {
         return response;
     }
 
-    /**
-     * PER-SESSION breakdown. The previous version aggregated everything by
-     * employee.id, so a freshly-opened session with zero sales got glued to
-     * the old closed session's row and looked like nothing changed.
-     *
-     * Now each session produces its own row, with openingAmount / cashIn /
-     * cashOut read directly from StoreSession + CashMovement — independent
-     * of whether any sale has been recorded.
-     */
+
     private async getCashierBreakdown(
         store: Store,
         currentStart: Date,
         currentEnd: Date,
     ): Promise<CashierStats[]> {
-        // 1. Fetch every session that touches today: still open, opened today, or closed today.
         const sessions = await this.em.find(
             StoreSession,
             {
@@ -183,12 +175,10 @@ export class DashboardService {
             { populate: ['cashMovements', 'openedBy'], refresh: true, orderBy: { openedAt: 'ASC' } },
         );
 
-        // Safety net — force-load the collections so .getItems() is never empty.
         await this.em.populate(sessions, ['cashMovements', 'openedBy'], { refresh: true });
 
         if (sessions.length === 0) return [];
 
-        // 2. Fetch today's sales and link them to sessions via Payment.
         const sales = await this.em.find(
             Sale,
             { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
@@ -217,7 +207,6 @@ export class DashboardService {
             else salesBySessionId.set(payment.storeSession.id, [sale]);
         }
 
-        // 3. Build ONE entry per session.
         const breakdown: CashierStats[] = sessions
             .filter((session) => session.openedBy != null)
             .map((session) => {
@@ -263,23 +252,13 @@ export class DashboardService {
         return breakdown.sort((a, b) => b.totalSales - a.totalSales);
     }
 
-    private calculateExpectedAmount(session: StoreSession): number {
-        const cashMovements = session.cashMovements.getItems();
-        const cashIn = cashMovements
-            .filter((cm) => cm.type === CashMovementType.CashIn)
-            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-        const cashOut = cashMovements
-            .filter((cm) => cm.type === CashMovementType.CashOut)
-            .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-        const salePayments = session.payments.getItems().reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
-        return (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
-    }
 
     private getEnumRangeBounds(range: DashboardRange): RangeBounds {
         const config = DAY_WINDOW_CONFIG[range] ?? DAY_WINDOW_CONFIG[DashboardRange.TODAY]!;
         return dayWindow(new Date(), config.windowDays, config.endOffsetDays);
     }
+
 
     private getCustomRangeBounds(from: Date, to: Date): RangeBounds {
         const currentStart = startOfUtcDay(from);
@@ -290,11 +269,7 @@ export class DashboardService {
         return { currentStart, currentEnd, previousStart, previousEnd };
     }
 
-    /**
-     * Now also reflects session lifecycle activity per day — opens, closes,
-     * cash-in, cash-out — so dashboard updates the moment those events
-     * happen, not only when a sale is recorded.
-     */
+
     private async buildDailyBreakdown(
         store: Store,
         sales: Sale[],
@@ -359,7 +334,7 @@ export class DashboardService {
         while (cursor.getTime() <= endCursor.getTime()) {
             const dateStr = cursor.toISOString().split('T')[0];
             const daySales = salesByDay.get(dateStr) ?? [];
-            const netProfit = this.calcTotalProfit(daySales, costPriceMap);
+            const netProfit = this.calcTotalProfit(daySales);
             const sessionInfo = sessionsByDay.get(dateStr) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
 
             days.push({
@@ -379,6 +354,7 @@ export class DashboardService {
         return days;
     }
 
+
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
@@ -389,6 +365,7 @@ export class DashboardService {
             0,
         );
     }
+
 
     private async buildCostPriceMap(store: Store, sales: Sale[]): Promise<Map<string, number>> {
         const productIds = [
@@ -411,17 +388,16 @@ export class DashboardService {
         return costPriceMap;
     }
 
-    private calcTotalProfit(sales: Sale[], costPriceMap: Map<string, number>): number {
+
+    private calcTotalProfit(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) =>
                 sum +
-                sale.items.getItems().reduce((s, item) => {
-                    const costPrice = costPriceMap.get(item.product.id) ?? 0;
-                    return s + ((item.unitPrice ?? 0) - costPrice) * (item.quantity ?? 0);
-                }, 0),
+                sale.items.getItems().reduce((s, item) => s + (item.unitPrice ?? 0) * (item.quantity ?? 0), 0),
             0,
         );
     }
+
 
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);
@@ -432,6 +408,7 @@ export class DashboardService {
 
         return Math.round(signed * 100) / 100;
     }
+
 
     private parseAndValidateDateRange(
         from: string | undefined,
