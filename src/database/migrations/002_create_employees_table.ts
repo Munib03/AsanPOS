@@ -1,5 +1,4 @@
-import { Knex } from "knex";
-
+import { Knex } from 'knex';
 
 exports.up = async function (knex: Knex): Promise<void> {
   await knex.schema.createTable('employees', (table: Knex.TableBuilder) => {
@@ -8,14 +7,24 @@ exports.up = async function (knex: Knex): Promise<void> {
     table.string('name').notNullable();
     table.string('password').notNullable();
     table.string('phone').nullable();
-    table.string('title').nullable();
+    table.string('role').nullable();
+    table.text('image_url').nullable();
+    table.string('first_name').nullable();
+    table.string('last_name').nullable();
+    table.date('dob').nullable();
+    table.enu('gender', ['male', 'female', 'other'], {
+      useNative: true,
+      enumName: 'employee_gender',
+    }).nullable();
     table.timestamp('verified_at').nullable();
-    table.uuid('store_id').notNullable().references('id').inTable('stores').onDelete('CASCADE');
+    table.uuid('store_id').notNullable()
+      .references('id').inTable('stores').onDelete('CASCADE');
     table.timestamp('created_at').defaultTo(knex.fn.now());
     table.timestamp('updated_at').defaultTo(knex.fn.now());
   });
 };
 
 exports.down = async function (knex: Knex): Promise<void> {
-  await knex.schema.dropTable('employees');
+  await knex.schema.dropTableIfExists('employees');
+  await knex.raw('DROP TYPE IF EXISTS employee_gender');
 };

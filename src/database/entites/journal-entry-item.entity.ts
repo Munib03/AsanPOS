@@ -20,7 +20,7 @@ export class JournalEntryItem {
   @ManyToOne(() => Sale, { fieldName: "sale_id", nullable: true })
   sale?: Sale;
 
-  @ManyToOne(() => Account, { fieldName: "acount_id" })
+  @ManyToOne(() => Account, { fieldName: "account_id" })
   account!: Account;
 
   @Property({ columnType: "decimal(10,2)", runtimeType: "number", nullable: true })

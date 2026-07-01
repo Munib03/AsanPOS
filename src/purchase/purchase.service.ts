@@ -218,6 +218,7 @@ export class PurchaseService {
         return em.create(PurchasedItem, {
           purchase,
           product,
+          warehouse: inventory,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         });

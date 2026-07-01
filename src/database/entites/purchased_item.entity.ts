@@ -2,6 +2,7 @@ import { Entity, PrimaryKey, Property, ManyToOne } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { Purchase } from "./purchase.entity";
 import { Product } from "./product.entity";
+import { Inventory } from "./inventory.entity";
 
 @Entity({ tableName: "purchased_items" })
 export class PurchasedItem {
@@ -12,6 +13,9 @@ export class PurchasedItem {
   @ManyToOne(() => Purchase, { fieldName: "purchase_id" })
   purchase!: Purchase;
 
+  @ManyToOne(() => Inventory, { fieldName: "warehouse_id" })
+  warehouse!: Inventory;
+  
   @ManyToOne(() => Product, { fieldName: "product_id" })
   product!: Product;
 
