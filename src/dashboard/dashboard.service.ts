@@ -68,7 +68,7 @@ export class DashboardService {
         const productIds = [...new Set(
             [...currentSales, ...previousSales].flatMap((s) => s.items.getItems().map((i) => i.product.id)),
         )];
-        const costPriceMap = await this.buildFifoSaleItemCostMap(store, productIds, currentEnd);
+        const costPriceMap = await this.buildSaleItemCostMap(store, productIds, currentEnd);
 
         const cashierBreakdown = includeCashierBreakdown
             ? await this.getCashierBreakdown(store, currentStart, currentEnd)
@@ -104,6 +104,7 @@ export class DashboardService {
         return response;
     }
 
+
     private toStockSummary = (record: StockQuantity) => ({
         id: record.product.id,
         name: record.product.name ?? '',
@@ -112,6 +113,7 @@ export class DashboardService {
         inventoryName: record.inventory.name ?? '',
     });
 
+    
     private sumCashMovements(
         cashMovements: { type: string; amount?: number; createdAt?: Date }[],
         type: CashMovementType,
@@ -126,6 +128,7 @@ export class DashboardService {
             })
             .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
     }
+
 
     private async getCashierBreakdown(store: Store, currentStart: Date, currentEnd: Date): Promise<CashierStats[]> {
         const sessions = await this.em.find(
@@ -151,12 +154,18 @@ export class DashboardService {
         const saleById = new Map(sales.map((s) => [s.id, s]));
         const salesBySessionId = new Map<string, Sale[]>();
         for (const payment of payments) {
-            if (!payment.sale || !payment.storeSession) continue;
+            if (!payment.sale || !payment.storeSession)
+                continue;
+
             const sale = saleById.get(payment.sale.id);
-            if (!sale) continue;
+            if (!sale)
+                continue;
+
             const bucket = salesBySessionId.get(payment.storeSession.id);
-            if (bucket) bucket.push(sale);
-            else salesBySessionId.set(payment.storeSession.id, [sale]);
+            if (bucket)
+                bucket.push(sale);
+            else
+                salesBySessionId.set(payment.storeSession.id, [sale]);
         }
 
         return sessions
@@ -181,10 +190,13 @@ export class DashboardService {
             .sort((a, b) => b.totalSales - a.totalSales);
     }
 
+
     private getEnumRangeBounds(range: DashboardRange): RangeBounds {
         const config = DAY_WINDOW_CONFIG[range] ?? DAY_WINDOW_CONFIG[DashboardRange.TODAY]!;
+
         return dayWindow(new Date(), config.windowDays, config.endOffsetDays);
     }
+
 
     private getCustomRangeBounds(from: Date, to: Date): RangeBounds {
         const currentStart = startOfUtcDay(from);
@@ -192,8 +204,10 @@ export class DashboardService {
         const lengthMs = currentEnd.getTime() - currentStart.getTime();
         const previousEnd = new Date(currentStart.getTime() - 1);
         const previousStart = new Date(previousEnd.getTime() - lengthMs);
+
         return { currentStart, currentEnd, previousStart, previousEnd };
     }
+
 
     private async buildDailyBreakdown(
         store: Store,
@@ -204,11 +218,15 @@ export class DashboardService {
     ): Promise<DailyStats[]> {
         const salesByDay = new Map<string, Sale[]>();
         for (const sale of sales) {
-            if (!sale.createdAt) continue;
+            if (!sale.createdAt)
+                continue;
+
             const day = toDay(sale.createdAt);
             const bucket = salesByDay.get(day);
-            if (bucket) bucket.push(sale);
-            else salesByDay.set(day, [sale]);
+            if (bucket)
+                bucket.push(sale);
+            else
+                salesByDay.set(day, [sale]);
         }
 
         const sessions = await this.em.find(
@@ -223,9 +241,13 @@ export class DashboardService {
         const sessionsByDay = new Map<string, DayBucket>();
 
         const bump = (date: Date | string | null | undefined, key: keyof DayBucket, value: number) => {
-            if (!date) return;
+            if (!date)
+                return;
+
             const d = toDay(date);
-            if (d < startDay || d > endDay) return;
+            if (d < startDay || d > endDay)
+                return;
+
             const bucket = sessionsByDay.get(d) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
             bucket[key] += value;
             sessionsByDay.set(d, bucket);
@@ -266,6 +288,7 @@ export class DashboardService {
         return days;
     }
 
+
     private calcTotalSales(sales: Sale[]): number {
         return sales.reduce(
             (sum, sale) => sum + sale.items.getItems().reduce((s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
@@ -273,7 +296,8 @@ export class DashboardService {
         );
     }
 
-    private async buildFifoSaleItemCostMap(store: Store, productIds: string[], upTo: Date): Promise<Map<string, number>> {
+
+    private async buildSaleItemCostMap(store: Store, productIds: string[], upTo: Date): Promise<Map<string, number>> {
         const costBySaleItemId = new Map<string, number>();
         if (productIds.length === 0) return costBySaleItemId;
 
@@ -317,6 +341,7 @@ export class DashboardService {
         return costBySaleItemId;
     }
 
+
     private calcTotalProfit(sales: Sale[], costBySaleItemId: Map<string, number>): number {
         return sales.reduce(
             (sum, sale) =>
@@ -330,30 +355,38 @@ export class DashboardService {
         );
     }
 
+
     private calcBoundedSignedPercentage(current: number, previous: number): number {
         const denom = Math.abs(current) + Math.abs(previous);
-        if (denom === 0) return 0;
+        if (denom === 0)
+            return 0;
+
         const shareMagnitude = (Math.abs(current) / denom) * 100;
+
         return round2(Math.sign(current) * shareMagnitude);
     }
 
+
     private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
-        if (from === undefined && to === undefined) return null;
-        if (from === undefined || to === undefined) {
+        if (from === undefined && to === undefined)
+            return null;
+
+        if (from === undefined || to === undefined)
             throw new BadRequestException('Both "from" and "to" must be provided for a custom date range');
-        }
+
 
         const fromDate = new Date(from);
         const toDate = new Date(to);
-        if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()))
             throw new BadRequestException('Invalid date format. Use ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)');
-        }
-        if (fromDate > toDate) throw new BadRequestException('"from" must be on or before "to"');
+
+        if (fromDate > toDate)
+            throw new BadRequestException('"from" must be on or before "to"');
 
         const oneYearMs = 365 * 24 * 60 * 60 * 1000;
-        if (toDate.getTime() - fromDate.getTime() > oneYearMs) {
+        if (toDate.getTime() - fromDate.getTime() > oneYearMs)
             throw new BadRequestException('Date range cannot exceed 1 year');
-        }
+
 
         return { from: fromDate, to: toDate };
     }

@@ -31,6 +31,7 @@ import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { ReceiptService } from '../receipt/receipt.service';
 import { PaginateQuery, Meta } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
+import { EntityName } from '@mikro-orm/core';
 
 
 export interface SaleListItem {
@@ -47,7 +48,6 @@ export interface SaleListItem {
   totalPrice: number;
 }
 
-
 @Injectable()
 export class SaleService {
   constructor(
@@ -57,8 +57,7 @@ export class SaleService {
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
     private readonly receiptService: ReceiptService,
-    private readonly saleRepository: BaseRepository<Sale>
-    
+    private readonly saleRepository: BaseRepository<Sale>,
   ) { }
 
 
@@ -87,9 +86,7 @@ export class SaleService {
           'items.product.price',
         ],
       },
-      {
-        searchable: ['customer.name'],
-      },
+      { searchable: ['customer.name'] },
       query,
     );
 
@@ -112,53 +109,29 @@ export class SaleService {
 
   async checkout(store: Store, employeeId: string, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id: dto.customerId });
-      if (!customer)
-        throw new NotFoundException(`Customer with id ${dto.customerId} not found`);
+      const customer = await this.findOrFail<Customer>(
+        em, Customer, { id: dto.customerId }, `Customer with id ${dto.customerId}`,
+      );
 
       const activeSession = await em.findOne(StoreSession, {
         store,
         openedBy: { id: employeeId },
         closedAt: null,
       });
-
       if (!activeSession)
         throw new BadRequestException('No active session found. Please open a session first.');
 
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
+      const employee = await this.findOrFail<Employee>(
+        em, Employee, { id: employeeId }, 'Employee',
+      );
 
-      const inventory = await em.findOne(Inventory, { id: dto.inventoryId, store });
-      if (!inventory)
-        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
+      const inventory = await this.findOrFail<Inventory>(
+        em, Inventory, { id: dto.inventoryId, store }, `Inventory with id ${dto.inventoryId}`,
+      );
 
-      const products = await em.findAll(Product, {
-        where: { id: { $in: dto.items.map((item) => item.productId) } },
-      });
+      const productMap = await this.findProductsOrFail(em, dto.items.map((i) => i.productId));
 
-      if (products.length !== dto.items.length)
-        throw new NotFoundException(`One or more products not found`);
-
-      const productMap = new Map(products.map((product) => [product.id, product]));
-
-      for (const item of dto.items) {
-        const product = productMap.get(item.productId);
-        if (!product)
-          throw new NotFoundException(`Product with id ${item.productId} not found`);
-
-        const stockRecord = await em.findOne(StockQuantity, {
-          product: { id: item.productId },
-          inventory: { id: dto.inventoryId },
-        });
-
-        const available = stockRecord?.quantity ?? 0;
-
-        if (available < item.quantity)
-          throw new BadRequestException(
-            `Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${available}.`,
-          );
-      }
+      await this.validateStockAvailability(em, dto, inventory, productMap);
 
       const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
       const sale = em.create(Sale, {
@@ -169,38 +142,27 @@ export class SaleService {
       });
       await em.persistAndFlush(sale);
 
-      const saleItems = dto.items.map((item) => {
-        const product = productMap.get(item.productId)!;
-        return em.create(SaleItem, {
+      const saleItems = dto.items.map((item) =>
+        em.create(SaleItem, {
           sale,
-          product,
+          product: productMap.get(item.productId)!,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-        });
-      });
+        }),
+      );
       await em.persistAndFlush(saleItems);
 
       this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.Sale,
-        sale.id,
-        AuditActionType.Create,
-        null,
-        SaleStatus.DRAFT,
+        em, employee, AuditEntityType.Sale, sale.id,
+        AuditActionType.Create, null, SaleStatus.DRAFT,
       );
 
       await em.populate(sale, ['items', 'items.product', 'customer']);
       const journalEntry = await this.journalEntryService.createFromSale(em, store, sale, employeeId);
 
       this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.Sale,
-        sale.id,
-        AuditActionType.Update,
-        SaleStatus.DRAFT,
-        SaleStatus.DONE,
+        em, employee, AuditEntityType.Sale, sale.id,
+        AuditActionType.Update, SaleStatus.DRAFT, SaleStatus.DONE,
       );
       sale.status = SaleStatus.DONE;
 
@@ -213,52 +175,36 @@ export class SaleService {
       });
       em.persist(stockOut);
 
-      for (let i = 0; i < dto.items.length; i++) {
-        const saleItem = saleItems[i];
+      dto.items.forEach((item, i) => {
         em.create(StockOutItem, {
           stockOut,
-          product: saleItem.product,
-          saleItem,
-          quantity: dto.items[i].quantity,
+          product: saleItems[i].product,
+          saleItem: saleItems[i],
+          quantity: item.quantity,
         });
-      }
+      });
 
       this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.StockOut,
-        stockOut.id,
-        AuditActionType.Create,
-        null,
-        StockOutStatus.PENDING,
+        em, employee, AuditEntityType.StockOut, stockOut.id,
+        AuditActionType.Create, null, StockOutStatus.PENDING,
       );
 
       await em.flush();
 
       for (const item of dto.items) {
-        const product = productMap.get(item.productId)!;
         await this.stockQuantityService.decreaseStockQuantity(
-          em,
-          inventory,
-          product,
-          item.quantity,
+          em, inventory, productMap.get(item.productId)!, item.quantity,
         );
       }
 
       this.auditService.logStatusChange(
-        em,
-        employee,
-        AuditEntityType.StockOut,
-        stockOut.id,
-        AuditActionType.Update,
-        StockOutStatus.PENDING,
-        StockOutStatus.DONE,
+        em, employee, AuditEntityType.StockOut, stockOut.id,
+        AuditActionType.Update, StockOutStatus.PENDING, StockOutStatus.DONE,
       );
       stockOut.status = StockOutStatus.DONE;
 
       const totalAmount = dto.items.reduce(
-        (sum, item) => sum + item.quantity * item.unitPrice,
-        0,
+        (sum, item) => sum + item.quantity * item.unitPrice, 0,
       );
 
       const payment = em.create(Payment, {
@@ -270,59 +216,39 @@ export class SaleService {
       em.persist(payment);
 
       this.auditService.log(
-        em,
-        employee,
-        AuditEntityType.Payment,
-        payment.id,
-        AuditActionType.Create,
-        null,
+        em, employee, AuditEntityType.Payment, payment.id,
+        AuditActionType.Create, null,
         { saleId: sale.id, amount: totalAmount, status: PaymentStatus.Done },
       );
 
       if (payment.amount === totalAmount) {
         this.auditService.logStatusChange(
-          em,
-          employee,
-          AuditEntityType.JournalEntry,
-          journalEntry.id,
-          AuditActionType.Update,
-          JournalEntryStatus.PENDING,
-          JournalEntryStatus.DONE,
+          em, employee, AuditEntityType.JournalEntry, journalEntry.id,
+          AuditActionType.Update, JournalEntryStatus.PENDING, JournalEntryStatus.DONE,
         );
-
         journalEntry.status = JournalEntryStatus.DONE;
       }
 
       await em.flush();
 
       const createdSale = await em.findOne(
-        Sale,
-        { id: sale.id },
-        { populate: ['items', 'items.product'] },
+        Sale, { id: sale.id }, { populate: ['items', 'items.product'] },
       );
-      const serialized = serialize(createdSale!, {
-        populate: ['items', 'items.product'],
-      });
+      const serialized = serialize(createdSale!, { populate: ['items', 'items.product'] });
+      const formattedItems = this.formatSaleItems(serialized.items);
 
-      const receiptItems = {
+      const receipt = await this.receiptService.create(em, store, activeSession, {
         saleId: sale.id,
         sequenceId: this.sequenceService.formatSequence(sequence),
         customerName: customer.name,
         totalAmount,
-        items: serialized.items.map((item) => ({
-          productName: item.product.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: (item.quantity ?? 0) * (item.unitPrice ?? 0),
-        })),
-      };
-
-      const receipt = await this.receiptService.create(em, store, activeSession, receiptItems);
+        items: formattedItems,
+      });
 
       await em.flush();
 
       return {
-        message: "Sale is created successfully!",
+        message: 'Sale is created successfully!',
         saleId: sale.id,
         receipt: {
           receiptId: receipt.id,
@@ -330,11 +256,8 @@ export class SaleService {
           sequenceId: this.sequenceService.formatSequence(sequence),
           customerName: customer.name,
           totalAmount,
-          items: serialized.items.map((item) => ({
-            productName: item.product.name,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subTotal: (item.quantity ?? 0) * (item.unitPrice ?? 0),
+          items: formattedItems.map(({ productName, quantity, unitPrice, total }) => ({
+            productName, quantity, unitPrice, subTotal: total,
           })),
         },
         createdAt: receipt.createdAt,
@@ -346,8 +269,7 @@ export class SaleService {
   async update(store: Store, id: string, employeeId: string, dto: UpdateSaleDto) {
     return await this.em.transactional(async (em) => {
       const sale = await em.findOne(Sale, { id, store });
-      if (!sale)
-        throw new NotFoundException(`Sale with id ${id} not found`);
+      if (!sale) throw new NotFoundException(`Sale with id ${id} not found`);
 
       if (sale.status === SaleStatus.DONE)
         throw new BadRequestException(`Cannot update a completed sale.`);
@@ -358,9 +280,7 @@ export class SaleService {
       if (dto.status) {
         this.validateSaleTransition(sale.status as SaleStatus, dto.status as SaleStatus);
 
-        const employee = await em.findOne(Employee, { id: employeeId });
-        if (!employee)
-          throw new NotFoundException('Employee not found');
+        const employee = await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee');
 
         if (dto.status === SaleStatus.DONE) {
           await em.populate(sale, ['items', 'items.product', 'customer']);
@@ -368,13 +288,8 @@ export class SaleService {
         }
 
         this.auditService.logStatusChange(
-          em,
-          employee,
-          AuditEntityType.Sale,
-          sale.id,
-          AuditActionType.Update,
-          sale.status ?? '',
-          dto.status,
+          em, employee, AuditEntityType.Sale, sale.id,
+          AuditActionType.Update, sale.status ?? '', dto.status,
         );
 
         sale.status = dto.status;
@@ -384,6 +299,7 @@ export class SaleService {
       return { message: `Sale with id ${id} updated successfully.` };
     });
   }
+
 
 
   private validateSaleTransition(currentStatus: SaleStatus, newStatus: SaleStatus): void {
@@ -398,5 +314,64 @@ export class SaleService {
       throw new BadRequestException(
         `Cannot transition from '${currentStatus}' to '${newStatus}'.`,
       );
+  }
+
+
+  private async findOrFail<T extends object>(
+    em: EntityManager,
+    entity: EntityName<T>,
+    where: any,
+    label: string,
+  ): Promise<T> {
+    const result = await em.findOne(entity, where);
+    if (!result) throw new NotFoundException(`${label} not found`);
+
+    return result;
+  }
+
+
+  private async findProductsOrFail(
+    em: EntityManager,
+    productIds: string[],
+  ): Promise<Map<string, Product>> {
+    const products = await em.findAll(Product, { where: { id: { $in: productIds } } });
+    if (products.length !== productIds.length)
+      throw new NotFoundException('One or more products not found');
+    
+    return new Map(products.map((p) => [p.id, p]));
+  }
+
+
+  private async validateStockAvailability(
+    em: EntityManager,
+    dto: CreateSaleDto,
+    inventory: Inventory,
+    productMap: Map<string, Product>,
+  ): Promise<void> {
+    for (const item of dto.items) {
+      const product = productMap.get(item.productId);
+      if (!product) throw new NotFoundException(`Product with id ${item.productId} not found`);
+
+      const stockRecord = await em.findOne(StockQuantity, {
+        product: { id: item.productId },
+        inventory: { id: inventory.id },
+      });
+
+      const available = stockRecord?.quantity ?? 0;
+      if (available < item.quantity)
+        throw new BadRequestException(
+          `Insufficient stock for product "${product.name}": requested ${item.quantity}, available ${available}.`,
+        );
+    }
+  }
+  
+
+  private formatSaleItems(items: any[]) {
+    return items.map((item) => ({
+      productName: item.product.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: (item.quantity ?? 0) * (item.unitPrice ?? 0),
+    }));
   }
 }

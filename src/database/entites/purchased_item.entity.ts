@@ -4,6 +4,7 @@ import { Purchase } from "./purchase.entity";
 import { Product } from "./product.entity";
 import { Inventory } from "./inventory.entity";
 
+
 @Entity({ tableName: "purchased_items" })
 export class PurchasedItem {
 
