@@ -93,7 +93,7 @@ export class ProductService {
     });
 
     product.categories.add(category);
-    product.barcode = await generateBarcode(sequenceText);
+    product.barcode = await generateBarcode(sequenceText); // "PDT" + SEQUENCE_NUMBER
 
     if (dto.attachmentIds?.length) {
       await this.attachImages(product, dto.attachmentIds);

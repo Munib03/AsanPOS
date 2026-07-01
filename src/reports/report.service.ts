@@ -8,7 +8,6 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository, FilterOptions } from '../shared/repositories/base.repository';
 import { REPORT_CONFIG } from '../shared/utils/report.config';
 
-
 type ExportColumn = { header: string; key: string };
 
 type ReportConfig = {
@@ -20,8 +19,6 @@ type ReportConfig = {
     exportColumns: ExportColumn[];
 };
 
-    
-
 @Injectable()
 export class ReportService {
     constructor(private readonly em: EntityManager) { }
@@ -29,7 +26,6 @@ export class ReportService {
     private getConfig(type: ReportType): ReportConfig {
         const config = REPORT_CONFIG[type];
         if (!config) throw new BadRequestException(`Unsupported report type: ${type}`);
-        
         return config;
     }
 
@@ -66,7 +62,7 @@ export class ReportService {
             where: { ...config.storeFilter(store), ...dateFilter },
             ...this.buildFindOptions(config),
         });
-        return serialize(data);
+        return serialize(data, { populate: config.populate as never[] });
     }
 
     async getReport(store: Store, reportQuery: ReportQueryDto, query: PaginateQuery) {
@@ -80,7 +76,11 @@ export class ReportService {
             query,
         );
 
-        return { type: reportQuery.type, data: serialize(data), meta };
+        return {
+            type: reportQuery.type,
+            data: serialize(data, { populate: config.populate as never[] }),
+            meta,
+        };
     }
 
     async exportReport(store: Store, exportQuery: ReportExportQueryDto, res: Response) {
