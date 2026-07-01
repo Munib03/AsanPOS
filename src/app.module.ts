@@ -23,6 +23,7 @@ import { PaymentModule } from './payments/payment.module';
 import { StoreSessionModule } from './store-session/store-session.module';
 import { ReceiptModule } from './receipt/receipt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportModule } from './reports/report.module';
 
 
 @Module({
@@ -47,7 +48,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     StoreSessionModule,
     PaymentModule,
     ReceiptModule,
-    DashboardModule
+    DashboardModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
