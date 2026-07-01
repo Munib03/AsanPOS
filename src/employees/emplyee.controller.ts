@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Employee } from '../database/entites/employee.entity';
@@ -19,6 +20,7 @@ import { Role } from '../shared/utils/role.enum';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeService } from './employee.service';
+import { EmployeeQueryDto } from './dto/employee-query.dto';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -40,8 +42,11 @@ export class EmployeeController {
   }
 
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.employeeService.findAll(store);
+  findAll(
+    @CurrentStore() store: Store,
+    @Query() query: EmployeeQueryDto,
+  ) {
+    return this.employeeService.findAll(store, query);
   }
 
 
@@ -50,7 +55,7 @@ export class EmployeeController {
     return this.employeeService.findOne(store, user.id);
   }
 
-  
+
   @Put('info')
   updateEmployeeInfo(
     @CurrentUser() user: { id: string },

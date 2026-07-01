@@ -19,6 +19,7 @@ import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { EmployeeQueryDto } from './dto/employee-query.dto';
 
 
 export interface EmployeeDetail {
@@ -45,9 +46,20 @@ export class EmployeeService {
     private readonly auditService: AuditService,
   ) { }
 
-  async findAll(store: Store) {
+  
+  async findAll(store: Store, query: EmployeeQueryDto) {
+    const where: Record<string, any> = { store };
+
+    if (query.role) {
+      where.role = query.role;
+    }
+
+    if (query.search) {
+      where.name = { $ilike: `%${query.search}%` };
+    }
+
     const employees = await this.em.findAll(Employee, {
-      where: { store },
+      where,
       fields: [
         'id', 'email', 'name', 'phone', 'role',
         'firstName', 'lastName', 'imageUrl', 'dob', 'gender', 'verifiedAt',
