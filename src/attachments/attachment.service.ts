@@ -4,7 +4,6 @@ import { Attachment } from '../database/entites/attachment.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 
-
 interface MulterFile {
   fieldname: string;
   originalname: string;
@@ -19,7 +18,7 @@ export class AttachmentService {
   constructor(
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
-  ) {}
+  ) { }
 
   async createAttachment(entityType: AttachmentEntityType, file: MulterFile): Promise<{ id: string }> {
     if (!file)
@@ -47,12 +46,11 @@ export class AttachmentService {
       throw new BadRequestException('No image files provided');
 
     const results = await Promise.all(
-      files.map(file => this.createAttachment(entityType, file))
+      files.map((file) => this.createAttachment(entityType, file)),
     );
 
-    return { ids: results.map(r => r.id) };
+    return { ids: results.map((r) => r.id) };
   }
-
 
   async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
@@ -67,23 +65,17 @@ export class AttachmentService {
     return attachment;
   }
 
-
   async claimAttachments(ids: string[], entityId: string, entityType: AttachmentEntityType): Promise<void> {
-    console.log('claiming ids:', ids);
-    console.log('entityType:', entityType);
-    
     const attachments = await this.getAttachments(ids, entityType);
-    console.log('found attachments:', attachments.length);
-    
     const now = new Date();
-    attachments.map((attachment) => {
+
+    attachments.forEach((attachment) => {
       attachment.entityId = entityId;
       attachment.claimedAt = now;
     });
 
     await this.em.persistAndFlush(attachments);
   }
-
 
   async getAttachment(id: string, entityType: AttachmentEntityType): Promise<Attachment> {
     const attachment = await this.em.findOne(Attachment, {
@@ -97,7 +89,6 @@ export class AttachmentService {
 
     return attachment;
   }
-
 
   async getAttachments(ids: string[], entityType: AttachmentEntityType): Promise<Attachment[]> {
     const attachments = await this.em.findAll(Attachment, {
@@ -113,7 +104,6 @@ export class AttachmentService {
 
     return attachments;
   }
-  
 
   async deleteAttachmentByUrl(imageUrl: string, entityType: AttachmentEntityType): Promise<void> {
     const attachment = await this.em.findOne(Attachment, { imageUrl, entityType });
@@ -124,7 +114,6 @@ export class AttachmentService {
     await this.minioService.deleteFile(imageUrl);
   }
 
-  
   async presignedUrl(key: string): Promise<string> {
     return this.minioService.getSignedUrl(key);
   }

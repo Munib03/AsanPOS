@@ -10,7 +10,6 @@ import { CloseSessionDto } from './dto/close-session.dto';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 
-
 @Injectable()
 export class StoreSessionService {
   constructor(
@@ -84,7 +83,6 @@ export class StoreSessionService {
     return session;
   }
 
-
   async getActiveSession(store: Store) {
     return this.em.find(
       StoreSession,
@@ -105,11 +103,8 @@ export class StoreSessionService {
     );
   }
 
-
   async open(store: Store, employeeId: string, dto: OpenSessionDto) {
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.findEmployeeOrFail(employeeId);
 
     const existing = await this.getMyActiveSession(employeeId);
     if (existing)
@@ -132,14 +127,13 @@ export class StoreSessionService {
       session.id,
       AuditActionType.Open,
       null,
-      null
+      null,
     );
 
     await this.em.flush();
 
     return { message: 'Session opened successfully.', id: session.id };
   }
-
 
   async close(store: Store, employeeId: string, dto: CloseSessionDto) {
     const session = await this.em.findOne(
@@ -151,18 +145,11 @@ export class StoreSessionService {
     if (!session)
       throw new NotFoundException('You have no active session to close.');
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.findEmployeeOrFail(employeeId);
 
     const cashMovements = session.cashMovements.getItems();
-    const cashIn = cashMovements
-      .filter(cm => cm.type === CashMovementType.CashIn)
-      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
-
-    const cashOut = cashMovements
-      .filter(cm => cm.type === CashMovementType.CashOut)
-      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
+    const cashIn = this.sumByType(cashMovements, CashMovementType.CashIn);
+    const cashOut = this.sumByType(cashMovements, CashMovementType.CashOut);
 
     const salePayments = session.payments
       .getItems()
@@ -202,17 +189,31 @@ export class StoreSessionService {
     return { message: 'Session closed successfully.', expectedAmount };
   }
 
-
   async hasActiveSession(employeeId: string): Promise<boolean> {
     const session = await this.getMyActiveSession(employeeId);
     return !!session;
   }
-
 
   async getMyActiveSession(employeeId: string): Promise<StoreSession | null> {
     return this.em.findOne(StoreSession, {
       openedBy: { id: employeeId },
       closedAt: null,
     });
+  }
+
+  private async findEmployeeOrFail(employeeId: string): Promise<Employee> {
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee)
+      throw new NotFoundException('Employee not found');
+    return employee;
+  }
+
+  private sumByType(
+    cashMovements: { type: string; amount?: number }[],
+    type: CashMovementType,
+  ): number {
+    return cashMovements
+      .filter((cm) => cm.type === type)
+      .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
   }
 }

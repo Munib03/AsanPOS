@@ -29,6 +29,8 @@ const STOCK_OUT_POPULATE = [
   'items.saleItem',
 ] as const;
 
+
+
 @Injectable()
 export class StockOutService {
   constructor(
@@ -79,9 +81,7 @@ export class StockOutService {
         throw new NotFoundException(`Sale with id ${dto.saleId} not found`);
 
       if (!inventory)
-        throw new NotFoundException(
-          `Inventory with id ${dto.inventoryId} not found`,
-        );
+        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
 
       const saleItemMap = new Map(
         sale.items.getItems().map((item) => [item.id, item]),
@@ -89,10 +89,7 @@ export class StockOutService {
 
       this.validateItems(dto.items, saleItemMap);
 
-      const sequence = await this.sequenceService.generateSequence(
-        'StockOut',
-        'STO',
-      );
+      const sequence = await this.sequenceService.generateSequence('StockOut', 'STO');
 
       const stockOut = em.create(StockOut, {
         inventory,
@@ -114,8 +111,7 @@ export class StockOutService {
         });
       }
 
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee) throw new NotFoundException('Employee not found');
+      const employee = await this.findEmployeeOrFail(em, employeeId);
 
       this.auditService.logStatusChange(
         em,
@@ -124,7 +120,7 @@ export class StockOutService {
         stockOut.id,
         AuditActionType.Create,
         null,
-        null
+        null,
       );
 
       await em.flush();
@@ -135,7 +131,6 @@ export class StockOutService {
       };
     });
   }
-
 
   async update(
     store: Store,
@@ -199,8 +194,7 @@ export class StockOutService {
           }
         }
 
-        const employee = await em.findOne(Employee, { id: employeeId });
-        if (!employee) throw new NotFoundException('Employee not found');
+        const employee = await this.findEmployeeOrFail(em, employeeId);
 
         this.auditService.logStatusChange(
           em,
@@ -218,6 +212,12 @@ export class StockOutService {
       await em.flush();
       return { message: `Stock out with id ${id} updated successfully.` };
     });
+  }
+
+  private async findEmployeeOrFail(em: EntityManager, employeeId: string): Promise<Employee> {
+    const employee = await em.findOne(Employee, { id: employeeId });
+    if (!employee) throw new NotFoundException('Employee not found');
+    return employee;
   }
 
   private validateItems(

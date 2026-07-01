@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager, serialize } from '@mikro-orm/postgresql';
+import { EntityManager, EntityName, serialize } from '@mikro-orm/postgresql';
 import { Product } from '../database/entites/product.entity';
 import { ProductImage } from '../database/entites/product-image.entity';
 import { Category } from '../database/entites/category.entity';
@@ -32,7 +32,6 @@ export class ProductService {
     private readonly auditService: AuditService,
   ) { }
 
-
   async findAll(store: Store, query: PaginateQuery) {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
@@ -50,7 +49,6 @@ export class ProductService {
     };
   }
 
-
   async findOne(store: Store, id: string) {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
@@ -64,10 +62,7 @@ export class ProductService {
     const stockQuantities = await this.em.find(
       StockQuantity,
       { product: { id } },
-      {
-        populate: ['inventory'],
-        fields: ['quantity', 'inventory.id', 'inventory.name'],
-      },
+      { populate: ['inventory'], fields: ['quantity', 'inventory.id', 'inventory.name'] },
     );
 
     const inventories = stockQuantities.map((sq) => ({
@@ -82,11 +77,10 @@ export class ProductService {
     };
   }
 
-
   async create(store: Store, employeeId: string, dto: CreateProductDto) {
-    const category = await this.em.findOne(Category, { name: dto.categoryName, store });
-    if (!category)
-      throw new NotFoundException(`Category not found: ${dto.categoryName}`);
+    const category = await this.findOrFail<Category>(
+      this.em, Category, { name: dto.categoryName, store }, `Category not found: ${dto.categoryName}`, true,
+    );
 
     const sequence = await this.sequenceService.generateSequence('Product', 'PDT');
     const sequenceText = this.sequenceService.formatSequence(sequence);
@@ -102,50 +96,24 @@ export class ProductService {
     product.barcode = await generateBarcode(sequenceText);
 
     if (dto.attachmentIds?.length) {
-      await this.attachmentService.claimAttachments(
-        dto.attachmentIds,
-        product.id,
-        AttachmentEntityType.PRODUCT,
-      );
-
-      const attachments = await this.em.findAll(Attachment, {
-        where: { id: { $in: dto.attachmentIds } },
-      });
-
-      attachments.map((attachment) =>
-        this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
-      );
+      await this.attachImages(product, dto.attachmentIds);
     }
 
     await this.em.persistAndFlush(product);
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
 
-    this.auditService.log(
-      this.em,
-      employee,
-      AuditEntityType.Product,
-      product.id,
-      AuditActionType.Create,
-      null,
-      null
-    );
+    this.auditService.log(this.em, employee, AuditEntityType.Product, product.id, AuditActionType.Create, null, null);
 
     await this.em.flush();
 
     return { message: 'Product created Successfully!' };
   }
 
-
   async update(store: Store, id: string, employeeId: string, dto: UpdateProductDto) {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
-      {
-        populate: ['categories', 'images', 'sequence'],
-        notFoundMessage: `Product with id ${id} not found`,
-      },
+      { populate: ['categories', 'images', 'sequence'], notFoundMessage: `Product with id ${id} not found` },
     );
 
     const before: Record<string, unknown> = {};
@@ -161,7 +129,7 @@ export class ProductService {
       after.price = dto.price;
     }
 
-    const currentCategoryName = product.categories.getItems().map(c => c.name).join(', ');
+    const currentCategoryName = product.categories.getItems().map((c) => c.name).join(', ');
     if (dto.categoryName && dto.categoryName !== currentCategoryName) {
       before.category = currentCategoryName;
       after.category = dto.categoryName;
@@ -170,39 +138,20 @@ export class ProductService {
     this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
 
     if (dto.name || dto.price) {
-      if (!product.sequence)
-        throw new NotFoundException(`Sequence not found for product ${id}`);
-
-      product.barcode = await generateBarcode(
-        this.sequenceService.formatSequence(product.sequence),
-      );
+      if (!product.sequence) throw new NotFoundException(`Sequence not found for product ${id}`);
+      product.barcode = await generateBarcode(this.sequenceService.formatSequence(product.sequence));
     }
 
     if (dto.categoryName) {
-      const category = await this.em.findOne(Category, { name: dto.categoryName, store });
-      if (!category)
-        throw new NotFoundException(`Category not found: ${dto.categoryName}`);
-
+      const category = await this.findOrFail<Category>(
+        this.em, Category, { name: dto.categoryName, store }, `Category not found: ${dto.categoryName}`, true,
+      );
       product.categories.set([category]);
     }
 
     if (dto.attachmentIds?.length) {
       const beforeImages = product.images.getItems().map((i) => i.imageUrl);
-
-      await this.attachmentService.claimAttachments(
-        dto.attachmentIds,
-        product.id,
-        AttachmentEntityType.PRODUCT,
-      );
-
-      const attachments = await this.em.findAll(Attachment, {
-        where: { id: { $in: dto.attachmentIds } },
-      });
-
-      attachments.map((attachment) =>
-        this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
-      );
-
+      await this.attachImages(product, dto.attachmentIds);
       const afterImages = product.images.getItems().map((i) => i.imageUrl);
 
       before.images = beforeImages.length ? beforeImages : null;
@@ -211,20 +160,10 @@ export class ProductService {
 
     product.updatedAt = new Date();
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
 
     if (Object.keys(before).length > 0) {
-      this.auditService.log(
-        this.em,
-        employee,
-        AuditEntityType.Product,
-        product.id,
-        AuditActionType.Update,
-        before,
-        after,
-      );
+      this.auditService.log(this.em, employee, AuditEntityType.Product, product.id, AuditActionType.Update, before, after);
     }
 
     await this.em.flush();
@@ -232,28 +171,18 @@ export class ProductService {
     return { message: `Product with id [${product.id}] updated successfully.` };
   }
 
-
   async remove(store: Store, id: string, employeeId: string) {
     await this.em.transactional(async (em) => {
       const product = await this.productRepository.findOneOrFail(
         { id, store },
-        {
-          notFoundMessage: `Product with id ${id} not found`,
-        },
+        { notFoundMessage: `Product with id ${id} not found` },
       );
 
-      const employee = await em.findOne(Employee, { id: employeeId });
-      if (!employee)
-        throw new NotFoundException('Employee not found');
+      const employee = await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee not found', true);
 
       this.auditService.log(
-        em,
-        employee,
-        AuditEntityType.Product,
-        product.id,
-        AuditActionType.Delete,
-        { name: product.name, price: product.price },
-        null,
+        em, employee, AuditEntityType.Product, product.id, AuditActionType.Delete,
+        { name: product.name, price: product.price }, null,
       );
 
       product.deletedAt = new Date();
@@ -264,38 +193,44 @@ export class ProductService {
     return { message: `Product ${id} deleted successfully` };
   }
 
-
   async deleteProductImage(imageId: string, employeeId: string): Promise<{ message: string }> {
-    const image = await this.em.findOne(
-      ProductImage,
-      { id: imageId },
-      { populate: ['product'] },
-    );
-    if (!image)
-      throw new NotFoundException('Image not found');
+    const image = await this.em.findOne(ProductImage, { id: imageId }, { populate: ['product'] });
+    if (!image) throw new NotFoundException('Image not found');
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
 
     if (image.imageUrl)
-      await this.attachmentService.deleteAttachmentByUrl(
-        image.imageUrl,
-        AttachmentEntityType.PRODUCT,
-      );
+      await this.attachmentService.deleteAttachmentByUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
 
     this.auditService.log(
-      this.em,
-      employee,
-      AuditEntityType.Product,
-      image.product.id,
-      AuditActionType.Delete,
-      { imageUrl: image.imageUrl },
-      null,
+      this.em, employee, AuditEntityType.Product, image.product.id, AuditActionType.Delete,
+      { imageUrl: image.imageUrl }, null,
     );
 
     await this.em.removeAndFlush(image);
 
     return { message: 'Image deleted successfully' };
+  }
+
+  private async attachImages(product: Product, attachmentIds: string[]): Promise<void> {
+    await this.attachmentService.claimAttachments(attachmentIds, product.id, AttachmentEntityType.PRODUCT);
+
+    const attachments = await this.em.findAll(Attachment, { where: { id: { $in: attachmentIds } } });
+
+    attachments.forEach((attachment) =>
+      this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
+    );
+  }
+
+  private async findOrFail<T extends object>(
+    em: EntityManager,
+    entity: EntityName<T>,
+    where: any,
+    message: string,
+    literalMessage = false,
+  ): Promise<T> {
+    const result = await em.findOne(entity, where);
+    if (!result) throw new NotFoundException(literalMessage ? message : `${message} not found`);
+    return result;
   }
 }
