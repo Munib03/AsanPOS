@@ -19,6 +19,12 @@ type ReportConfig = {
     exportColumns: ExportColumn[];
 };
 
+const SENSITIVE_EMPLOYEE_FIELDS = [
+    'password', 'imageUrl', 'imageUrlSigned', 'dob', 'gender',
+    'verifiedAt', 'createdAt', 'updatedAt', 'deletedAt', 'store',
+    'firstName', 'lastName', 'phone',
+];
+
 @Injectable()
 export class ReportService {
     constructor(private readonly em: EntityManager) { }
@@ -57,12 +63,29 @@ export class ReportService {
         };
     }
 
+    private stripSensitiveFields(rows: any[]): any[] {
+        return rows.map((row) => {
+            const cleaned = { ...row };
+            for (const key of Object.keys(cleaned)) {
+                const val = cleaned[key];
+                if (val && typeof val === 'object' && !Array.isArray(val) && val.password !== undefined) {
+                    const cleanedRelation = { ...val };
+                    for (const field of SENSITIVE_EMPLOYEE_FIELDS) {
+                        delete cleanedRelation[field];
+                    }
+                    cleaned[key] = cleanedRelation;
+                }
+            }
+            return cleaned;
+        });
+    }
+
     private async fetchAll(store: Store, config: ReportConfig, dateFilter: Record<string, any>) {
         const data = await this.repo(config).findAll({
             where: { ...config.storeFilter(store), ...dateFilter },
             ...this.buildFindOptions(config),
         });
-        return serialize(data, { populate: config.populate as never[] });
+        return this.stripSensitiveFields(serialize(data, { populate: config.populate as never[] }));
     }
 
     async getReport(store: Store, reportQuery: ReportQueryDto, query: PaginateQuery) {
@@ -78,7 +101,7 @@ export class ReportService {
 
         return {
             type: reportQuery.type,
-            data: serialize(data, { populate: config.populate as never[] }),
+            data: this.stripSensitiveFields(serialize(data, { populate: config.populate as never[] })),
             meta,
         };
     }
