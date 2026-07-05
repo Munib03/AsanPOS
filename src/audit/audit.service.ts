@@ -91,7 +91,6 @@ export class AuditService {
           'createdAt',
           'employee.id',
           'employee.name',
-          'employee.email',
         ],
       },
       { searchable: ['entityType'] },
