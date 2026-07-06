@@ -101,6 +101,7 @@ export class PurchaseService {
     return this.mapPurchaseToListItem(serialized, stockInsMap, inventoryId, purchase.inventory?.name);
   }
 
+
   async create(store: Store, employeeId: string, dto: CreatePurchaseDto) {
     return await this.em.transactional(async (em) => {
       const customer = await this.findOrFail<Customer>(em, Customer, { id: dto.customerId }, `Customer with id ${dto.customerId}`);
@@ -132,7 +133,15 @@ export class PurchaseService {
 
       const employee = await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee');
 
-      this.auditService.logStatusChange(em, employee, AuditEntityType.Purchase, purchase.id, AuditActionType.Create, null, null);
+      this.auditService.logStatusChange(
+        em,
+        employee,
+        AuditEntityType.Purchase,
+        purchase.id,
+        AuditActionType.Create,
+        null,
+        null
+      );
 
       await em.flush();
 
@@ -143,17 +152,26 @@ export class PurchaseService {
     });
   }
 
+
   async update(store: Store, id: string, employeeId: string, dto: UpdatePurchaseDto) {
+    console.log('[PurchaseService.update] incoming dto:', JSON.stringify(dto));
+
     return await this.em.transactional(async (em) => {
       const purchase = await em.findOne(Purchase, { id, store }, { populate: ['items', 'items.product', 'customer'] });
-      if (!purchase) throw new NotFoundException(`Purchase with id ${id} not found`);
+      if (!purchase)
+        throw new NotFoundException(`Purchase with id ${id} not found`);
+
+      console.log('[PurchaseService.update] purchase found, current status:', purchase.status);
 
       if (purchase.status === PurchaseStatus.CANCELLED)
         throw new BadRequestException(`Cannot update a cancelled purchase.`);
+
       if (purchase.status === PurchaseStatus.DONE)
         throw new BadRequestException(`Cannot update a completed purchase.`);
 
-      if (dto.status) {
+      if (dto.status !== undefined && dto.status !== null) {
+        console.log('[PurchaseService.update] status change requested:', purchase.status, '->', dto.status);
+
         this.getAllowedTransitions(purchase.status as PurchaseStatus, dto.status as PurchaseStatus);
 
         const employee = await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee');
@@ -162,30 +180,48 @@ export class PurchaseService {
 
         purchase.status = dto.status;
 
+        console.log('[PurchaseService.update] purchase.status after assignment (in-memory):', purchase.status);
+
         if (dto.status === PurchaseStatus.DONE) {
-          const journalEntry = await this.journalEntryService.createFromPurchase(em, store, purchase, employeeId);
+          try {
+            const journalEntry = await this.journalEntryService.createFromPurchase(em, store, purchase, employeeId);
 
-          const journalItems = journalEntry.items.getItems();
-          const journalDebitTotal = journalItems.reduce((sum, item) => sum + (item.debit ?? 0), 0);
-          const journalCreditTotal = journalItems.reduce((sum, item) => sum + (item.credit ?? 0), 0);
+            const journalItems = journalEntry.items.getItems();
+            const journalDebitTotal = journalItems.reduce((sum, item) => sum + (item.debit ?? 0), 0);
+            const journalCreditTotal = journalItems.reduce((sum, item) => sum + (item.credit ?? 0), 0);
 
-          if (journalDebitTotal === journalCreditTotal) {
-            this.auditService.logStatusChange(
-              em, employee, AuditEntityType.JournalEntry, journalEntry.id,
-              AuditActionType.Update, JournalEntryStatus.PENDING, JournalEntryStatus.DONE,
+            if (journalDebitTotal === journalCreditTotal) {
+              this.auditService.logStatusChange(
+                em, employee, AuditEntityType.JournalEntry, journalEntry.id,
+                AuditActionType.Update, JournalEntryStatus.PENDING, JournalEntryStatus.DONE,
+              );
+              journalEntry.status = JournalEntryStatus.DONE;
+            }
+          } catch (error) {
+            throw new BadRequestException(
+              `Failed to complete purchase: ${error instanceof Error ? error.message : 'unknown error'}`,
             );
-            journalEntry.status = JournalEntryStatus.DONE;
           }
         }
+      } else {
+        console.log('[PurchaseService.update] no status in dto, skipping status block entirely');
       }
 
+      const changeSets = em.getUnitOfWork().getChangeSets();
+      console.log('[PurchaseService.update] pending changesets before flush:', changeSets.length,
+        changeSets.map(cs => ({ entity: cs.name, type: cs.type, payload: cs.payload })));
+
       await em.flush();
+
+      console.log('[PurchaseService.update] flush complete, final purchase.status:', purchase.status);
+
       return { message: `Purchase with id ${id} updated successfully.` };
     });
   }
 
   private async findOrFail<T extends object>(
     em: EntityManager,
+    
     entity: EntityName<T>,
     where: any,
     label: string,

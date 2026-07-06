@@ -83,7 +83,6 @@ export class AuditService {
     return { data: logs, meta };
   }
 
-
   async findByEntity(entityId: string, query: PaginateQuery) {
     const [stockIns, stockOuts] = await Promise.all([
       this.em.find(
@@ -139,12 +138,14 @@ export class AuditService {
     const stockInById = new Map(stockIns.map((s) => [s.id, s]));
     const stockOutById = new Map(stockOuts.map((s) => [s.id, s]));
 
-    const seenEntityIds = new Set<string>();
+    // Dedupe by the audit log's own id, not entityId — entityId legitimately
+    // repeats across multiple distinct history entries (create, update, update...).
+    const seenLogIds = new Set<string>();
 
     const data = logs.reduce<any[]>((acc, log) => {
-      if (seenEntityIds.has(log.entityId!))
+      if (seenLogIds.has(log.id))
         return acc;
-      seenEntityIds.add(log.entityId!);
+      seenLogIds.add(log.id);
 
       const base = {
         id: log.id,
