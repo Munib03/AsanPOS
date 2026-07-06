@@ -7,7 +7,7 @@ import { StockQuantity } from "./stock-quantity.entity";
 @Filter({
   name: 'notDeleted',
   cond: { deletedAt: null },
-  default: true, 
+  default: false, 
 })
 
 
