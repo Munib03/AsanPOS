@@ -29,7 +29,6 @@ export class InventoryService {
       {
         populate: ['products'],
         fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
-        filters: ['notDeleted'],
       },
       { searchable: ['name'] },
       query,
@@ -67,7 +66,6 @@ export class InventoryService {
           'products.sequence.prefix',
           'products.sequence.lastIndex',
         ],
-        filters: ['notDeleted'],
       },
     );
 
@@ -109,11 +107,7 @@ export class InventoryService {
   }
 
   async create(store: Store, employeeId: string, dto: CreateInventoryDto) {
-    const existingInventory = await this.em.findOne(
-      Inventory,
-      { name: dto.name, store },
-      { filters: ['notDeleted'] },
-    );
+    const existingInventory = await this.em.findOne(Inventory, { name: dto.name, store });
     if (existingInventory)
       throw new BadRequestException(`Inventory with name ${dto.name} already exists.`);
 
@@ -145,11 +139,7 @@ export class InventoryService {
   }
 
   async update(store: Store, id: string, employeeId: string, dto: UpdateInventoryDto) {
-    const inventory = await this.em.findOne(
-      Inventory,
-      { id, store },
-      { filters: ['notDeleted'] },
-    );
+    const inventory = await this.em.findOne(Inventory, { id, store });
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 
@@ -177,11 +167,7 @@ export class InventoryService {
   }
 
   async delete(store: Store, id: string, employeeId: string) {
-    const inventory = await this.em.findOne(
-      Inventory,
-      { id, store },
-      { filters: ['notDeleted'] },
-    );
+    const inventory = await this.em.findOne(Inventory, { id, store });
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 

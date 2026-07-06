@@ -9,6 +9,7 @@ import { Payment } from '../database/entites/payments.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { CashierStats, DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
 import { SaleItem } from '../database/entites/sale-item.entity';
+import { PurchaseStatus } from '../shared/utils/purchase-status-enum';
 
 type RangeBounds = { currentStart: Date; currentEnd: Date; previousStart: Date; previousEnd: Date };
 
@@ -113,7 +114,7 @@ export class DashboardService {
         inventoryName: record.inventory.name ?? '',
     });
 
-    
+
     private sumCashMovements(
         cashMovements: { type: string; amount?: number; createdAt?: Date }[],
         type: CashMovementType,
@@ -297,13 +298,17 @@ export class DashboardService {
     }
 
 
+
     private async buildSaleItemCostMap(store: Store, productIds: string[], upTo: Date): Promise<Map<string, number>> {
         const costBySaleItemId = new Map<string, number>();
         if (productIds.length === 0) return costBySaleItemId;
 
         const purchasedItems = await this.em.find(
             PurchasedItem,
-            { product: { id: { $in: productIds } }, purchase: { store } },
+            {
+                product: { id: { $in: productIds } },
+                purchase: { store, status: PurchaseStatus.DONE },
+            },
             { orderBy: { createdAt: 'ASC' }, refresh: true },
         );
 
