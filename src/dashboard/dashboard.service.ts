@@ -298,14 +298,13 @@ export class DashboardService {
 
 
     private async buildSaleItemCostMap(store: Store, productIds: string[], upTo: Date): Promise<Map<string, number>> {
-        this.em.clear();
         const costBySaleItemId = new Map<string, number>();
         if (productIds.length === 0) return costBySaleItemId;
 
         const purchasedItems = await this.em.find(
             PurchasedItem,
-            { product: { id: { $in: productIds } }, purchase: { store, status: 'Done' } },
-            { orderBy: { createdAt: 'ASC' }, refresh: true, filters: false },
+            { product: { id: { $in: productIds } }, purchase: { store } },
+            { orderBy: { createdAt: 'ASC' }, refresh: true },
         );
 
         const batchesByProduct = new Map<string, { remaining: number; unitPrice: number }[]>();
