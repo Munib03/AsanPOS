@@ -129,7 +129,7 @@ export class AuditService {
         orderBy: { createdAt: 'DESC' },
         fields: [
           'id', 'entityType', 'entityId', 'actionType', 'before', 'after', 'createdAt',
-          'employee.id', 'employee.name', 'employee.email',
+          'employee.id', 'employee.name',
         ],
       },
       { searchable: ['entityType', 'actionType'] },
@@ -139,7 +139,13 @@ export class AuditService {
     const stockInById = new Map(stockIns.map((s) => [s.id, s]));
     const stockOutById = new Map(stockOuts.map((s) => [s.id, s]));
 
-    const data = logs.map((log) => {
+    const seenEntityIds = new Set<string>();
+
+    const data = logs.reduce<any[]>((acc, log) => {
+      if (seenEntityIds.has(log.entityId!))
+        return acc;
+      seenEntityIds.add(log.entityId!);
+
       const base = {
         id: log.id,
         actionType: log.actionType,
@@ -151,13 +157,12 @@ export class AuditService {
         performedBy: {
           id: (log.employee as any)?.id,
           name: (log.employee as any)?.name,
-          email: (log.employee as any)?.email,
         },
       };
 
       if (log.entityType === AuditEntityType.StockIn) {
         const stockIn = stockInById.get(base.entityId!) ?? null;
-        return {
+        acc.push({
           ...base,
           stockIn: stockIn ? {
             id: stockIn.id,
@@ -168,12 +173,13 @@ export class AuditService {
             sequence: (stockIn.sequence as any),
             items: stockIn.items.getItems(),
           } : null,
-        };
+        });
+        return acc;
       }
 
       if (log.entityType === AuditEntityType.StockOut) {
         const stockOut = stockOutById.get(base.entityId!) ?? null;
-        return {
+        acc.push({
           ...base,
           stockOut: stockOut ? {
             id: stockOut.id,
@@ -184,11 +190,13 @@ export class AuditService {
             sequence: (stockOut.sequence as any),
             items: stockOut.items.getItems(),
           } : null,
-        };
+        });
+        return acc;
       }
 
-      return base;
-    });
+      acc.push(base);
+      return acc;
+    }, []);
 
     return { data, meta };
   }
