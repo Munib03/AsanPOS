@@ -21,7 +21,7 @@ export class AuditLog {
   entityType!: string;
 
   @Property({ fieldName: 'entity_id', type: 'uuid', nullable: true })
-  entityId?: string;
+  entityId?: string | undefined;
 
   @Property({ fieldName: 'action_type', nullable: true })
   actionType?: string;

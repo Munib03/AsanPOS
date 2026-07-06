@@ -11,7 +11,7 @@ import { AuditQueryDto } from './dto/audit-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class AuditController {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(private readonly auditService: AuditService) { }
 
   @Get()
   findAll(
