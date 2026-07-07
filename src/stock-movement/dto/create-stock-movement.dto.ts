@@ -3,8 +3,6 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsNotEmpty,
-  IsOptional,
-  IsString,
   IsUUID,
   ValidateNested,
   ArrayMinSize,
@@ -30,10 +28,6 @@ export class CreateStockMovementDto {
   @IsUUID()
   @IsNotEmpty()
   destinationInventoryId!: string;
-
-  @IsOptional()
-  @IsString()
-  customDate?: string;
 
   @IsArray()
   @ArrayMinSize(1)
