@@ -138,8 +138,6 @@ export class AuditService {
     const stockInById = new Map(stockIns.map((s) => [s.id, s]));
     const stockOutById = new Map(stockOuts.map((s) => [s.id, s]));
 
-    // Dedupe by the audit log's own id, not entityId — entityId legitimately
-    // repeats across multiple distinct history entries (create, update, update...).
     const seenLogIds = new Set<string>();
 
     const data = logs.reduce<any[]>((acc, log) => {

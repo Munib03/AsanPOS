@@ -24,6 +24,7 @@ import { StoreSessionModule } from './store-session/store-session.module';
 import { ReceiptModule } from './receipt/receipt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportModule } from './reports/report.module';
+import { StockMovementModule } from './stock-movement/stock-movement.module';
 
 
 @Module({
@@ -50,6 +51,7 @@ import { ReportModule } from './reports/report.module';
     ReceiptModule,
     DashboardModule,
     ReportModule,
+    StockMovementModule
   ],
   controllers: [AppController],
   providers: [AppService],

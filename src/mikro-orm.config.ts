@@ -27,6 +27,8 @@ import { CashMovement } from './database/entites/cash-movement.entity';
 import { Payment } from './database/entites/payments.entity';
 import { StoreSession } from './database/entites/store-session.entity';
 import { Receipt } from './database/entites/receipt.entity';
+import { StockMovement } from './database/entites/stock-movement.entity';
+import { StockMovementItem } from './database/entites/stock-movement-item.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -40,7 +42,7 @@ const config: Options<PostgreSqlDriver> = {
              Product, ProductImage, Attachment, Inventory, Customer, 
              StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, 
              JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem, AuditLog, 
-             CashMovement, StoreSession, Payment, Receipt],
+             CashMovement, StoreSession, Payment, Receipt, StockMovement, StockMovementItem],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',

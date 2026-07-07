@@ -13,4 +13,5 @@ export enum AuditEntityType {
   Payment = 'payment',
   StoreSession = 'store_session',
   CashMovement = 'cash_movement',
+  StockMovement = "StockMovement",
 }
