@@ -28,6 +28,7 @@ export class StockMovementService {
         private readonly auditService: AuditService,
     ) { }
 
+
     async findAll(store: Store, query: PaginateQuery): Promise<{ data: any[]; meta: Meta }> {
         const [movements, meta] = await this.stockMovementRepository.findAndPaginate(
             { store },
@@ -49,6 +50,7 @@ export class StockMovementService {
         return { data: movements, meta };
     }
 
+
     async findOne(store: Store, id: string): Promise<StockMovement> {
         const movement = await this.em.findOne(
             StockMovement,
@@ -62,6 +64,7 @@ export class StockMovementService {
         return movement;
     }
 
+    
     async create(store: Store, employeeId: string, dto: CreateStockMovementDto) {
         return await this.em.transactional(async (em) => {
             if (dto.sourceInventoryId === dto.destinationInventoryId)
@@ -88,8 +91,6 @@ export class StockMovementService {
                     throw new BadRequestException(`Quantity for product ${item.productId} must be greater than zero.`);
             }
 
-            // Validate available stock in source inventory at creation time (early feedback).
-            // Actual availability is re-checked and locked at completion time to avoid race conditions.
             await this.assertSufficientStock(em, sourceInventory, dto.items);
 
             const sequence = await this.sequenceService.generateSequence('StockMovement', 'MOV');
@@ -125,6 +126,7 @@ export class StockMovementService {
             };
         });
     }
+
 
     async update(store: Store, id: string, employeeId: string, dto: UpdateStockMovementDto) {
         return await this.em.transactional(async (em) => {
@@ -168,6 +170,8 @@ export class StockMovementService {
         });
     }
 
+    
+
     private async assertSufficientStock(
         em: EntityManager,
         sourceInventory: Inventory,
@@ -197,8 +201,6 @@ export class StockMovementService {
         for (const item of items) {
             const productId = item.product.id;
 
-            // Lock the source row to prevent concurrent movements/sales from
-            // reading stale quantity between the check and the update.
             const sourceStock = await em.findOne(
                 StockQuantity,
                 { inventory: sourceInventory, product: { id: productId } },
@@ -230,6 +232,11 @@ export class StockMovementService {
             }
 
             destinationStock.quantity = (destinationStock.quantity ?? 0) + item.quantity;
+
+            await destinationInventory.products.init();
+            if (!destinationInventory.products.contains(item.product)) {
+                destinationInventory.products.add(item.product);
+            }
         }
     }
 

@@ -5,6 +5,7 @@ import {
     Param,
     Patch,
     Post,
+    Put,
     Query,
     UseGuards,
 } from '@nestjs/common';
@@ -20,7 +21,7 @@ import { RolesGuard } from '../shared/guards/role.guard';
 import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 
-@Controller('stock-movements')
+@Controller('stock-movement')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class StockMovementController {
@@ -45,7 +46,7 @@ export class StockMovementController {
         return this.stockMovementService.create(store, user.id, dto);
     }
 
-    @Patch(':id')
+    @Put(':id')
     update(
         @CurrentStore() store: Store,
         @Param('id') id: string,
