@@ -14,9 +14,9 @@ export class PurchasedItem {
   @ManyToOne(() => Purchase, { fieldName: "purchase_id" })
   purchase!: Purchase;
 
-  @ManyToOne(() => Inventory, { fieldName: "warehouse_id" })
-  warehouse!: Inventory;
-  
+  @ManyToOne(() => Inventory, { fieldName: "warehouse_id", nullable: true })
+  warehouse?: Inventory | null;
+
   @ManyToOne(() => Product, { fieldName: "product_id" })
   product!: Product;
 

@@ -335,7 +335,10 @@ export class DashboardService {
             }
 
             const consumedQty = (item.quantity ?? 0) - qtyToConsume;
-            costBySaleItemId.set(item.id, consumedQty > 0 ? totalCost / consumedQty : 0);
+
+            if (consumedQty > 0 && qtyToConsume === 0) {
+                costBySaleItemId.set(item.id, totalCost / consumedQty);
+            }
         }
 
         return costBySaleItemId;
@@ -343,16 +346,30 @@ export class DashboardService {
 
 
     private calcTotalProfit(sales: Sale[], costBySaleItemId: Map<string, number>): number {
-        return sales.reduce(
+        let hasMissingCost = false;
+
+        const profit = sales.reduce(
             (sum, sale) =>
                 sum +
                 sale.items.getItems().reduce((s, item) => {
                     const basePrice = (item.unitPrice ?? 0) / (1 + DashboardService.TAX_RATE);
-                    const costPrice = costBySaleItemId.get(item.id) ?? 0;
+                    const costPrice = costBySaleItemId.get(item.id);
+
+                    if (costPrice === undefined) {
+                        hasMissingCost = true;
+                        return s;
+                    }
+
                     return s + (basePrice - costPrice) * (item.quantity ?? 0);
                 }, 0),
             0,
         );
+
+        if (hasMissingCost) {
+            console.warn('[profit] some sale items had no cost history — check for missing/orphaned purchase data');
+        }
+
+        return profit;
     }
 
 
