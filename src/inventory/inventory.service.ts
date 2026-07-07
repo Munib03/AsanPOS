@@ -40,6 +40,7 @@ export class InventoryService {
     };
   }
 
+
   async findOne(store: Store, id: string) {
     const inventory = await this.em.findOne(
       Inventory,
@@ -106,6 +107,7 @@ export class InventoryService {
     return { ...serialized, products };
   }
 
+
   async create(store: Store, employeeId: string, dto: CreateInventoryDto) {
     const existingInventory = await this.em.findOne(Inventory, { name: dto.name, store });
     if (existingInventory)
@@ -138,6 +140,7 @@ export class InventoryService {
     return { message: 'Inventory created successfully.' };
   }
 
+
   async update(store: Store, id: string, employeeId: string, dto: UpdateInventoryDto) {
     const inventory = await this.em.findOne(Inventory, { id, store });
     if (!inventory)
@@ -166,10 +169,21 @@ export class InventoryService {
     return { message: `Inventory with id ${id} updated successfully.` };
   }
 
+
   async delete(store: Store, id: string, employeeId: string) {
     const inventory = await this.em.findOne(Inventory, { id, store });
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
+
+    const remainingStock = await this.em.findOne(StockQuantity, {
+      inventory: { id },
+      quantity: { $gt: 0 },
+    });
+
+    if (remainingStock)
+      throw new BadRequestException(
+        'Cannot delete an inventory that still has stock. Move all products to another inventory before deleting.',
+      );
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
     if (!employee)
