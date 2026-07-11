@@ -152,7 +152,7 @@ export class DashboardService {
             : [];
 
         const saleById = new Map(sales.map((s) => [s.id, s]));
-        const salesBySessionId = new Map<string, Sale[]>();
+        const salesBySessionId = new Map<string, Map<string, Sale>>();
         for (const payment of payments) {
             if (!payment.sale || !payment.storeSession)
                 continue;
@@ -161,11 +161,9 @@ export class DashboardService {
             if (!sale)
                 continue;
 
-            const bucket = salesBySessionId.get(payment.storeSession.id);
-            if (bucket)
-                bucket.push(sale);
-            else
-                salesBySessionId.set(payment.storeSession.id, [sale]);
+            const bucket = salesBySessionId.get(payment.storeSession.id) ?? new Map<string, Sale>();
+            bucket.set(sale.id, sale);
+            salesBySessionId.set(payment.storeSession.id, bucket);
         }
 
         return sessions
@@ -173,7 +171,7 @@ export class DashboardService {
             .map((session) => {
                 const employee = session.openedBy!;
                 const cashMovements = session.cashMovements.getItems();
-                const sessionSales = salesBySessionId.get(session.id) ?? [];
+                const sessionSales = Array.from(salesBySessionId.get(session.id)?.values() ?? []);
 
                 return {
                     sessionId: session.id,
@@ -303,7 +301,7 @@ export class DashboardService {
 
         const purchasedItems = await this.em.find(
             PurchasedItem,
-            { product: { id: { $in: productIds } }, purchase: { store } },
+            { product: { id: { $in: productIds } }, purchase: { store }, createdAt: { $lte: upTo } },
             { orderBy: { createdAt: 'ASC' }, refresh: true },
         );
 
@@ -374,13 +372,12 @@ export class DashboardService {
 
 
     private calcBoundedSignedPercentage(current: number, previous: number): number {
-        const denom = Math.abs(current) + Math.abs(previous);
-        if (denom === 0)
-            return 0;
+        if (previous === 0) {
+            if (current === 0) return 0;
+            return current > 0 ? 100 : -100;
+        }
 
-        const shareMagnitude = (Math.abs(current) / denom) * 100;
-
-        return round2(Math.sign(current) * shareMagnitude);
+        return round2(((current - previous) / Math.abs(previous)) * 100);
     }
 
 

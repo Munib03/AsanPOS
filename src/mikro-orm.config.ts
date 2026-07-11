@@ -29,6 +29,9 @@ import { StoreSession } from './database/entites/store-session.entity';
 import { Receipt } from './database/entites/receipt.entity';
 import { StockMovement } from './database/entites/stock-movement.entity';
 import { StockMovementItem } from './database/entites/stock-movement-item.entity';
+import { Purchase } from './database/entites/purchase.entity';
+import { Account } from './database/entites/account.entity';
+import { StoreSettings } from './database/entites/store-settings.entity';
 
 
 const config: Options<PostgreSqlDriver> = {
@@ -42,12 +45,13 @@ const config: Options<PostgreSqlDriver> = {
              Product, ProductImage, Attachment, Inventory, Customer, 
              StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, 
              JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem, AuditLog, 
-             CashMovement, StoreSession, Payment, Receipt, StockMovement, StockMovementItem],
+             CashMovement, StoreSession, Payment, Receipt, StockMovement, StockMovementItem,
+             Purchase, Account, StoreSettings],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',
   },
-  debug: true,
+  debug: process.env.NODE_ENV !== 'production',
 };
 
 export default config;
