@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateText, stepCountIs, tool } from 'ai';
+import { generateText, stepCountIs, streamText, tool } from 'ai';
 import { z } from 'zod';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DashboardRange } from '../dashboard/dto/dashboard.dto';
@@ -26,76 +26,16 @@ export class AiAssistantService {
     employeeId: string,
     question: string,
   ): Promise<AiAssistantResponse> {
-    const prompt = question?.trim();
-    if (!prompt) throw new BadRequestException('question is required');
-
-    if (!process.env.OPENAI_API_KEY)
-      throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
-
     try {
-      const openCode = createOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
-        name: 'opencode',
-      });
+      const prompt = this.validateQuestion(question);
+      const openCode = this.createOpenCodeProvider();
 
       const { text } = await generateText({
-        model: openCode.chat(
-          process.env.OPENCODE_MODEL ??
-            process.env.OPENAI_MODEL ??
-            DEFAULT_OPENCODE_MODEL,
-        ),
+        model: this.getChatModel(openCode),
         system: this.getAnalystSystemPrompt(),
         prompt,
         stopWhen: stepCountIs(5),
-
-        tools: {
-          getDashboardStats: tool({
-            description:
-              'Get sales, profit, cashier breakdown, low-stock alerts, out-of-stock alerts, and daily breakdowns for analytical POS questions.',
-            inputSchema: z.object({
-              range: z.enum([
-                'today',
-                'yesterday',
-                'last_week',
-                'monthly',
-                'custom',
-              ]),
-              from: z
-                .string()
-                .optional()
-                .describe(
-                  'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
-                ),
-              to: z
-                .string()
-                .optional()
-                .describe(
-                  'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
-                ),
-            }),
-
-            execute: async ({ range, from, to }) => {
-              const rangeMap: Record<string, DashboardRange> = {
-                today: DashboardRange.TODAY,
-                yesterday: DashboardRange.YESTERDAY,
-                last_week: DashboardRange.LAST_WEEK,
-                monthly: DashboardRange.MONTHLY,
-                custom: DashboardRange.CUSTOM,
-              };
-
-              return this.dashboardService.getDashboardStats(
-                store,
-                employeeId,
-                {
-                  range: rangeMap[range],
-                  from,
-                  to,
-                },
-              );
-            },
-          }),
-        },
+        tools: this.getAssistantTools(store, employeeId),
       });
 
       return {
@@ -109,6 +49,7 @@ export class AiAssistantService {
         throw new ServiceUnavailableException(
           'OpenCode rejected OPENAI_API_KEY. The value must be a valid OpenCode Zen key, even though the env variable is named OPENAI_API_KEY.',
         );
+
       if (statusCode === 404)
         throw new ServiceUnavailableException(
           'OpenCode endpoint was not found. Check OPENCODE_BASE_URL and OPENCODE_MODEL in .env, then restart the server.',
@@ -116,6 +57,90 @@ export class AiAssistantService {
 
       throw error;
     }
+  }
+
+  streamAnswer(store: Store, employeeId: string, question: string): any {
+    const prompt = this.validateQuestion(question);
+    const openCode = this.createOpenCodeProvider();
+
+    return streamText({
+      model: this.getChatModel(openCode),
+      system: this.getAnalystSystemPrompt(),
+      prompt,
+      stopWhen: stepCountIs(5),
+      tools: this.getAssistantTools(store, employeeId),
+    });
+  }
+
+  private validateQuestion(question: string): string {
+    const prompt = question?.trim();
+    if (!prompt) throw new BadRequestException('question is required');
+    return prompt;
+  }
+
+  private createOpenCodeProvider() {
+    if (!process.env.OPENAI_API_KEY)
+      throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
+
+    return createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
+      name: 'opencode',
+    });
+  }
+
+  private getChatModel(openCode: ReturnType<typeof createOpenAI>) {
+    return openCode.chat(
+      process.env.OPENCODE_MODEL ??
+        process.env.OPENAI_MODEL ??
+        DEFAULT_OPENCODE_MODEL,
+    );
+  }
+
+  private getAssistantTools(store: Store, employeeId: string) {
+    return {
+      getDashboardStats: tool({
+        description:
+          'Get sales, profit, cashier breakdown, low-stock alerts, out-of-stock alerts, and daily breakdowns for analytical POS questions.',
+        inputSchema: z.object({
+          range: z.enum([
+            'today',
+            'yesterday',
+            'last_week',
+            'monthly',
+            'custom',
+          ]),
+          from: z
+            .string()
+            .optional()
+            .describe(
+              'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
+            ),
+          to: z
+            .string()
+            .optional()
+            .describe(
+              'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
+            ),
+        }),
+
+        execute: async ({ range, from, to }) => {
+          const rangeMap: Record<string, DashboardRange> = {
+            today: DashboardRange.TODAY,
+            yesterday: DashboardRange.YESTERDAY,
+            last_week: DashboardRange.LAST_WEEK,
+            monthly: DashboardRange.MONTHLY,
+            custom: DashboardRange.CUSTOM,
+          };
+
+          return this.dashboardService.getDashboardStats(store, employeeId, {
+            range: rangeMap[range],
+            from,
+            to,
+          });
+        },
+      }),
+    };
   }
 
   private getOpenAiErrorStatus(error: unknown): number | undefined {
