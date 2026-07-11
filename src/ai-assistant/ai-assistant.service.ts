@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateText, stepCountIs, streamText, tool } from 'ai';
+import { stepCountIs, streamText, tool } from 'ai';
 import { z } from 'zod';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DashboardRange } from '../dashboard/dto/dashboard.dto';
@@ -13,53 +13,19 @@ import { Store } from '../database/entites/store.entity';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
 const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
 
-export interface AiAssistantResponse {
-  answer: string;
+export interface AiAssistantStreamResponse {
+  textStream: AsyncIterable<string>;
 }
 
 @Injectable()
 export class AiAssistantService {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  async ask(
+  streamAnswer(
     store: Store,
     employeeId: string,
     question: string,
-  ): Promise<AiAssistantResponse> {
-    try {
-      const prompt = this.validateQuestion(question);
-      const openCode = this.createOpenCodeProvider();
-
-      const { text } = await generateText({
-        model: this.getChatModel(openCode),
-        system: this.getAnalystSystemPrompt(),
-        prompt,
-        stopWhen: stepCountIs(5),
-        tools: this.getAssistantTools(store, employeeId),
-      });
-
-      return {
-        answer:
-          this.cleanAssistantAnswer(text) ||
-          'I could not generate an answer for that question.',
-      };
-    } catch (error) {
-      const statusCode = this.getOpenAiErrorStatus(error);
-      if (statusCode === 401)
-        throw new ServiceUnavailableException(
-          'OpenCode rejected OPENAI_API_KEY. The value must be a valid OpenCode Zen key, even though the env variable is named OPENAI_API_KEY.',
-        );
-
-      if (statusCode === 404)
-        throw new ServiceUnavailableException(
-          'OpenCode endpoint was not found. Check OPENCODE_BASE_URL and OPENCODE_MODEL in .env, then restart the server.',
-        );
-
-      throw error;
-    }
-  }
-
-  streamAnswer(store: Store, employeeId: string, question: string): any {
+  ): AiAssistantStreamResponse {
     const prompt = this.validateQuestion(question);
     const openCode = this.createOpenCodeProvider();
 
@@ -143,33 +109,6 @@ export class AiAssistantService {
     };
   }
 
-  private getOpenAiErrorStatus(error: unknown): number | undefined {
-    if (typeof error !== 'object' || error === null) return undefined;
-
-    const maybeError = error as {
-      statusCode?: number;
-      status?: number;
-      response?: { status?: number };
-    };
-    return (
-      maybeError.statusCode ?? maybeError.status ?? maybeError.response?.status
-    );
-  }
-
-  private cleanAssistantAnswer(answer: string): string {
-    return answer
-      .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-      .replace(/```(?:json)?/gi, '')
-      .replace(/```/g, '')
-      .replace(/\*\*/g, '')
-      .replace(/^\s*[-*]\s+/gm, '')
-      .replace(/^\s*[-–—]{3,}\s*$/gm, '')
-      .replace(/\r?\n+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  }
-
   private getAnalystSystemPrompt(): string {
     const today = new Date().toISOString().split('T')[0];
 
@@ -182,6 +121,8 @@ Answer like a helpful business analyst in a natural chat conversation. Use clear
 
 Rules:
 - Use AFN for money.
+- Never reveal hidden reasoning, chain-of-thought, scratchpad text, or thinking text.
+- Never output <think> or <thinking> tags.
 - If a previous period is zero, use "No baseline".
 - Keep the answer concise, but include the important numbers.
 - Return plain text only.
