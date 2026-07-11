@@ -1,4 +1,12 @@
-import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { AiAssistantService } from './ai-assistant.service';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
@@ -8,6 +16,7 @@ import { Store } from '../database/entites/store.entity';
 
 interface AskAssistantBody {
   question: string;
+  threadId?: string;
 }
 
 interface StreamSanitizerState {
@@ -20,6 +29,23 @@ interface StreamSanitizerState {
 export class AiAssistantController {
   constructor(private readonly aiAssistantService: AiAssistantService) {}
 
+  @Get('threads')
+  findAllThreads(
+    @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.aiAssistantService.findAllThreads(store, user.id);
+  }
+
+  @Get('threads/:id')
+  findOneThread(
+    @CurrentStore() store: Store,
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+  ) {
+    return this.aiAssistantService.findOneThread(store, user.id, id);
+  }
+
   @Post('ask/stream')
   async askStream(
     @CurrentStore() store: Store,
@@ -27,10 +53,11 @@ export class AiAssistantController {
     @Body() body: AskAssistantBody,
     @Res() res: Response,
   ): Promise<void> {
-    const result = this.aiAssistantService.streamAnswer(
+    const result = await this.aiAssistantService.streamAnswer(
       store,
       user.id,
       body.question,
+      body.threadId,
     );
 
     res.status(200);
@@ -63,10 +90,31 @@ export class AiAssistantController {
         this.writeSseEvent(res, 'chunk', { content: finalChunk });
       }
 
-      this.writeSseEvent(res, 'done', { content: fullResponse });
+      const assistantMessage =
+        await this.aiAssistantService.saveAssistantMessage(
+          result.threadId,
+          fullResponse,
+        );
+
+      this.writeSseEvent(res, 'done', {
+        content: fullResponse,
+        threadId: result.threadId,
+        userMessageId: result.userMessageId,
+        assistantMessageId: assistantMessage.id,
+      });
       res.end();
     } catch (error) {
+      try {
+        await this.aiAssistantService.saveFailedAssistantMessage(
+          result.threadId,
+          fullResponse,
+          error,
+        );
+      } catch {}
+
       this.writeSseEvent(res, 'error', {
+        threadId: result.threadId,
+        userMessageId: result.userMessageId,
         message:
           error instanceof Error
             ? error.message
@@ -76,7 +124,6 @@ export class AiAssistantController {
     }
   }
 
-  
   private writeSseEvent(
     res: Response,
     event: string,

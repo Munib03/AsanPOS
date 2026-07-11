@@ -32,7 +32,8 @@ import { StockMovementItem } from './database/entites/stock-movement-item.entity
 import { Purchase } from './database/entites/purchase.entity';
 import { Account } from './database/entites/account.entity';
 import { StoreSettings } from './database/entites/store-settings.entity';
-
+import { AiChatThread } from './database/entites/ai-chat-thread.entity';
+import { AiChatMessage } from './database/entites/ai-chat-message.entity';
 
 const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,
@@ -41,12 +42,41 @@ const config: Options<PostgreSqlDriver> = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   dbName: process.env.DB_NAME,
-  entities: [Employee, Store, TwoFactorAuth, SecurityAction, Category, 
-             Product, ProductImage, Attachment, Inventory, Customer, 
-             StockIn, StockInItem, PurchasedItem, StockQuantity, Sequence, JournalEntry, 
-             JournalEntryItem, Sale, SaleItem, StockOut, StockOutItem, AuditLog, 
-             CashMovement, StoreSession, Payment, Receipt, StockMovement, StockMovementItem,
-             Purchase, Account, StoreSettings],
+  entities: [
+    Employee,
+    Store,
+    TwoFactorAuth,
+    SecurityAction,
+    Category,
+    Product,
+    ProductImage,
+    Attachment,
+    Inventory,
+    Customer,
+    StockIn,
+    StockInItem,
+    PurchasedItem,
+    StockQuantity,
+    Sequence,
+    JournalEntry,
+    JournalEntryItem,
+    Sale,
+    SaleItem,
+    StockOut,
+    StockOutItem,
+    AuditLog,
+    CashMovement,
+    StoreSession,
+    Payment,
+    Receipt,
+    StockMovement,
+    StockMovementItem,
+    Purchase,
+    Account,
+    StoreSettings,
+    AiChatThread,
+    AiChatMessage,
+  ],
   migrations: {
     path: './src/database/migrations',
     glob: '!(*.d).{js,ts}',
