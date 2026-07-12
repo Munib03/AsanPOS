@@ -6,6 +6,7 @@ const PURCHASE_COUNT = 1000;
 const SALE_COUNT = 1000;
 const INVENTORY_COUNT = 100;
 const CUSTOMER_COUNT = 100;
+const CATEGORY_COUNT = 20;
 const SEED_PREFIX = 'seed-demo';
 
 type ProductSeed = {
@@ -16,39 +17,58 @@ type ProductSeed = {
   barcode: string;
 };
 
+type SequenceSeed = {
+  id: string;
+  entity: string;
+  prefix: string;
+  last_index: number;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type PurchaseSeed = {
+  id: string;
+  customer_id: string;
+  inventory_id: string;
+  custom_date: Date;
+  status: string;
+  store_id: string;
+  sequence_id: string;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type SaleSeed = {
+  id: string;
+  inventory_id: string;
+  sequence_id: string;
+  customer_id: string;
+  store_id: string;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+};
+
 export async function seed(knex: Knex): Promise<void> {
   const alreadySeeded = await knex('products')
     .where({ barcode: `${SEED_PREFIX}-product-0001` })
     .first('id');
 
-  if (alreadySeeded) return;
+  if (alreadySeeded) {
+    await deleteExistingSeedData(knex);
+  }
 
   const now = new Date();
   const storeId = await getOrCreateStore(knex, now);
-  const saleSequenceId = uuidv4();
-  const purchaseSequenceId = uuidv4();
 
-  await knex('sequence').insert([
-    {
-      id: saleSequenceId,
-      entity: 'Sale',
-      prefix: 'SAL',
-      last_index: SALE_COUNT,
-      created_at: now,
-      updated_at: now,
-    },
-    {
-      id: purchaseSequenceId,
-      entity: 'Purchase',
-      prefix: 'PUR',
-      last_index: PURCHASE_COUNT,
-      created_at: now,
-      updated_at: now,
-    },
-  ]);
+  const accounts = await createSeedAccounts(knex, now);
+  const sessionId = await createSeedSession(knex, storeId, now);
 
   const inventories = buildInventories(storeId, now);
   await insertChunks(knex, 'inventory', inventories);
+
+  const categories = buildCategories(storeId, now);
+  await insertChunks(knex, 'categories', categories);
 
   const products = buildProducts(storeId, now);
   await insertChunks(
@@ -57,12 +77,23 @@ export async function seed(knex: Knex): Promise<void> {
     products.map(({ purchasePrice, ...product }) => product),
   );
 
+  const categoryProducts = buildCategoryProducts(products, categories);
+  await insertChunks(knex, 'category_product', categoryProducts);
+
   const customers = buildCustomers(storeId, now);
   await insertChunks(knex, 'customer', customers);
 
+  const purchaseSequences = buildSequences(
+    'Purchase',
+    'PUR',
+    PURCHASE_COUNT,
+    now,
+  );
+  await insertChunks(knex, 'sequence', purchaseSequences);
+
   const purchases = buildPurchases(
     storeId,
-    purchaseSequenceId,
+    purchaseSequences,
     customers,
     inventories,
     now,
@@ -77,20 +108,196 @@ export async function seed(knex: Knex): Promise<void> {
   );
   await insertChunks(knex, 'purchased_items', purchasedItems);
 
-  const stockQuantities = buildStockQuantities(purchasedItems, now);
+  const inventoryProducts = buildInventoryProducts(purchasedItems);
+  await insertChunks(knex, 'inventory_product', inventoryProducts);
+
+  const stockInSequences = buildSequences(
+    'StockIn',
+    'STK',
+    PURCHASE_COUNT,
+    now,
+  );
+  await insertChunks(knex, 'sequence', stockInSequences);
+
+  const stockIns = buildStockIns(purchases, stockInSequences, now);
+  await insertChunks(knex, 'stock_in', stockIns);
+
+  const stockInItems = buildStockInItems(stockIns, purchasedItems, now);
+  await insertChunks(knex, 'stock_in_items', stockInItems);
+
+  const saleSequences = buildSequences('Sale', 'SAL', SALE_COUNT, now);
+  await insertChunks(knex, 'sequence', saleSequences);
+
+  const sales = buildSales(storeId, saleSequences, customers, inventories, now);
+  await insertChunks(
+    knex,
+    'sale',
+    sales.map(({ inventory_id, ...sale }) => sale),
+  );
+
+  const saleItems = buildSaleItems(sales, purchasedItems, products, now);
+  await insertChunks(knex, 'sale_items', saleItems);
+
+  const stockQuantities = buildStockQuantities(
+    purchasedItems,
+    saleItems,
+    sales,
+    now,
+  );
   await insertChunks(knex, 'stock_quantity', stockQuantities);
 
-  const sales = buildSales(storeId, saleSequenceId, customers, now);
-  await insertChunks(knex, 'sale', sales);
+  const stockOutSequences = buildSequences('StockOut', 'STO', SALE_COUNT, now);
+  await insertChunks(knex, 'sequence', stockOutSequences);
 
-  const saleItems = buildSaleItems(sales, products, now);
-  await insertChunks(knex, 'sale_items', saleItems);
+  const stockOuts = buildStockOuts(sales, stockOutSequences, now);
+  await insertChunks(knex, 'stock_out', stockOuts);
+
+  const stockOutItems = buildStockOutItems(stockOuts, saleItems, now);
+  await insertChunks(knex, 'stock_out_items', stockOutItems);
+
+  const salePayments = buildSalePayments(sales, saleItems, sessionId, now);
+  await insertChunks(knex, 'payments', salePayments);
+
+  const journalSequences = buildSequences(
+    'JournalEntry',
+    'JRN',
+    SALE_COUNT,
+    now,
+  );
+  await insertChunks(knex, 'sequence', journalSequences);
+
+  const journalEntries = buildJournalEntries(
+    sales,
+    storeId,
+    journalSequences,
+    now,
+  );
+  await insertChunks(knex, 'journal_entry', journalEntries);
+
+  const journalItems = buildJournalItems(
+    journalEntries,
+    saleItems,
+    accounts,
+    now,
+  );
+  await insertChunks(knex, 'journal_entry_items', journalItems);
+
+  const receipts = buildReceipts(
+    sales,
+    saleItems,
+    products,
+    storeId,
+    sessionId,
+    now,
+  );
+  await insertChunks(knex, 'receipt', receipts);
+}
+
+async function deleteExistingSeedData(knex: Knex): Promise<void> {
+  const products = await knex('products')
+    .whereLike('barcode', `${SEED_PREFIX}-product-%`)
+    .select('id');
+  const productIds = products.map((product) => product.id);
+
+  const customers = await knex('customer')
+    .whereLike('name', 'Seed Customer %')
+    .select('id');
+  const customerIds = customers.map((customer) => customer.id);
+
+  const inventories = await knex('inventory')
+    .whereLike('name', 'Seed Inventory %')
+    .select('id');
+  const inventoryIds = inventories.map((inventory) => inventory.id);
+
+  const sessions = await knex('store_session')
+    .where({ opening_note: 'Seed demo session' })
+    .select('id');
+  const sessionIds = sessions.map((session) => session.id);
+
+  const saleItems = productIds.length
+    ? await knex('sale_items')
+        .whereIn('product_id', productIds)
+        .select('id', 'sale_id')
+    : [];
+  const saleItemIds = saleItems.map((item) => item.id);
+  const saleIds = [...new Set(saleItems.map((item) => item.sale_id))];
+
+  const purchasedItems = productIds.length
+    ? await knex('purchased_items')
+        .whereIn('product_id', productIds)
+        .select('id', 'purchase_id')
+    : [];
+  const purchasedItemIds = purchasedItems.map((item) => item.id);
+  const purchaseIds = [
+    ...new Set(purchasedItems.map((item) => item.purchase_id)),
+  ];
+
+  const journalItems = saleIds.length
+    ? await knex('journal_entry_items')
+        .whereIn('sale_id', saleIds)
+        .select('journal_entry_id')
+    : [];
+  const journalEntryIds = [
+    ...new Set(journalItems.map((item) => item.journal_entry_id)),
+  ];
+
+  const stockOuts = saleIds.length
+    ? await knex('stock_out').whereIn('sale_id', saleIds).select('id')
+    : [];
+  const stockOutIds = stockOuts.map((stockOut) => stockOut.id);
+
+  const stockIns = purchaseIds.length
+    ? await knex('stock_in').whereIn('purchase_id', purchaseIds).select('id')
+    : [];
+  const stockInIds = stockIns.map((stockIn) => stockIn.id);
+
+  if (sessionIds.length)
+    await knex('receipt').whereIn('session_id', sessionIds).delete();
+  if (saleIds.length)
+    await knex('payments').whereIn('sale_id', saleIds).delete();
+  if (journalEntryIds.length)
+    await knex('journal_entry_items')
+      .whereIn('journal_entry_id', journalEntryIds)
+      .delete();
+  if (journalEntryIds.length)
+    await knex('journal_entry').whereIn('id', journalEntryIds).delete();
+  if (stockOutIds.length)
+    await knex('stock_out_items').whereIn('stock_out_id', stockOutIds).delete();
+  if (stockOutIds.length)
+    await knex('stock_out').whereIn('id', stockOutIds).delete();
+  if (saleItemIds.length)
+    await knex('sale_items').whereIn('id', saleItemIds).delete();
+  if (saleIds.length) await knex('sale').whereIn('id', saleIds).delete();
+  if (stockInIds.length)
+    await knex('stock_in_items').whereIn('stock_in_id', stockInIds).delete();
+  if (stockInIds.length)
+    await knex('stock_in').whereIn('id', stockInIds).delete();
+  if (productIds.length)
+    await knex('stock_quantity').whereIn('product_id', productIds).delete();
+  if (productIds.length)
+    await knex('inventory_product').whereIn('product_id', productIds).delete();
+  if (productIds.length)
+    await knex('category_product').whereIn('product_id', productIds).delete();
+  if (purchasedItemIds.length)
+    await knex('purchased_items').whereIn('id', purchasedItemIds).delete();
+  if (purchaseIds.length)
+    await knex('purchase').whereIn('id', purchaseIds).delete();
+  if (productIds.length)
+    await knex('products').whereIn('id', productIds).delete();
+  if (customerIds.length)
+    await knex('customer').whereIn('id', customerIds).delete();
+  if (inventoryIds.length)
+    await knex('inventory').whereIn('id', inventoryIds).delete();
+  await knex('categories').whereLike('name', 'Seed Category %').delete();
+  if (sessionIds.length)
+    await knex('store_session').whereIn('id', sessionIds).delete();
+  await knex('accounts')
+    .whereIn('name', ['Seed Demo Cash', 'Seed Demo Sales Revenue'])
+    .delete();
 }
 
 async function getOrCreateStore(knex: Knex, now: Date): Promise<string> {
-  const existingStore = await knex('stores')
-    .where({ name: 'Seed Demo Store' })
-    .first('id');
+  const existingStore = await knex('stores').first('id');
 
   if (existingStore) return existingStore.id;
 
@@ -125,11 +332,69 @@ async function getOrCreateStore(knex: Knex, now: Date): Promise<string> {
   return storeId;
 }
 
+async function createSeedAccounts(knex: Knex, now: Date) {
+  const cashAccountId = uuidv4();
+  const salesAccountId = uuidv4();
+
+  await knex('accounts').insert([
+    {
+      id: cashAccountId,
+      name: 'Seed Demo Cash',
+      type: 'asset',
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: salesAccountId,
+      name: 'Seed Demo Sales Revenue',
+      type: 'revenue',
+      created_at: now,
+      updated_at: now,
+    },
+  ]);
+
+  return { cashAccountId, salesAccountId };
+}
+
+async function createSeedSession(
+  knex: Knex,
+  storeId: string,
+  now: Date,
+): Promise<string> {
+  const sessionId = uuidv4();
+
+  await knex('store_session').insert({
+    id: sessionId,
+    store_id: storeId,
+    opened_by_emp_id: null,
+    closed_by_emp_id: null,
+    opening_amount: 0,
+    opening_note: 'Seed demo session',
+    closing_amount: null,
+    expected_amount: null,
+    closing_note: null,
+    opened_at: now,
+    closed_at: null,
+  });
+
+  return sessionId;
+}
+
 function buildInventories(storeId: string, now: Date) {
   return Array.from({ length: INVENTORY_COUNT }, (_, index) => ({
     id: uuidv4(),
     name: `Seed Inventory ${index + 1}`,
     address: `Seed Warehouse Block ${index + 1}`,
+    store_id: storeId,
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
+function buildCategories(storeId: string, now: Date) {
+  return Array.from({ length: CATEGORY_COUNT }, (_, index) => ({
+    id: uuidv4(),
+    name: `Seed Category ${index + 1}`,
     store_id: storeId,
     created_at: now,
     updated_at: now,
@@ -167,6 +432,33 @@ function buildProducts(storeId: string, now: Date): ProductSeed[] {
   });
 }
 
+function buildCategoryProducts(
+  products: Array<{ id: string }>,
+  categories: Array<{ id: string }>,
+) {
+  return products.map((product, index) => ({
+    id: uuidv4(),
+    product_id: product.id,
+    category_id: categories[index % categories.length].id,
+  }));
+}
+
+function buildSequences(
+  entity: string,
+  prefix: string,
+  count: number,
+  now: Date,
+): SequenceSeed[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: uuidv4(),
+    entity,
+    prefix,
+    last_index: index + 1,
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
 function buildCustomers(storeId: string, now: Date) {
   return Array.from({ length: CUSTOMER_COUNT }, (_, index) => ({
     id: uuidv4(),
@@ -183,19 +475,19 @@ function buildCustomers(storeId: string, now: Date) {
 
 function buildPurchases(
   storeId: string,
-  sequenceId: string,
+  sequences: SequenceSeed[],
   customers: Array<{ id: string }>,
   inventories: Array<{ id: string }>,
   now: Date,
-) {
+): PurchaseSeed[] {
   return Array.from({ length: PURCHASE_COUNT }, (_, index) => ({
     id: uuidv4(),
     customer_id: customers[index % customers.length].id,
     inventory_id: inventories[index % inventories.length].id,
     custom_date: daysAgo(index % 90),
-    status: 'completed',
+    status: 'Done',
     store_id: storeId,
-    sequence_id: sequenceId,
+    sequence_id: sequences[index].id,
     created_at: daysAgo(index % 90),
     updated_at: now,
   }));
@@ -235,13 +527,30 @@ function buildStockQuantities(
     product_id: string;
     quantity: number;
   }>,
+  saleItems: Array<{
+    sale_id: string;
+    product_id: string;
+    quantity: number;
+  }>,
+  sales: SaleSeed[],
   now: Date,
 ) {
   const totals = new Map<string, number>();
+  const inventoryIdBySaleId = new Map(
+    sales.map((sale) => [sale.id, sale.inventory_id]),
+  );
 
   for (const item of purchasedItems) {
     const key = `${item.warehouse_id}:${item.product_id}`;
     totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+  }
+
+  for (const item of saleItems) {
+    const inventoryId = inventoryIdBySaleId.get(item.sale_id);
+    if (!inventoryId) continue;
+
+    const key = `${inventoryId}:${item.product_id}`;
+    totals.set(key, Math.max(0, (totals.get(key) ?? 0) - item.quantity));
   }
 
   return Array.from(totals.entries()).map(([key, quantity]) => {
@@ -257,31 +566,175 @@ function buildStockQuantities(
   });
 }
 
-function buildSales(
-  storeId: string,
-  sequenceId: string,
-  customers: Array<{ id: string }>,
+function buildInventoryProducts(
+  purchasedItems: Array<{
+    warehouse_id: string;
+    product_id: string;
+  }>,
+) {
+  const pairs = new Set<string>();
+
+  for (const item of purchasedItems) {
+    pairs.add(`${item.warehouse_id}:${item.product_id}`);
+  }
+
+  return Array.from(pairs).map((pair) => {
+    const [inventoryId, productId] = pair.split(':');
+    return {
+      id: uuidv4(),
+      inventory_id: inventoryId,
+      product_id: productId,
+    };
+  });
+}
+
+function buildStockIns(
+  purchases: PurchaseSeed[],
+  sequences: SequenceSeed[],
   now: Date,
 ) {
+  return purchases.map((purchase, index) => ({
+    id: uuidv4(),
+    inventory_id: purchase.inventory_id,
+    purchase_id: purchase.id,
+    sequence_id: sequences[index].id,
+    status: 'Done',
+    created_at: purchase.created_at,
+    updated_at: now,
+  }));
+}
+
+function buildStockInItems(
+  stockIns: Array<{ id: string; purchase_id: string }>,
+  purchasedItems: Array<{
+    id: string;
+    purchase_id: string;
+    product_id: string;
+    quantity: number;
+  }>,
+  now: Date,
+) {
+  const stockInByPurchaseId = new Map(
+    stockIns.map((stockIn) => [stockIn.purchase_id, stockIn]),
+  );
+
+  return purchasedItems.map((item) => ({
+    id: uuidv4(),
+    stock_in_id: stockInByPurchaseId.get(item.purchase_id)!.id,
+    product_id: item.product_id,
+    purchased_item_id: item.id,
+    quantity: item.quantity,
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
+function buildSales(
+  storeId: string,
+  sequences: SequenceSeed[],
+  customers: Array<{ id: string }>,
+  inventories: Array<{ id: string }>,
+  now: Date,
+): SaleSeed[] {
   return Array.from({ length: SALE_COUNT }, (_, index) => ({
     id: uuidv4(),
-    sequence_id: sequenceId,
+    inventory_id: inventories[index % inventories.length].id,
+    sequence_id: sequences[index].id,
     customer_id: customers[index % customers.length].id,
     store_id: storeId,
-    status: 'completed',
+    status: 'Done',
     created_at: daysAgo(index % 90),
     updated_at: now,
   }));
 }
 
-function buildSaleItems(
+function buildJournalEntries(
   sales: Array<{ id: string }>,
+  storeId: string,
+  sequences: SequenceSeed[],
+  now: Date,
+) {
+  return sales.map((_, index) => ({
+    id: uuidv4(),
+    sequence_id: sequences[index].id,
+    status: 'Done',
+    store_id: storeId,
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
+function buildJournalItems(
+  journalEntries: Array<{ id: string }>,
+  saleItems: Array<{
+    sale_id: string;
+    quantity: number;
+    unit_price: number;
+  }>,
+  accounts: { cashAccountId: string; salesAccountId: string },
+  now: Date,
+) {
+  const saleTotals = calcSaleTotals(saleItems);
+  const saleIds = Array.from(saleTotals.keys());
+
+  return journalEntries.flatMap((entry, index) => {
+    const saleId = saleIds[index];
+    const total = saleTotals.get(saleId) ?? 0;
+
+    return [
+      {
+        id: uuidv4(),
+        journal_entry_id: entry.id,
+        purchase_id: null,
+        sale_id: saleId,
+        account_id: accounts.cashAccountId,
+        debit: total,
+        credit: null,
+        created_at: now,
+        updated_at: now,
+      },
+      {
+        id: uuidv4(),
+        journal_entry_id: entry.id,
+        purchase_id: null,
+        sale_id: saleId,
+        account_id: accounts.salesAccountId,
+        debit: null,
+        credit: total,
+        created_at: now,
+        updated_at: now,
+      },
+    ];
+  });
+}
+
+function buildSaleItems(
+  sales: SaleSeed[],
+  purchasedItems: Array<{ warehouse_id: string; product_id: string }>,
   products: ProductSeed[],
   now: Date,
 ) {
+  const productIdsByInventoryId = new Map<string, string[]>();
+
+  for (const item of purchasedItems) {
+    const productIds = productIdsByInventoryId.get(item.warehouse_id) ?? [];
+    productIds.push(item.product_id);
+    productIdsByInventoryId.set(item.warehouse_id, productIds);
+  }
+
+  const productsById = new Map(
+    products.map((product) => [product.id, product]),
+  );
+
   return sales.flatMap((sale, saleIndex) =>
     Array.from({ length: 2 }, (_, itemIndex) => {
-      const product = products[(saleIndex * 2 + itemIndex) % products.length];
+      const inventoryProductIds =
+        productIdsByInventoryId.get(sale.inventory_id) ?? [];
+      const productId =
+        inventoryProductIds[
+          (saleIndex * 2 + itemIndex) % inventoryProductIds.length
+        ];
+      const product = productsById.get(productId)!;
 
       return {
         id: uuidv4(),
@@ -296,10 +749,137 @@ function buildSaleItems(
   );
 }
 
+function buildStockOuts(
+  sales: SaleSeed[],
+  sequences: SequenceSeed[],
+  now: Date,
+) {
+  return sales.map((sale, index) => ({
+    id: uuidv4(),
+    inventory_id: sale.inventory_id,
+    sale_id: sale.id,
+    sequence_id: sequences[index].id,
+    status: 'Done',
+    created_at: sale.created_at,
+    updated_at: now,
+  }));
+}
+
+function buildStockOutItems(
+  stockOuts: Array<{ id: string; sale_id: string }>,
+  saleItems: Array<{
+    id: string;
+    sale_id: string;
+    product_id: string;
+    quantity: number;
+  }>,
+  now: Date,
+) {
+  const stockOutBySaleId = new Map(
+    stockOuts.map((stockOut) => [stockOut.sale_id, stockOut]),
+  );
+
+  return saleItems.map((item) => ({
+    id: uuidv4(),
+    stock_out_id: stockOutBySaleId.get(item.sale_id)!.id,
+    product_id: item.product_id,
+    sale_item_id: item.id,
+    quantity: item.quantity,
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
+function buildSalePayments(
+  sales: Array<{ id: string }>,
+  saleItems: Array<{ sale_id: string; quantity: number; unit_price: number }>,
+  sessionId: string,
+  now: Date,
+) {
+  const saleTotals = calcSaleTotals(saleItems);
+
+  return sales.map((sale) => ({
+    id: uuidv4(),
+    purchase_id: null,
+    sale_id: sale.id,
+    store_session_id: sessionId,
+    amount: saleTotals.get(sale.id) ?? 0,
+    note: 'Seed sale payment',
+    status: 'done',
+    created_at: now,
+    updated_at: now,
+  }));
+}
+
+function buildReceipts(
+  sales: Array<{ id: string }>,
+  saleItems: Array<{
+    sale_id: string;
+    product_id: string;
+    quantity: number;
+    unit_price: number;
+  }>,
+  products: ProductSeed[],
+  storeId: string,
+  sessionId: string,
+  now: Date,
+) {
+  const productsById = new Map(
+    products.map((product) => [product.id, product]),
+  );
+  const itemsBySaleId = new Map<string, typeof saleItems>();
+
+  for (const item of saleItems) {
+    const items = itemsBySaleId.get(item.sale_id) ?? [];
+    items.push(item);
+    itemsBySaleId.set(item.sale_id, items);
+  }
+
+  return sales.map((sale) => {
+    const items = itemsBySaleId.get(sale.id) ?? [];
+
+    return {
+      id: uuidv4(),
+      store_id: storeId,
+      session_id: sessionId,
+      items: JSON.stringify({
+        saleId: sale.id,
+        items: items.map((item) => ({
+          productId: item.product_id,
+          productName: productsById.get(item.product_id)?.name,
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          total: item.quantity * item.unit_price,
+        })),
+        total: items.reduce(
+          (sum, item) => sum + item.quantity * item.unit_price,
+          0,
+        ),
+      }),
+      created_at: now,
+    };
+  });
+}
+
 function daysAgo(days: number): Date {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date;
+}
+
+function calcSaleTotals(
+  saleItems: Array<{ sale_id: string; quantity: number; unit_price: number }>,
+) {
+  const totals = new Map<string, number>();
+
+  for (const item of saleItems) {
+    totals.set(
+      item.sale_id,
+      (totals.get(item.sale_id) ?? 0) + item.quantity * item.unit_price,
+    );
+  }
+
+  return totals;
 }
 
 async function insertChunks(
