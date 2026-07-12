@@ -131,6 +131,7 @@ export function createAiAssistantTools({
           where.$or = [{ name: { $ilike: q } }, { barcode: { $ilike: q } }];
         }
 
+        const totalCount = await em.count(Product, where);
         const products = await em.find(Product, where, {
           orderBy: { name: 'ASC' },
           limit: take,
@@ -149,7 +150,10 @@ export function createAiAssistantTools({
             )
           : [];
 
-        return products
+        return {
+          totalCount,
+          returnedCount: products.length,
+          products: products
           .map((product) => ({
             id: product.id,
             name: product.name,
@@ -167,7 +171,26 @@ export function createAiAssistantTools({
             (product) =>
               !lowStockOnly ||
               product.stock.some((stock) => stock.quantity <= 10),
-          );
+          ),
+        };
+      },
+    }),
+
+    getProductCount: tool({
+      description:
+        'Return the total number of products in the current store, optionally filtered by name or barcode text.',
+      inputSchema: z.object({
+        query: z.string().optional(),
+      }),
+      execute: async ({ query }) => {
+        const where: Record<string, any> = { store };
+        if (query?.trim()) {
+          const q = `%${query.trim()}%`;
+          where.$or = [{ name: { $ilike: q } }, { barcode: { $ilike: q } }];
+        }
+
+        const totalCount = await em.count(Product, where);
+        return { totalCount };
       },
     }),
 

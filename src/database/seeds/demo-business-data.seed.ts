@@ -1,12 +1,13 @@
 import { Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
 
-const PRODUCT_COUNT = 1000;
-const PURCHASE_COUNT = 1000;
-const SALE_COUNT = 1000;
-const INVENTORY_COUNT = 100;
-const CUSTOMER_COUNT = 100;
+const PRODUCT_COUNT = 100000;
+const PURCHASE_COUNT = 100000;
+const SALE_COUNT = 100000;
+const INVENTORY_COUNT = 1000;
+const CUSTOMER_COUNT = 1000;
 const CATEGORY_COUNT = 20;
+const SEED_DATE_SPAN_DAYS = 450;
 const SEED_PREFIX = 'seed-demo';
 const SEED_EMPLOYEE_ID = process.env.SEED_EMPLOYEE_ID?.trim();
 const SEED_STORE_ID = process.env.SEED_STORE_ID?.trim();
@@ -560,16 +561,19 @@ function buildPurchases(
   inventories: Array<{ id: string }>,
   now: Date,
 ): PurchaseSeed[] {
+  const inventoryAllocation = buildInventoryLoadPool(inventories);
+  const customDate = (index: number) =>
+    buildDateInSpan(now, index, 11, SEED_DATE_SPAN_DAYS);
   return Array.from({ length: PURCHASE_COUNT }, (_, index) => ({
     id: uuidv4(),
     customer_id: customers[index % customers.length].id,
-    inventory_id: inventories[index % inventories.length].id,
-    custom_date: daysAgo(index % 90),
+    inventory_id: inventoryAllocation[index % inventoryAllocation.length],
+    custom_date: customDate(index),
     status: 'Done',
     store_id: storeId,
     sequence_id: sequences[index].id,
-    created_at: daysAgo(index % 90),
-    updated_at: now,
+    created_at: customDate(index),
+    updated_at: customDate(index),
   }));
 }
 
@@ -579,11 +583,16 @@ function buildPurchasedItems(
   inventories: Array<{ id: string }>,
   now: Date,
 ) {
-  return purchases.flatMap((purchase, purchaseIndex) =>
-    Array.from({ length: 3 }, (_, itemIndex) => {
+  const itemDateOffset = (index: number) =>
+    buildDateInSpan(now, index, 23, SEED_DATE_SPAN_DAYS);
+
+  return purchases.flatMap((purchase, purchaseIndex) => {
+    const itemCount = 1 + ((purchaseIndex * 5 + 9) % 6);
+
+    return Array.from({ length: itemCount }, (_, itemIndex) => {
       const product =
         products[(purchaseIndex * 3 + itemIndex) % products.length];
-      const quantity = 20 + ((purchaseIndex + itemIndex) % 80);
+      const quantity = 5 + ((purchaseIndex * 7 + itemIndex * 13) % 96);
 
       return {
         id: uuidv4(),
@@ -595,10 +604,10 @@ function buildPurchasedItems(
         quantity,
         unit_price: product.purchasePrice,
         received: quantity,
-        created_at: now,
+        created_at: itemDateOffset(purchaseIndex * 7 + itemIndex),
       };
-    }),
-  );
+    });
+  });
 }
 
 function buildStockQuantities(
@@ -680,12 +689,12 @@ function buildStockIns(
     sequence_id: sequences[index].id,
     status: 'Done',
     created_at: purchase.created_at,
-    updated_at: now,
+    updated_at: purchase.created_at,
   }));
 }
 
 function buildStockInItems(
-  stockIns: Array<{ id: string; purchase_id: string }>,
+  stockIns: Array<{ id: string; purchase_id: string; created_at: Date }>,
   purchasedItems: Array<{
     id: string;
     purchase_id: string;
@@ -704,8 +713,8 @@ function buildStockInItems(
     product_id: item.product_id,
     purchased_item_id: item.id,
     quantity: item.quantity,
-    created_at: now,
-    updated_at: now,
+    created_at: stockInByPurchaseId.get(item.purchase_id)!.created_at,
+    updated_at: stockInByPurchaseId.get(item.purchase_id)!.created_at,
   }));
 }
 
@@ -716,20 +725,24 @@ function buildSales(
   inventories: Array<{ id: string }>,
   now: Date,
 ): SaleSeed[] {
+  const inventoryAllocation = buildInventoryLoadPool(inventories);
+  const saleDate = (index: number) =>
+    buildDateInSpan(now, index, 19, SEED_DATE_SPAN_DAYS);
+
   return Array.from({ length: SALE_COUNT }, (_, index) => ({
     id: uuidv4(),
-    inventory_id: inventories[index % inventories.length].id,
+    inventory_id: inventoryAllocation[index % inventoryAllocation.length],
     sequence_id: sequences[index].id,
     customer_id: customers[index % customers.length].id,
     store_id: storeId,
     status: 'Done',
-    created_at: daysAgo(index % 90),
-    updated_at: now,
+    created_at: saleDate(index),
+    updated_at: saleDate(index),
   }));
 }
 
 function buildJournalEntries(
-  sales: Array<{ id: string }>,
+  sales: Array<{ id: string; created_at: Date }>,
   storeId: string,
   sequences: SequenceSeed[],
   now: Date,
@@ -739,13 +752,13 @@ function buildJournalEntries(
     sequence_id: sequences[index].id,
     status: 'Done',
     store_id: storeId,
-    created_at: now,
-    updated_at: now,
+    created_at: sales[index].created_at,
+    updated_at: sales[index].created_at,
   }));
 }
 
 function buildJournalItems(
-  journalEntries: Array<{ id: string }>,
+  journalEntries: Array<{ id: string; created_at: Date }>,
   saleItems: Array<{
     sale_id: string;
     quantity: number;
@@ -770,8 +783,8 @@ function buildJournalItems(
         account_id: accounts.cashAccountId,
         debit: total,
         credit: null,
-        created_at: now,
-        updated_at: now,
+        created_at: journalEntries[index].created_at,
+        updated_at: journalEntries[index].created_at,
       },
       {
         id: uuidv4(),
@@ -781,8 +794,8 @@ function buildJournalItems(
         account_id: accounts.salesAccountId,
         debit: null,
         credit: total,
-        created_at: now,
-        updated_at: now,
+        created_at: journalEntries[index].created_at,
+        updated_at: journalEntries[index].created_at,
       },
     ];
   });
@@ -807,7 +820,7 @@ function buildSaleItems(
   );
 
   return sales.flatMap((sale, saleIndex) =>
-    Array.from({ length: 2 }, (_, itemIndex) => {
+    Array.from({ length: 1 + ((saleIndex * 3 + 7) % 5) }, (_, itemIndex) => {
       const inventoryProductIds =
         productIdsByInventoryId.get(sale.inventory_id) ?? [];
       const productId =
@@ -820,10 +833,10 @@ function buildSaleItems(
         id: uuidv4(),
         sale_id: sale.id,
         product_id: product.id,
-        quantity: 1 + ((saleIndex + itemIndex) % 5),
+        quantity: 1 + ((saleIndex + itemIndex) % 7),
         unit_price: product.price,
-        created_at: now,
-        updated_at: now,
+        created_at: sale.created_at,
+        updated_at: sale.created_at,
       };
     }),
   );
@@ -841,12 +854,12 @@ function buildStockOuts(
     sequence_id: sequences[index].id,
     status: 'Done',
     created_at: sale.created_at,
-    updated_at: now,
+    updated_at: sale.created_at,
   }));
 }
 
 function buildStockOutItems(
-  stockOuts: Array<{ id: string; sale_id: string }>,
+  stockOuts: Array<{ id: string; sale_id: string; created_at: Date }>,
   saleItems: Array<{
     id: string;
     sale_id: string;
@@ -865,13 +878,13 @@ function buildStockOutItems(
     product_id: item.product_id,
     sale_item_id: item.id,
     quantity: item.quantity,
-    created_at: now,
-    updated_at: now,
+    created_at: stockOutBySaleId.get(item.sale_id)!.created_at,
+    updated_at: stockOutBySaleId.get(item.sale_id)!.created_at,
   }));
 }
 
 function buildSalePayments(
-  sales: Array<{ id: string }>,
+  sales: Array<{ id: string; created_at: Date }>,
   saleItems: Array<{ sale_id: string; quantity: number; unit_price: number }>,
   sessionId: string,
   now: Date,
@@ -886,13 +899,13 @@ function buildSalePayments(
     amount: saleTotals.get(sale.id) ?? 0,
     note: 'Seed sale payment',
     status: 'done',
-    created_at: now,
-    updated_at: now,
+    created_at: sale.created_at,
+    updated_at: sale.created_at,
   }));
 }
 
 function buildReceipts(
-  sales: Array<{ id: string }>,
+  sales: Array<{ id: string; created_at: Date }>,
   saleItems: Array<{
     sale_id: string;
     product_id: string;
@@ -936,14 +949,44 @@ function buildReceipts(
           0,
         ),
       }),
-      created_at: now,
+      created_at: sale.created_at,
     };
   });
 }
 
-function daysAgo(days: number): Date {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
+function buildInventoryLoadPool(
+  inventories: Array<{ id: string }>,
+): string[] {
+  const weightedInventoryIds: string[] = [];
+
+  for (let index = 0; index < inventories.length; index++) {
+    const repeats = 1 + ((index * 7 + 13) % 9);
+    for (let i = 0; i < repeats; i++) {
+      weightedInventoryIds.push(inventories[index].id);
+    }
+  }
+
+  return weightedInventoryIds;
+}
+
+function buildDateInSpan(
+  now: Date,
+  index: number,
+  salt: number,
+  spanDays: number,
+): Date {
+  const start = new Date(now.getTime());
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - spanDays);
+
+  const dayOffset = (index * 17 + salt) % Math.max(1, spanDays);
+  const hour = (index * 7 + salt * 3) % 24;
+  const minute = (index * 11 + salt * 5) % 60;
+  const second = (index * 13 + salt) % 60;
+
+  const date = new Date(start);
+  date.setUTCDate(start.getUTCDate() + dayOffset);
+  date.setUTCHours(hour, minute, second, 0);
   return date;
 }
 

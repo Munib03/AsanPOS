@@ -20,7 +20,7 @@ import { AiChatThread } from '../database/entites/ai-chat-thread.entity';
 import { AiChatMessage } from '../database/entites/ai-chat-message.entity';
 
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
-const DEFAULT_OPENCODE_MODEL = 'gpt-4o-mini';
+const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
 const AI_CHAT_PROVIDER = 'opencode';
 const USER_MESSAGE_ROLE = 'user';
 const ASSISTANT_MESSAGE_ROLE = 'assistant';
