@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
@@ -30,8 +40,9 @@ export class InventoryController {
   findOne(
     @CurrentStore() store: Store,
     @Param('id') id: string,
+    @Query() query: paginateQueryTypes.PaginateQuery,
   ) {
-    return this.inventoryService.findOne(store, id);
+    return this.inventoryService.findOne(store, id, query);
   }
 
   @Post()

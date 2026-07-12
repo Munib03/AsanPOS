@@ -19,6 +19,8 @@ import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
 import { CreateStockOutDto, StockOutItemDto } from './dto/create-stock-out.dto';
 import { UpdateStockOutDto } from './dto/update-stock-out.dto';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { findAndPaginate } from '../shared/utils/pagination';
 
 const STOCK_OUT_POPULATE = [
   'inventory',
@@ -29,8 +31,6 @@ const STOCK_OUT_POPULATE = [
   'items.saleItem',
 ] as const;
 
-
-
 @Injectable()
 export class StockOutService {
   constructor(
@@ -38,15 +38,24 @@ export class StockOutService {
     private readonly sequenceService: SequenceService,
     private readonly stockQuantityService: StockQuantityService,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
-  async findAll(store: Store) {
-    const stockOuts = await this.em.findAll(StockOut, {
-      where: { sale: { store } },
-      populate: STOCK_OUT_POPULATE,
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    const result = await findAndPaginate(
+      this.em,
+      StockOut,
+      { sale: { store } },
+      {
+        populate: STOCK_OUT_POPULATE,
+        orderBy: { createdAt: 'DESC' },
+      },
+      query,
+    );
 
-    return serialize(stockOuts, { populate: STOCK_OUT_POPULATE });
+    return {
+      data: serialize(result.data, { populate: STOCK_OUT_POPULATE }),
+      meta: result.meta,
+    };
   }
 
   async findOne(store: Store, id: string) {
@@ -81,7 +90,9 @@ export class StockOutService {
         throw new NotFoundException(`Sale with id ${dto.saleId} not found`);
 
       if (!inventory)
-        throw new NotFoundException(`Inventory with id ${dto.inventoryId} not found`);
+        throw new NotFoundException(
+          `Inventory with id ${dto.inventoryId} not found`,
+        );
 
       const saleItemMap = new Map(
         sale.items.getItems().map((item) => [item.id, item]),
@@ -89,7 +100,10 @@ export class StockOutService {
 
       this.validateItems(dto.items, saleItemMap);
 
-      const sequence = await this.sequenceService.generateSequence('StockOut', 'STO');
+      const sequence = await this.sequenceService.generateSequence(
+        'StockOut',
+        'STO',
+      );
 
       const stockOut = em.create(StockOut, {
         inventory,
@@ -214,7 +228,10 @@ export class StockOutService {
     });
   }
 
-  private async findEmployeeOrFail(em: EntityManager, employeeId: string): Promise<Employee> {
+  private async findEmployeeOrFail(
+    em: EntityManager,
+    employeeId: string,
+  ): Promise<Employee> {
     const employee = await em.findOne(Employee, { id: employeeId });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;

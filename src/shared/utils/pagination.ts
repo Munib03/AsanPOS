@@ -11,7 +11,62 @@ export type FilterOperator = {
   $nin?: any[];
 };
 
-export function transformFilterQueryParams(filter: Record<string, any>): Record<string, any> {
+export function normalizePagination(page?: number, itemsPerPage?: number) {
+  const parsedPage = Number(page);
+  const parsedItemsPerPage = Number(itemsPerPage);
+  const currentPage =
+    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const limit =
+    Number.isInteger(parsedItemsPerPage) && parsedItemsPerPage > 0
+      ? Math.min(parsedItemsPerPage, 100)
+      : 20;
+
+  return {
+    currentPage,
+    limit,
+    offset: (currentPage - 1) * limit,
+  };
+}
+
+export async function findAndPaginate<Entity extends object>(
+  em: EntityManager,
+  entity: EntityName<Entity>,
+  where: FilterQuery<Entity>,
+  options: Record<string, unknown>,
+  query: PaginateQuery = {},
+): Promise<{
+  data: Entity[];
+  meta: {
+    currentPage: number;
+    itemsPerPage: number;
+    totalItems: number;
+    totalPages: number;
+  };
+}> {
+  const { currentPage, limit, offset } = normalizePagination(
+    query.page,
+    query.itemsPerPage,
+  );
+  const [data, totalItems] = await em.findAndCount(entity, where, {
+    ...options,
+    limit,
+    offset,
+  } as never);
+
+  return {
+    data: data as Entity[],
+    meta: {
+      currentPage,
+      itemsPerPage: limit,
+      totalItems,
+      totalPages: Math.ceil(totalItems / limit),
+    },
+  };
+}
+
+export function transformFilterQueryParams(
+  filter: Record<string, any>,
+): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(filter)) {
     result[key] = value;
@@ -72,3 +127,9 @@ export function mergeSortObjects(
 ): Record<string, any> {
   return { ...base, ...override };
 }
+import type {
+  EntityManager,
+  EntityName,
+  FilterQuery,
+} from '@mikro-orm/postgresql';
+import type { PaginateQuery } from '../types/paginate-query.types';

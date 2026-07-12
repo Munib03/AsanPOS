@@ -34,6 +34,8 @@ export function createAiAssistantTools({
   store,
   employeeId,
 }: CreateAiAssistantToolsParams) {
+  const storeWhere = { id: store.id };
+  const scope = { storeId: store.id, storeName: store.name };
   const rangeSchema = z.object({
     range: z.enum(['today', 'yesterday', 'last_week', 'monthly', 'custom']),
     from: z.string().optional(),
@@ -68,17 +70,22 @@ export function createAiAssistantTools({
           custom: DashboardRange.CUSTOM,
         };
 
-        return dashboardService.getDashboardStats(store, employeeId, {
-          range: rangeMap[range],
-          from,
-          to,
-        });
+        const stats = await dashboardService.getDashboardStats(
+          store,
+          employeeId,
+          {
+            range: rangeMap[range],
+            from,
+            to,
+          },
+        );
+        return { scope, stats };
       },
     }),
 
     getMyDashboardStats: tool({
       description:
-        'Get sales, profit, cashier metrics, and breakdowns only for the current logged-in employee.',
+        "Get sales, profit, cashier metrics, and breakdowns for the current logged-in employee's verified store.",
       inputSchema: z.object({
         range: z.enum(['today', 'yesterday', 'last_week', 'monthly', 'custom']),
         from: z
@@ -103,7 +110,7 @@ export function createAiAssistantTools({
           custom: DashboardRange.CUSTOM,
         };
 
-        return dashboardService.getDashboardStats(
+        const stats = await dashboardService.getDashboardStats(
           store,
           employeeId,
           {
@@ -112,6 +119,7 @@ export function createAiAssistantTools({
             to,
           },
         );
+        return { scope, stats };
       },
     }),
 
@@ -125,7 +133,7 @@ export function createAiAssistantTools({
       }),
       execute: async ({ query, lowStockOnly, limit }) => {
         const take = clampToolLimit(limit);
-        const where: Record<string, any> = { store };
+        const where: Record<string, any> = { store: storeWhere };
         if (query?.trim()) {
           const q = `%${query.trim()}%`;
           where.$or = [{ name: { $ilike: q } }, { barcode: { $ilike: q } }];
@@ -143,7 +151,7 @@ export function createAiAssistantTools({
               StockQuantity,
               {
                 product: { id: { $in: productIds } },
-                inventory: { store },
+                inventory: { store: storeWhere },
                 ...(lowStockOnly ? { quantity: { $lte: 10 } } : {}),
               },
               { populate: ['inventory', 'product'], refresh: true },
@@ -151,27 +159,28 @@ export function createAiAssistantTools({
           : [];
 
         return {
+          scope,
           totalCount,
           returnedCount: products.length,
           products: products
-          .map((product) => ({
-            id: product.id,
-            name: product.name,
-            barcode: product.barcode,
-            price: product.price,
-            stock: stockRecords
-              .filter((record) => record.product.id === product.id)
-              .map((record) => ({
-                inventoryId: record.inventory.id,
-                inventoryName: record.inventory.name,
-                quantity: record.quantity ?? 0,
-              })),
-          }))
-          .filter(
-            (product) =>
-              !lowStockOnly ||
-              product.stock.some((stock) => stock.quantity <= 10),
-          ),
+            .map((product) => ({
+              id: product.id,
+              name: product.name,
+              barcode: product.barcode,
+              price: product.price,
+              stock: stockRecords
+                .filter((record) => record.product.id === product.id)
+                .map((record) => ({
+                  inventoryId: record.inventory.id,
+                  inventoryName: record.inventory.name,
+                  quantity: record.quantity ?? 0,
+                })),
+            }))
+            .filter(
+              (product) =>
+                !lowStockOnly ||
+                product.stock.some((stock) => stock.quantity <= 10),
+            ),
         };
       },
     }),
@@ -183,14 +192,14 @@ export function createAiAssistantTools({
         query: z.string().optional(),
       }),
       execute: async ({ query }) => {
-        const where: Record<string, any> = { store };
+        const where: Record<string, any> = { store: storeWhere };
         if (query?.trim()) {
           const q = `%${query.trim()}%`;
           where.$or = [{ name: { $ilike: q } }, { barcode: { $ilike: q } }];
         }
 
         const totalCount = await em.count(Product, where);
-        return { totalCount };
+        return { scope, totalCount };
       },
     }),
 
@@ -203,60 +212,90 @@ export function createAiAssistantTools({
       }),
       execute: async ({ inventoryId, limit }) => {
         const take = clampToolLimit(limit);
-        const inventories = await em.find(
-          Inventory,
-          {
-            store,
-            ...(inventoryId ? { id: inventoryId } : {}),
-          },
-          {
+        const inventoryWhere = {
+          store: storeWhere,
+          ...(inventoryId ? { id: inventoryId } : {}),
+        };
+        const [totalInventoryCount, inventories] = await Promise.all([
+          em.count(Inventory, inventoryWhere),
+          em.find(Inventory, inventoryWhere, {
             orderBy: { name: 'ASC' },
             limit: take,
             refresh: true,
-          },
-        );
+          }),
+        ]);
 
         const inventoryIds = inventories.map((inventory) => inventory.id);
-        const stockRecords = inventoryIds.length
-          ? await em.find(
-              StockQuantity,
-              { inventory: { id: { $in: inventoryIds } } },
-              { populate: ['inventory', 'product'], refresh: true },
-            )
-          : [];
-
-        return inventories.map((inventory) => {
-          const records = stockRecords.filter(
-            (record) => record.inventory.id === inventory.id,
-          );
-          return {
-            id: inventory.id,
-            name: inventory.name,
-            address: inventory.address,
-            productCount: records.length,
-            totalQuantity: records.reduce(
-              (sum, record) => sum + (record.quantity ?? 0),
-              0,
-            ),
-            lowStockProducts: records
-              .filter(
-                (record) =>
-                  (record.quantity ?? 0) > 0 && (record.quantity ?? 0) <= 10,
+        const [
+          totalStockRecordCount,
+          lowStockCount,
+          outOfStockCount,
+          stockRecords,
+        ] = await Promise.all([
+          em.count(StockQuantity, { inventory: inventoryWhere }),
+          em.count(StockQuantity, {
+            inventory: inventoryWhere,
+            quantity: { $gt: 0, $lte: 10 },
+          }),
+          em.count(StockQuantity, {
+            inventory: inventoryWhere,
+            quantity: 0,
+          }),
+          inventoryIds.length
+            ? em.find(
+                StockQuantity,
+                {
+                  inventory: {
+                    id: { $in: inventoryIds },
+                    store: storeWhere,
+                  },
+                  product: { store: storeWhere },
+                },
+                { populate: ['inventory', 'product'], refresh: true },
               )
-              .map((record) => ({
-                id: record.product.id,
-                name: record.product.name,
-                quantity: record.quantity ?? 0,
-              })),
-            outOfStockProducts: records
-              .filter((record) => (record.quantity ?? 0) === 0)
-              .map((record) => ({
-                id: record.product.id,
-                name: record.product.name,
-                quantity: 0,
-              })),
-          };
-        });
+            : Promise.resolve([]),
+        ]);
+
+        return {
+          scope,
+          totalInventoryCount,
+          totalStockRecordCount,
+          lowStockCount,
+          outOfStockCount,
+          returnedInventoryCount: inventories.length,
+          inventories: inventories.map((inventory) => {
+            const records = stockRecords.filter(
+              (record) => record.inventory.id === inventory.id,
+            );
+            return {
+              id: inventory.id,
+              name: inventory.name,
+              address: inventory.address,
+              productCount: records.length,
+              totalQuantity: records.reduce(
+                (sum, record) => sum + (record.quantity ?? 0),
+                0,
+              ),
+              lowStockProducts: records
+                .filter(
+                  (record) =>
+                    (record.quantity ?? 0) > 0 && (record.quantity ?? 0) <= 10,
+                )
+                .map((record) => ({
+                  id: record.product.id,
+                  name: record.product.name,
+                  quantity: record.quantity ?? 0,
+                })),
+              outOfStockProducts: records
+                .filter((record) => (record.quantity ?? 0) === 0)
+                .map((record) => ({
+                  id: record.product.id,
+                  name: record.product.name,
+                  quantity: 0,
+                })),
+            };
+          }),
+        };
       },
     }),
 
@@ -280,6 +319,7 @@ export function createAiAssistantTools({
               Sale,
               {
                 id: { $in: saleIds },
+                store: storeWhere,
                 createdAt: { $gte: bounds.from, $lte: bounds.to },
               },
               {
@@ -323,6 +363,7 @@ export function createAiAssistantTools({
         }
 
         return {
+          scope,
           from: bounds.from.toISOString(),
           to: bounds.to.toISOString(),
           count: sales.length,
@@ -361,6 +402,7 @@ export function createAiAssistantTools({
 
         if (!purchaseIds.length) {
           return {
+            scope,
             from: bounds.from.toISOString(),
             to: bounds.to.toISOString(),
             count: 0,
@@ -373,7 +415,7 @@ export function createAiAssistantTools({
         const purchases = await em.find(
           Purchase,
           {
-            store,
+            store: storeWhere,
             id: { $in: purchaseIds },
             createdAt: { $gte: bounds.from, $lte: bounds.to },
           },
@@ -393,6 +435,7 @@ export function createAiAssistantTools({
         );
 
         return {
+          scope,
           from: bounds.from.toISOString(),
           to: bounds.to.toISOString(),
           count: purchases.length,
@@ -440,7 +483,7 @@ export function createAiAssistantTools({
           ),
         ]);
 
-        const where: Record<string, any> = { store };
+        const where: Record<string, any> = { store: storeWhere };
         if (query?.trim()) {
           const q = `%${query.trim()}%`;
           where.$or = [{ name: { $ilike: q } }, { phone: { $ilike: q } }];
@@ -452,14 +495,22 @@ export function createAiAssistantTools({
           refresh: true,
         });
 
-        return Promise.all(
+        const customerResults = await Promise.all(
           customers.map(async (customer) => {
             const [saleCount, purchaseCount] = await Promise.all([
               saleIds.length
-                ? em.count(Sale, { store, customer, id: { $in: saleIds } })
+                ? em.count(Sale, {
+                    store: storeWhere,
+                    customer,
+                    id: { $in: saleIds },
+                  })
                 : Promise.resolve(0),
               purchaseIds.length
-                ? em.count(Purchase, { store, customer, id: { $in: purchaseIds } })
+                ? em.count(Purchase, {
+                    store: storeWhere,
+                    customer,
+                    id: { $in: purchaseIds },
+                  })
                 : Promise.resolve(0),
             ]);
 
@@ -474,6 +525,7 @@ export function createAiAssistantTools({
             };
           }),
         );
+        return { scope, customers: customerResults };
       },
     }),
 
@@ -487,7 +539,11 @@ export function createAiAssistantTools({
         const take = clampToolLimit(limit);
         const sessions = await em.find(
           StoreSession,
-          { store, openedBy: { id: employeeId }, closedAt: null },
+          {
+            store: storeWhere,
+            openedBy: { id: employeeId, store: storeWhere },
+            closedAt: null,
+          },
           {
             populate: ['openedBy', 'payments', 'cashMovements'],
             orderBy: { openedAt: 'DESC' },
@@ -496,34 +552,38 @@ export function createAiAssistantTools({
           },
         );
 
-        return sessions.map((session) => ({
-          id: session.id,
-          openedBy: session.openedBy
-            ? {
-                id: session.openedBy.id,
-                name: getEmployeeFullName(session.openedBy),
-                email: session.openedBy.email,
-              }
-            : null,
-          openingAmount: session.openingAmount ?? 0,
-          openedAt: session.openedAt,
-          paymentTotal: session.payments
-            .getItems()
-            .reduce((sum, payment) => sum + (payment.amount ?? 0), 0),
-          cashIn: session.cashMovements
-            .getItems()
-            .filter((movement) => movement.type === 'cash_in')
-            .reduce((sum, movement) => sum + (movement.amount ?? 0), 0),
-          cashOut: session.cashMovements
-            .getItems()
-            .filter((movement) => movement.type === 'cash_out')
-            .reduce((sum, movement) => sum + (movement.amount ?? 0), 0),
-        }));
+        return {
+          scope,
+          sessions: sessions.map((session) => ({
+            id: session.id,
+            openedBy: session.openedBy
+              ? {
+                  id: session.openedBy.id,
+                  name: getEmployeeFullName(session.openedBy),
+                  email: session.openedBy.email,
+                }
+              : null,
+            openingAmount: session.openingAmount ?? 0,
+            openedAt: session.openedAt,
+            paymentTotal: session.payments
+              .getItems()
+              .reduce((sum, payment) => sum + (payment.amount ?? 0), 0),
+            cashIn: session.cashMovements
+              .getItems()
+              .filter((movement) => movement.type === 'cash_in')
+              .reduce((sum, movement) => sum + (movement.amount ?? 0), 0),
+            cashOut: session.cashMovements
+              .getItems()
+              .filter((movement) => movement.type === 'cash_out')
+              .reduce((sum, movement) => sum + (movement.amount ?? 0), 0),
+          })),
+        };
       },
     }),
 
     getAuditActivity: tool({
-      description: 'Get recent audit activity for the current logged-in employee.',
+      description:
+        'Get recent audit activity for the current logged-in employee.',
       inputSchema: rangeSchema.extend({
         limit: z.number().optional(),
       }),
@@ -533,7 +593,7 @@ export function createAiAssistantTools({
         const logs = await em.find(
           AuditLog,
           {
-            employee: { id: employeeId, store },
+            employee: { id: employeeId, store: storeWhere },
             createdAt: { $gte: bounds.from, $lte: bounds.to },
           },
           {
@@ -544,15 +604,18 @@ export function createAiAssistantTools({
           },
         );
 
-        return logs.map((log) => ({
-          id: log.id,
-          employeeId: log.employee.id,
-          employeeName: getEmployeeFullName(log.employee),
-          actionType: log.actionType,
-          entityType: log.entityType,
-          entityId: log.entityId,
-          createdAt: log.createdAt,
-        }));
+        return {
+          scope,
+          activity: logs.map((log) => ({
+            id: log.id,
+            employeeId: log.employee.id,
+            employeeName: getEmployeeFullName(log.employee),
+            actionType: log.actionType,
+            entityType: log.entityType,
+            entityId: log.entityId,
+            createdAt: log.createdAt,
+          })),
+        };
       },
     }),
   };
@@ -629,8 +692,11 @@ async function getEmployeeSaleIdsByRange(
   const payments = await em.find(
     Payment,
     {
-      sale: { store },
-      storeSession: { store, openedBy: { id: employeeId } },
+      sale: { store: { id: store.id } },
+      storeSession: {
+        store: { id: store.id },
+        openedBy: { id: employeeId, store: { id: store.id } },
+      },
       ...(bounds ? { createdAt: { $gte: bounds.from, $lte: bounds.to } } : {}),
     },
     { populate: ['sale'], refresh: true },
@@ -655,21 +721,17 @@ async function getEmployeeCreatedEntityIds(
   const logs = await em.find(
     AuditLog,
     {
-      employee: { id: employeeId, store },
+      employee: { id: employeeId, store: { id: store.id } },
       entityType,
       actionType: AuditActionType.Create,
-      ...(bounds
-        ? { createdAt: { $gte: bounds.from, $lte: bounds.to } }
-        : {}),
+      ...(bounds ? { createdAt: { $gte: bounds.from, $lte: bounds.to } } : {}),
     },
     { refresh: true },
   );
 
   return [
     ...new Set(
-      logs
-        .map((log) => log.entityId)
-        .filter((id): id is string => Boolean(id)),
+      logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)),
     ),
   ];
 }

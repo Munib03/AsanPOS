@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../shared/guards/role.guard';
@@ -8,6 +16,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import type { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -16,15 +25,12 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.paymentService.findAll(store);
+  findAll(@CurrentStore() store: Store, @Query() query: PaginateQuery) {
+    return this.paymentService.findAll(store, query);
   }
 
   @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
+  findOne(@CurrentStore() store: Store, @Param('id') id: string) {
     return this.paymentService.findOne(store, id);
   }
 

@@ -95,8 +95,9 @@ export class AiAssistantService {
     threadId?: string,
   ): Promise<AiAssistantStreamResponse> {
     const prompt = this.validateQuestion(question);
+    const verifiedStore = await this.getVerifiedStore(store.id, employeeId);
     const { thread, userMessage, messages } = await this.prepareChatTurn(
-      store,
+      verifiedStore,
       employeeId,
       prompt,
       threadId,
@@ -113,7 +114,7 @@ export class AiAssistantService {
       tools: createAiAssistantTools({
         dashboardService: this.dashboardService,
         em: this.em,
-        store,
+        store: verifiedStore,
         employeeId,
       }),
     });
@@ -397,6 +398,20 @@ export class AiAssistantService {
     const prompt = question?.trim();
     if (!prompt) throw new BadRequestException('question is required');
     return prompt;
+  }
+
+  private async getVerifiedStore(
+    requestedStoreId: string,
+    employeeId: string,
+  ): Promise<Store> {
+    const employee = await this.em.findOne(
+      Employee,
+      { id: employeeId, store: { id: requestedStoreId } },
+      { populate: ['store'], refresh: true },
+    );
+    if (!employee) throw new NotFoundException('Employee or store not found');
+
+    return employee.store;
   }
 
   private createOpenCodeProvider() {

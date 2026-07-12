@@ -13,6 +13,8 @@ import { OpenSessionDto } from './dto/open-session.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { findAndPaginate } from '../shared/utils/pagination';
 
 @Injectable()
 export class StoreSessionService {
@@ -21,30 +23,35 @@ export class StoreSessionService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(store: Store) {
-    return this.em.findAll(StoreSession, {
-      where: { store },
-      populate: ['openedBy', 'closedBy'],
-      fields: [
-        'id',
-        'openingAmount',
-        'openingNote',
-        'closingAmount',
-        'expectedAmount',
-        'closingNote',
-        'openedAt',
-        'closedAt',
-        'openedBy.id',
-        'openedBy.firstName',
-        'openedBy.lastName',
-        'openedBy.email',
-        'closedBy.id',
-        'closedBy.firstName',
-        'closedBy.lastName',
-        'closedBy.email',
-      ],
-      orderBy: { openedAt: 'DESC' },
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    return findAndPaginate(
+      this.em,
+      StoreSession,
+      { store },
+      {
+        populate: ['openedBy', 'closedBy'],
+        fields: [
+          'id',
+          'openingAmount',
+          'openingNote',
+          'closingAmount',
+          'expectedAmount',
+          'closingNote',
+          'openedAt',
+          'closedAt',
+          'openedBy.id',
+          'openedBy.firstName',
+          'openedBy.lastName',
+          'openedBy.email',
+          'closedBy.id',
+          'closedBy.firstName',
+          'closedBy.lastName',
+          'closedBy.email',
+        ],
+        orderBy: { openedAt: 'DESC' },
+      },
+      query,
+    );
   }
 
   async findOne(store: Store, id: string) {

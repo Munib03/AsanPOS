@@ -1,11 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Sale } from '../database/entites/sale.entity';
 import { Store } from '../database/entites/store.entity';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
-import { PurchasedItem } from '../database/entites/purchased_item.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
-import { Payment } from '../database/entites/payments.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
 import {
   CashierStats,
@@ -14,7 +11,6 @@ import {
   DashboardRange,
   DashboardStats,
 } from './dto/dashboard.dto';
-import { SaleItem } from '../database/entites/sale-item.entity';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 
 type RangeBounds = {
@@ -22,6 +18,19 @@ type RangeBounds = {
   currentEnd: Date;
   previousStart: Date;
   previousEnd: Date;
+};
+
+type DashboardSaleItem = {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+type DashboardSale = {
+  id: string;
+  createdAt?: Date;
+  items: DashboardSaleItem[];
 };
 
 const startOfUtcDay = (date: Date): Date => {
@@ -98,15 +107,10 @@ export class DashboardService {
       range === DashboardRange.MONTHLY ||
       range === DashboardRange.CUSTOM;
 
-    const findSales = (gte: Date, lte: Date) =>
-      this.em.find(
-        Sale,
-        { store, createdAt: { $gte: gte, $lte: lte } },
-        { populate: ['items', 'items.product'], refresh: true },
-      );
-
-    const currentSales = await findSales(currentStart, currentEnd);
-    const previousSales = await findSales(previousStart, previousEnd);
+    const [currentSales, previousSales] = await Promise.all([
+      this.findDashboardSales(store.id, currentStart, currentEnd),
+      this.findDashboardSales(store.id, previousStart, previousEnd),
+    ]);
 
     const currentTotalSales = this.calcTotalSales(currentSales);
     const previousTotalSales = this.calcTotalSales(previousSales);
@@ -118,19 +122,21 @@ export class DashboardService {
     const productIds = [
       ...new Set(
         [...currentSales, ...previousSales].flatMap((s) =>
-          s.items.getItems().map((i) => i.product.id),
+          s.items.map((i) => i.productId),
         ),
       ),
     ];
-    const costPriceMap = await this.buildSaleItemCostMap(
-      store,
-      productIds,
-      currentEnd,
-    );
-
-    const cashierBreakdown = includeCashierBreakdown
-      ? await this.getCashierBreakdown(store, currentStart, currentEnd)
-      : [];
+    const [costPriceMap, cashierBreakdown] = await Promise.all([
+      this.buildSaleItemCostMap(store, productIds, currentEnd),
+      includeCashierBreakdown
+        ? this.getCashierBreakdown(
+            store,
+            currentStart,
+            currentEnd,
+            currentSales,
+          )
+        : Promise.resolve([]),
+    ]);
 
     const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
     const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
@@ -173,33 +179,47 @@ export class DashboardService {
         quantity: 0,
       };
 
-      const [lowStockTotal, outOfStockTotal] = await Promise.all([
+      const [
+        lowStockTotal,
+        outOfStockTotal,
+        lowStockRecords,
+        outOfStockRecords,
+      ] = await Promise.all([
         this.em.count(StockQuantity, lowStockBaseWhere),
         this.em.count(StockQuantity, outOfStockBaseWhere),
-      ]);
-
-      const lowStockRecords = await this.em.find(
-        StockQuantity,
-        lowStockBaseWhere,
-        {
+        this.em.find(StockQuantity, lowStockBaseWhere, {
           populate: ['product', 'inventory'],
+          fields: [
+            'id',
+            'quantity',
+            'product.id',
+            'product.name',
+            'product.price',
+            'inventory.id',
+            'inventory.name',
+          ],
           refresh: true,
           orderBy: { quantity: 'ASC', id: 'ASC' },
           limit: lowStockPageSize,
           offset: (lowStockPage - 1) * lowStockPageSize,
-        },
-      );
-      const outOfStockRecords = await this.em.find(
-        StockQuantity,
-        outOfStockBaseWhere,
-        {
+        }),
+        this.em.find(StockQuantity, outOfStockBaseWhere, {
           populate: ['product', 'inventory'],
+          fields: [
+            'id',
+            'quantity',
+            'product.id',
+            'product.name',
+            'product.price',
+            'inventory.id',
+            'inventory.name',
+          ],
           refresh: true,
           orderBy: { id: 'ASC' },
           limit: outOfStockPageSize,
           offset: (outOfStockPage - 1) * outOfStockPageSize,
-        },
-      );
+        }),
+      ]);
 
       response.lowStockProducts = {
         items: lowStockRecords.map(this.toStockSummary),
@@ -276,6 +296,7 @@ export class DashboardService {
     store: Store,
     currentStart: Date,
     currentEnd: Date,
+    sales: DashboardSale[],
   ): Promise<CashierStats[]> {
     const sessions = await this.em.find(
       StoreSession,
@@ -295,33 +316,34 @@ export class DashboardService {
     );
     if (sessions.length === 0) return [];
 
-    const sales = await this.em.find(
-      Sale,
-      { store, createdAt: { $gte: currentStart, $lte: currentEnd } },
-      { populate: ['items'], refresh: true },
-    );
     const saleIds = sales.map((s) => s.id);
     const payments = saleIds.length
-      ? await this.em.find(
-          Payment,
-          { sale: { id: { $in: saleIds } }, storeSession: { store } },
-          { populate: ['sale', 'storeSession'], refresh: true },
-        )
+      ? await this.em
+          .getKnex()('payments as payment')
+          .join(
+            'store_session as session',
+            'session.id',
+            'payment.store_session_id',
+          )
+          .where('session.store_id', store.id)
+          .whereIn('payment.sale_id', saleIds)
+          .select(
+            'payment.sale_id as saleId',
+            'payment.store_session_id as sessionId',
+          )
       : [];
 
     const saleById = new Map(sales.map((s) => [s.id, s]));
-    const salesBySessionId = new Map<string, Map<string, Sale>>();
+    const salesBySessionId = new Map<string, Map<string, DashboardSale>>();
     for (const payment of payments) {
-      if (!payment.sale || !payment.storeSession) continue;
-
-      const sale = saleById.get(payment.sale.id);
+      const sale = saleById.get(payment.saleId);
       if (!sale) continue;
 
       const bucket =
-        salesBySessionId.get(payment.storeSession.id) ??
-        new Map<string, Sale>();
+        salesBySessionId.get(payment.sessionId) ??
+        new Map<string, DashboardSale>();
       bucket.set(sale.id, sale);
-      salesBySessionId.set(payment.storeSession.id, bucket);
+      salesBySessionId.set(payment.sessionId, bucket);
     }
 
     return sessions
@@ -385,12 +407,12 @@ export class DashboardService {
 
   private async buildDailyBreakdown(
     store: Store,
-    sales: Sale[],
+    sales: DashboardSale[],
     costPriceMap: Map<string, number>,
     start: Date,
     end: Date,
   ): Promise<DailyStats[]> {
-    const salesByDay = new Map<string, Sale[]>();
+    const salesByDay = new Map<string, DashboardSale[]>();
     for (const sale of sales) {
       if (!sale.createdAt) continue;
 
@@ -487,16 +509,53 @@ export class DashboardService {
     return days;
   }
 
-  private calcTotalSales(sales: Sale[]): number {
+  private async findDashboardSales(
+    storeId: string,
+    from: Date,
+    to: Date,
+  ): Promise<DashboardSale[]> {
+    const rows = await this.em
+      .getKnex()('sale as sale')
+      .leftJoin('sale_items as item', 'item.sale_id', 'sale.id')
+      .where('sale.store_id', storeId)
+      .whereBetween('sale.created_at', [from, to])
+      .orderBy('sale.created_at', 'asc')
+      .select(
+        'sale.id as saleId',
+        'sale.created_at as createdAt',
+        'item.id as itemId',
+        'item.product_id as productId',
+        'item.quantity',
+        'item.unit_price as unitPrice',
+      );
+
+    const salesById = new Map<string, DashboardSale>();
+    for (const row of rows) {
+      const sale: DashboardSale = salesById.get(row.saleId) ?? {
+        id: row.saleId,
+        createdAt: row.createdAt ? new Date(row.createdAt) : undefined,
+        items: [],
+      };
+
+      if (row.itemId) {
+        sale.items.push({
+          id: row.itemId,
+          productId: row.productId,
+          quantity: Number(row.quantity ?? 0),
+          unitPrice: Number(row.unitPrice ?? 0),
+        });
+      }
+      salesById.set(sale.id, sale);
+    }
+
+    return [...salesById.values()];
+  }
+
+  private calcTotalSales(sales: DashboardSale[]): number {
     return sales.reduce(
       (sum, sale) =>
         sum +
-        sale.items
-          .getItems()
-          .reduce(
-            (s, item) => s + (item.quantity ?? 0) * (item.unitPrice ?? 0),
-            0,
-          ),
+        sale.items.reduce((s, item) => s + item.quantity * item.unitPrice, 0),
       0,
     );
   }
@@ -509,54 +568,64 @@ export class DashboardService {
     const costBySaleItemId = new Map<string, number>();
     if (productIds.length === 0) return costBySaleItemId;
 
-    const purchasedItems = await this.em.find(
-      PurchasedItem,
-      {
-        product: { id: { $in: productIds } },
-        purchase: { store },
-        createdAt: { $lte: upTo },
-      },
-      { orderBy: { createdAt: 'ASC' }, refresh: true },
-    );
+    const purchasedItems = await this.em
+      .getKnex()('purchased_items as item')
+      .join('purchase', 'purchase.id', 'item.purchase_id')
+      .where('purchase.store_id', store.id)
+      .whereIn('item.product_id', productIds)
+      .where('item.created_at', '<=', upTo)
+      .orderBy('item.created_at', 'asc')
+      .select(
+        'item.product_id as productId',
+        'item.quantity',
+        'item.unit_price as unitPrice',
+      );
 
     const batchesByProduct = new Map<
       string,
       { remaining: number; unitPrice: number }[]
     >();
     for (const pi of purchasedItems) {
-      const list = batchesByProduct.get(pi.product.id) ?? [];
-      list.push({ remaining: pi.quantity, unitPrice: pi.unitPrice });
-      batchesByProduct.set(pi.product.id, list);
+      const list = batchesByProduct.get(pi.productId) ?? [];
+      list.push({
+        remaining: Number(pi.quantity),
+        unitPrice: Number(pi.unitPrice),
+      });
+      batchesByProduct.set(pi.productId, list);
     }
+    const nextBatchByProduct = new Map<string, number>();
 
-    const saleItems = await this.em.find(
-      SaleItem,
-      {
-        product: { id: { $in: productIds } },
-        sale: { store, createdAt: { $lte: upTo } },
-      },
-      {
-        populate: ['sale', 'product'],
-        orderBy: { sale: { createdAt: 'ASC' } },
-        refresh: true,
-      },
-    );
+    const saleItems = await this.em
+      .getKnex()('sale_items as item')
+      .join('sale', 'sale.id', 'item.sale_id')
+      .where('sale.store_id', store.id)
+      .whereIn('item.product_id', productIds)
+      .where('sale.created_at', '<=', upTo)
+      .orderBy('sale.created_at', 'asc')
+      .select('item.id', 'item.product_id as productId', 'item.quantity');
 
     for (const item of saleItems) {
-      const batches = batchesByProduct.get(item.product.id) ?? [];
-      let qtyToConsume = item.quantity ?? 0;
+      const batches = batchesByProduct.get(item.productId) ?? [];
+      let batchIndex = nextBatchByProduct.get(item.productId) ?? 0;
+      let qtyToConsume = Number(item.quantity);
       let totalCost = 0;
 
-      for (const batch of batches) {
+      while (batchIndex < batches.length && qtyToConsume > 0) {
+        const batch = batches[batchIndex];
         if (qtyToConsume <= 0) break;
-        if (batch.remaining <= 0) continue;
+        if (batch.remaining <= 0) {
+          batchIndex += 1;
+          continue;
+        }
         const take = Math.min(batch.remaining, qtyToConsume);
         totalCost += take * batch.unitPrice;
         batch.remaining -= take;
         qtyToConsume -= take;
+        if (batch.remaining <= 0) batchIndex += 1;
       }
+      nextBatchByProduct.set(item.productId, batchIndex);
 
-      const consumedQty = (item.quantity ?? 0) - qtyToConsume;
+      const consumedQty = Number(item.quantity) - qtyToConsume;
 
       if (consumedQty > 0 && qtyToConsume === 0) {
         costBySaleItemId.set(item.id, totalCost / consumedQty);
@@ -567,7 +636,7 @@ export class DashboardService {
   }
 
   private calcTotalProfit(
-    sales: Sale[],
+    sales: DashboardSale[],
     costBySaleItemId: Map<string, number>,
   ): number {
     let hasMissingCost = false;
@@ -575,9 +644,8 @@ export class DashboardService {
     const profit = sales.reduce(
       (sum, sale) =>
         sum +
-        sale.items.getItems().reduce((s, item) => {
-          const basePrice =
-            (item.unitPrice ?? 0) / (1 + DashboardService.TAX_RATE);
+        sale.items.reduce((s, item) => {
+          const basePrice = item.unitPrice / (1 + DashboardService.TAX_RATE);
           const costPrice = costBySaleItemId.get(item.id);
 
           if (costPrice === undefined) {
@@ -585,7 +653,7 @@ export class DashboardService {
             return s;
           }
 
-          return s + (basePrice - costPrice) * (item.quantity ?? 0);
+          return s + (basePrice - costPrice) * item.quantity;
         }, 0),
       0,
     );

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { CashMovement } from '../database/entites/cash-movement.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
@@ -8,6 +12,8 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { findAndPaginate } from '../shared/utils/pagination';
 
 @Injectable()
 export class CashMovementService {
@@ -16,12 +22,17 @@ export class CashMovementService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(store: Store) {
-    return this.em.findAll(CashMovement, {
-      where: { storeSession: { store } },
-      populate: ['storeSession', 'createdBy'],
-      orderBy: { createdAt: 'DESC' },
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    return findAndPaginate(
+      this.em,
+      CashMovement,
+      { storeSession: { store } },
+      {
+        populate: ['storeSession', 'createdBy'],
+        orderBy: { createdAt: 'DESC' },
+      },
+      query,
+    );
   }
 
   async findOne(store: Store, id: string) {
@@ -44,11 +55,12 @@ export class CashMovementService {
     });
 
     if (!session)
-      throw new BadRequestException('No active session found. Please open a session first.');
+      throw new BadRequestException(
+        'No active session found. Please open a session first.',
+      );
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const cashMovement = this.em.create(CashMovement, {
       storeSession: session,
@@ -68,11 +80,14 @@ export class CashMovementService {
       cashMovement.id,
       AuditActionType.Create,
       null,
-      null
+      null,
     );
 
     await this.em.flush();
 
-    return { message: 'Cash movement created successfully.', id: cashMovement.id };
+    return {
+      message: 'Cash movement created successfully.',
+      id: cashMovement.id,
+    };
   }
 }

@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { StockInService } from './stock-in.service';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../shared/guards/role.guard';
@@ -9,23 +18,21 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { CreateStockInDto } from './dto/create-stock-in.dto';
 import { UpdateStockInDto } from './dto/update-stock-in.dto';
+import type { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('stock-in')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class StockInController {
-  constructor(private readonly stockInService: StockInService) { }
+  constructor(private readonly stockInService: StockInService) {}
 
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.stockInService.findAll(store);
+  findAll(@CurrentStore() store: Store, @Query() query: PaginateQuery) {
+    return this.stockInService.findAll(store, query);
   }
 
   @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
+  findOne(@CurrentStore() store: Store, @Param('id') id: string) {
     return this.stockInService.findOne(store, id);
   }
 

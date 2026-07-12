@@ -87,51 +87,12 @@ export class AuditService {
       this.em.find(
         StockIn,
         { inventory: { id: entityId } },
-        {
-          populate: [
-            'inventory',
-            'purchase',
-            'sequence',
-            'items',
-            'items.product',
-          ],
-          fields: [
-            'id',
-            'status',
-            'createdAt',
-            'inventory.id',
-            'inventory.name',
-            'purchase.id',
-            'sequence.prefix',
-            'sequence.lastIndex',
-            'items.id',
-            'items.quantity',
-            'items.product.id',
-            'items.product.name',
-          ],
-        },
+        { fields: ['id'] },
       ),
       this.em.find(
         StockOut,
         { inventory: { id: entityId } },
-        {
-          populate: ['inventory', 'sale', 'sequence', 'items', 'items.product'],
-          fields: [
-            'id',
-            'status',
-            'createdAt',
-            'inventory.id',
-            'inventory.name',
-            'sale.id',
-            'sale.status',
-            'sequence.prefix',
-            'sequence.lastIndex',
-            'items.id',
-            'items.quantity',
-            'items.product.id',
-            'items.product.name',
-          ],
-        },
+        { fields: ['id'] },
       ),
     ]);
 
@@ -162,8 +123,50 @@ export class AuditService {
       query,
     );
 
-    const stockInById = new Map(stockIns.map((s) => [s.id, s]));
-    const stockOutById = new Map(stockOuts.map((s) => [s.id, s]));
+    const pageStockInIds = logs
+      .filter((log) => log.entityType === AuditEntityType.StockIn)
+      .map((log) => log.entityId)
+      .filter((id): id is string => Boolean(id));
+    const pageStockOutIds = logs
+      .filter((log) => log.entityType === AuditEntityType.StockOut)
+      .map((log) => log.entityId)
+      .filter((id): id is string => Boolean(id));
+
+    const [pageStockIns, pageStockOuts] = await Promise.all([
+      pageStockInIds.length
+        ? this.em.find(
+            StockIn,
+            { id: { $in: pageStockInIds } },
+            {
+              populate: [
+                'inventory',
+                'purchase',
+                'sequence',
+                'items',
+                'items.product',
+              ],
+            },
+          )
+        : Promise.resolve([]),
+      pageStockOutIds.length
+        ? this.em.find(
+            StockOut,
+            { id: { $in: pageStockOutIds } },
+            {
+              populate: [
+                'inventory',
+                'sale',
+                'sequence',
+                'items',
+                'items.product',
+              ],
+            },
+          )
+        : Promise.resolve([]),
+    ]);
+
+    const stockInById = new Map(pageStockIns.map((s) => [s.id, s]));
+    const stockOutById = new Map(pageStockOuts.map((s) => [s.id, s]));
 
     const seenLogIds = new Set<string>();
 

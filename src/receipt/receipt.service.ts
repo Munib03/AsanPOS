@@ -3,19 +3,24 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { Receipt } from '../database/entites/receipt.entity';
 import { Store } from '../database/entites/store.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
-
+import { PaginateQuery } from '../shared/types/paginate-query.types';
+import { findAndPaginate } from '../shared/utils/pagination';
 
 @Injectable()
 export class ReceiptService {
   constructor(private readonly em: EntityManager) {}
 
-  async findAll(store: Store) {
-    return this.em.findAll(Receipt, {
-      where: { store },
-      orderBy: { createdAt: 'DESC' },
-    });
+  async findAll(store: Store, query: PaginateQuery) {
+    return findAndPaginate(
+      this.em,
+      Receipt,
+      { store },
+      {
+        orderBy: { createdAt: 'DESC' },
+      },
+      query,
+    );
   }
-
 
   async findOne(store: Store, id: string) {
     const receipt = await this.em.findOne(Receipt, { id, store });
@@ -24,7 +29,6 @@ export class ReceiptService {
 
     return receipt;
   }
-
 
   async create(
     em: EntityManager,
