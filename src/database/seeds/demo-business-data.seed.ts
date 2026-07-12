@@ -82,7 +82,8 @@ export async function seed(knex: Knex): Promise<void> {
   const categoryProducts = buildCategoryProducts(products, categories);
   await insertChunks(knex, 'category_product', categoryProducts);
 
-  const customers = buildCustomers(storeId, now);
+  const nextCustomerPhone = await getNextCustomerPhoneIndex(knex);
+  const customers = await buildCustomers(storeId, now, nextCustomerPhone);
   await insertChunks(knex, 'customer', customers);
 
   const purchaseSequences = buildSequences(
@@ -512,12 +513,38 @@ function buildSequences(
   }));
 }
 
-function buildCustomers(storeId: string, now: Date) {
+async function getNextCustomerPhoneIndex(knex: Knex): Promise<number> {
+  const rows = await knex('customer')
+    .where('phone', 'like', '0799%')
+    .select('phone');
+
+  let maxSuffix = 0;
+
+  for (const row of rows) {
+    const phone = row.phone as string | null;
+    if (!phone) continue;
+    const match = /^0799(\d+)$/.exec(phone.trim());
+    if (!match) continue;
+
+    const suffix = Number(match[1]);
+    if (!Number.isNaN(suffix) && suffix > maxSuffix) {
+      maxSuffix = suffix;
+    }
+  }
+
+  return maxSuffix + 1;
+}
+
+function buildCustomers(
+  storeId: string,
+  now: Date,
+  startPhoneIndex: number,
+) {
   return Array.from({ length: CUSTOMER_COUNT }, (_, index) => ({
     id: uuidv4(),
     name: `Seed Customer ${index + 1}`,
     address: `Seed Customer Address ${index + 1}`,
-    phone: `0799${String(index + 1).padStart(6, '0')}`,
+    phone: `0799${String(startPhoneIndex + index).padStart(6, '0')}`,
     store_id: storeId,
     payable_id: null,
     receivable_id: null,
