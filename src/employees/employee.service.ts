@@ -20,12 +20,10 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
-import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 
 export interface EmployeeDetail {
   id: string;
   email: string;
-  fullName: string;
   firstName: string | null;
   lastName: string | null;
   phone: string | null;
@@ -92,7 +90,6 @@ export class EmployeeService {
     return {
       id: employee.id,
       email: employee.email,
-      fullName: getEmployeeFullName(employee),
       firstName: employee.firstName ?? null,
       lastName: employee.lastName ?? null,
       phone: employee.phone ?? null,
@@ -170,7 +167,6 @@ export class EmployeeService {
       message: 'Employee registered successfully',
       firstName: employee.firstName,
       lastName: employee.lastName,
-      fullName: getEmployeeFullName(employee),
       email: employee.email,
     };
   }
@@ -326,7 +322,6 @@ export class EmployeeService {
         id: employee.id,
         firstName: employee.firstName,
         lastName: employee.lastName,
-        fullName: getEmployeeFullName(employee),
         email: employee.email,
         phone: employee.phone,
       };
@@ -336,7 +331,6 @@ export class EmployeeService {
       id: employee.id,
       firstName: employee.firstName,
       lastName: employee.lastName,
-      fullName: getEmployeeFullName(employee),
       email: employee.email,
       phone: employee.phone,
     };

@@ -102,16 +102,6 @@ export class AiAssistantService {
       threadId,
     );
 
-    if (!this.isInScopeQuestion(prompt)) {
-      return {
-        threadId: thread.id,
-        userMessageId: userMessage.id,
-        textStream: this.createStaticTextStream(
-          'I can only help with AsanPOS, sales, inventory, customers, purchases, reports, cashier sessions, and store operations.',
-        ),
-      };
-    }
-
     const openCode = this.createOpenCodeProvider();
     const model = this.getModelName();
 
@@ -407,54 +397,6 @@ export class AiAssistantService {
     const prompt = question?.trim();
     if (!prompt) throw new BadRequestException('question is required');
     return prompt;
-  }
-
-  private isInScopeQuestion(prompt: string): boolean {
-    const normalized = prompt.toLowerCase();
-    const inScopeKeywords = [
-      'asanpos',
-      'pos',
-      'point of sale',
-      'store',
-      'business',
-      'sales',
-      'sale',
-      'profit',
-      'revenue',
-      'cashier',
-      'session',
-      'stock',
-      'inventory',
-      'product',
-      'purchase',
-      'customer',
-      'supplier',
-      'payment',
-      'receipt',
-      'report',
-      'dashboard',
-      'category',
-      'barcode',
-      'journal',
-      'account',
-      'cash',
-      'low stock',
-      'out of stock',
-      'refund',
-      'invoice',
-      'thread',
-      'chat',
-      'help',
-      'how do i',
-      'how can i',
-      'what can you do',
-    ];
-
-    return inScopeKeywords.some((keyword) => normalized.includes(keyword));
-  }
-
-  private async *createStaticTextStream(text: string): AsyncIterable<string> {
-    yield text;
   }
 
   private createOpenCodeProvider() {
