@@ -24,7 +24,7 @@ export class Employee {
   @Property({ unique: true })
   email!: string;
 
-  @Property()
+  @Property({ hidden: true })
   password!: string;
 
   @Property({ nullable: true })

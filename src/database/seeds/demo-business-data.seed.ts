@@ -8,6 +8,8 @@ const INVENTORY_COUNT = 100;
 const CUSTOMER_COUNT = 100;
 const CATEGORY_COUNT = 20;
 const SEED_PREFIX = 'seed-demo';
+const SEED_EMPLOYEE_ID = process.env.SEED_EMPLOYEE_ID?.trim();
+const SEED_STORE_ID = process.env.SEED_STORE_ID?.trim();
 
 type ProductSeed = {
   id: string;
@@ -59,10 +61,10 @@ export async function seed(knex: Knex): Promise<void> {
   }
 
   const now = new Date();
-  const storeId = await getOrCreateStore(knex, now);
+  const { storeId, employeeId } = await getOrCreateSeedTarget(knex, now);
 
   const accounts = await createSeedAccounts(knex, now);
-  const sessionId = await createSeedSession(knex, storeId, now);
+  const sessionId = await createSeedSession(knex, storeId, now, employeeId);
 
   const inventories = buildInventories(storeId, now);
   await insertChunks(knex, 'inventory', inventories);
@@ -296,10 +298,42 @@ async function deleteExistingSeedData(knex: Knex): Promise<void> {
     .delete();
 }
 
-async function getOrCreateStore(knex: Knex, now: Date): Promise<string> {
+async function getOrCreateSeedTarget(
+  knex: Knex,
+  now: Date,
+): Promise<{ storeId: string; employeeId?: string }> {
+  if (SEED_EMPLOYEE_ID) {
+    const employee = await knex('employees')
+      .where({ id: SEED_EMPLOYEE_ID, deleted_at: null })
+      .first('id', 'store_id');
+
+    if (!employee) {
+      throw new Error(`Employee ${SEED_EMPLOYEE_ID} not found`);
+    }
+
+    if (!employee.store_id) {
+      throw new Error(`Employee ${SEED_EMPLOYEE_ID} has no store assigned`);
+    }
+
+    return {
+      storeId: employee.store_id,
+      employeeId: employee.id,
+    };
+  }
+
+  if (SEED_STORE_ID) {
+    const store = await knex('stores').where({ id: SEED_STORE_ID }).first('id');
+
+    if (!store) {
+      throw new Error(`Store ${SEED_STORE_ID} not found`);
+    }
+
+    return { storeId: store.id };
+  }
+
   const existingStore = await knex('stores').first('id');
 
-  if (existingStore) return existingStore.id;
+  if (existingStore) return { storeId: existingStore.id };
 
   const accountId = uuidv4();
   const storeSettingsId = uuidv4();
@@ -329,7 +363,7 @@ async function getOrCreateStore(knex: Knex, now: Date): Promise<string> {
     updated_at: now,
   });
 
-  return storeId;
+  return { storeId };
 }
 
 async function createSeedAccounts(knex: Knex, now: Date) {
@@ -360,13 +394,14 @@ async function createSeedSession(
   knex: Knex,
   storeId: string,
   now: Date,
+  employeeId?: string,
 ): Promise<string> {
   const sessionId = uuidv4();
 
   await knex('store_session').insert({
     id: sessionId,
     store_id: storeId,
-    opened_by_emp_id: null,
+    opened_by_emp_id: employeeId ?? null,
     closed_by_emp_id: null,
     opening_amount: 0,
     opening_note: 'Seed demo session',

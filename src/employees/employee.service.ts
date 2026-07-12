@@ -1,4 +1,4 @@
-import { EntityManager, serialize } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/postgresql';
 import {
   BadRequestException,
   Injectable,
@@ -34,6 +34,23 @@ export interface EmployeeDetail {
   storeName: string | null;
   createdAt: Date | null;
 }
+
+type EmployeeDetailProjection = {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  role?: string | null;
+  imageUrl?: string | null;
+  imageUrlSigned?: string | null;
+  dob?: Date | null;
+  gender?: string | null;
+  createdAt?: Date | null;
+  store?: {
+    name?: string | null;
+  } | null;
+};
 
 @Injectable()
 export class EmployeeService {
@@ -76,7 +93,9 @@ export class EmployeeService {
       ],
     });
 
-    return serialize(employees, { forceObject: true });
+    return employees.map((employee) =>
+      this.toEmployeeDetail(employee as EmployeeDetailProjection),
+    );
   }
 
   async findOne(store: Store, id: string): Promise<EmployeeDetail> {
@@ -87,6 +106,12 @@ export class EmployeeService {
     );
     if (!employee) throw new NotFoundException('Employee not found');
 
+    return this.toEmployeeDetail(employee);
+  }
+
+  private toEmployeeDetail(
+    employee: EmployeeDetailProjection,
+  ): EmployeeDetail {
     return {
       id: employee.id,
       email: employee.email,
