@@ -31,11 +31,7 @@ export class AiChatThread {
   @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
 
-  @Property({
-    fieldName: 'updated_at',
-    onUpdate: () => new Date(),
-    nullable: true,
-  })
+  @Property({ fieldName: 'updated_at', nullable: true })
   updatedAt?: Date;
 
   @Property({ fieldName: 'deleted_at', type: 'datetime', nullable: true })

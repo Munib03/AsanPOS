@@ -7,15 +7,10 @@ import {
 } from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
-
 export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
   id?: string;
-
-  @IsOptional()
-  @IsString()
-  name?: string;
 
   @IsOptional()
   @IsEmail()
@@ -60,7 +55,6 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsEnum(EmployeeGender)
   gender?: EmployeeGender;
-
 
   // Here although the create attachments is returning an array but you have to handle that in employees's updateEmployeeInfo to assign that value here
   @IsOptional()

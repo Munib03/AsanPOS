@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { StoreSession } from '../database/entites/store-session.entity';
 import { Employee } from '../database/entites/employee.entity';
@@ -15,7 +19,7 @@ export class StoreSessionService {
   constructor(
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   async findAll(store: Store) {
     return this.em.findAll(StoreSession, {
@@ -31,10 +35,12 @@ export class StoreSessionService {
         'openedAt',
         'closedAt',
         'openedBy.id',
-        'openedBy.name',
+        'openedBy.firstName',
+        'openedBy.lastName',
         'openedBy.email',
         'closedBy.id',
-        'closedBy.name',
+        'closedBy.firstName',
+        'closedBy.lastName',
         'closedBy.email',
       ],
       orderBy: { openedAt: 'DESC' },
@@ -57,10 +63,12 @@ export class StoreSessionService {
           'openedAt',
           'closedAt',
           'openedBy.id',
-          'openedBy.name',
+          'openedBy.firstName',
+          'openedBy.lastName',
           'openedBy.email',
           'closedBy.id',
-          'closedBy.name',
+          'closedBy.firstName',
+          'closedBy.lastName',
           'closedBy.email',
           'payments.id',
           'payments.amount',
@@ -95,7 +103,8 @@ export class StoreSessionService {
           'openingNote',
           'openedAt',
           'openedBy.id',
-          'openedBy.name',
+          'openedBy.firstName',
+          'openedBy.lastName',
           'openedBy.email',
         ],
         orderBy: { openedAt: 'DESC' },
@@ -155,7 +164,8 @@ export class StoreSessionService {
       .getItems()
       .reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
-    const expectedAmount = (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
+    const expectedAmount =
+      (session.openingAmount ?? 0) + cashIn - cashOut + salePayments;
 
     const before = {
       openingAmount: session.openingAmount,
@@ -203,8 +213,7 @@ export class StoreSessionService {
 
   private async findEmployeeOrFail(employeeId: string): Promise<Employee> {
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
     return employee;
   }
 

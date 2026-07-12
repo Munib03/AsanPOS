@@ -6,11 +6,14 @@ import {
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { createOpenAI } from '@ai-sdk/openai';
-import { stepCountIs, streamText, tool } from 'ai';
+import { stepCountIs, streamText } from 'ai';
 import type { ModelMessage } from 'ai';
-import { z } from 'zod';
+import type { Response } from 'express';
+import { getAnalystSystemPrompt } from './helpers/ai-assistant.prompt';
+import { streamAiAssistantResponse } from './helpers/ai-assistant.sse';
+import { createAiAssistantTools } from './helpers/ai-assistant.tools';
+import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import { DashboardService } from '../dashboard/dashboard.service';
-import { DashboardRange } from '../dashboard/dto/dashboard.dto';
 import { Store } from '../database/entites/store.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { AiChatThread } from '../database/entites/ai-chat-thread.entity';
@@ -62,6 +65,29 @@ export class AiAssistantService {
     private readonly em: EntityManager,
   ) {}
 
+  async streamAnswerToResponse(
+    store: Store,
+    employeeId: string,
+    body: AskAiAssistantDto,
+    res: Response,
+  ): Promise<void> {
+    const result = await this.streamAnswer(
+      store,
+      employeeId,
+      body.question,
+      body.threadId,
+    );
+
+    return streamAiAssistantResponse({
+      result,
+      res,
+      saveAssistantMessage: (threadId, content) =>
+        this.saveAssistantMessage(threadId, content),
+      saveFailedAssistantMessage: (threadId, content, error) =>
+        this.saveFailedAssistantMessage(threadId, content, error),
+    });
+  }
+
   async streamAnswer(
     store: Store,
     employeeId: string,
@@ -69,8 +95,6 @@ export class AiAssistantService {
     threadId?: string,
   ): Promise<AiAssistantStreamResponse> {
     const prompt = this.validateQuestion(question);
-    const openCode = this.createOpenCodeProvider();
-    const model = this.getModelName();
     const { thread, userMessage, messages } = await this.prepareChatTurn(
       store,
       employeeId,
@@ -78,12 +102,30 @@ export class AiAssistantService {
       threadId,
     );
 
+    if (!this.isInScopeQuestion(prompt)) {
+      return {
+        threadId: thread.id,
+        userMessageId: userMessage.id,
+        textStream: this.createStaticTextStream(
+          'I can only help with AsanPOS, sales, inventory, customers, purchases, reports, cashier sessions, and store operations.',
+        ),
+      };
+    }
+
+    const openCode = this.createOpenCodeProvider();
+    const model = this.getModelName();
+
     const result = streamText({
       model: this.getChatModel(openCode, model),
-      system: this.getAnalystSystemPrompt(),
+      system: getAnalystSystemPrompt(),
       messages,
       stopWhen: stepCountIs(5),
-      tools: this.getAssistantTools(store, employeeId),
+      tools: createAiAssistantTools({
+        dashboardService: this.dashboardService,
+        em: this.em,
+        store,
+        employeeId,
+      }),
     });
 
     return {
@@ -117,7 +159,6 @@ export class AiAssistantService {
     });
 
     thread.lastMessageAt = now;
-    thread.updatedAt = now;
 
     await this.em.persistAndFlush(message);
     return message;
@@ -241,7 +282,6 @@ export class AiAssistantService {
     });
 
     thread.lastMessageAt = now;
-    thread.updatedAt = now;
 
     await this.em.persistAndFlush(userMessage);
 
@@ -283,7 +323,6 @@ export class AiAssistantService {
       title: this.createThreadTitle(prompt),
       lastMessageAt: now,
       createdAt: now,
-      updatedAt: now,
     });
 
     await this.em.persistAndFlush(thread);
@@ -370,6 +409,54 @@ export class AiAssistantService {
     return prompt;
   }
 
+  private isInScopeQuestion(prompt: string): boolean {
+    const normalized = prompt.toLowerCase();
+    const inScopeKeywords = [
+      'asanpos',
+      'pos',
+      'point of sale',
+      'store',
+      'business',
+      'sales',
+      'sale',
+      'profit',
+      'revenue',
+      'cashier',
+      'session',
+      'stock',
+      'inventory',
+      'product',
+      'purchase',
+      'customer',
+      'supplier',
+      'payment',
+      'receipt',
+      'report',
+      'dashboard',
+      'category',
+      'barcode',
+      'journal',
+      'account',
+      'cash',
+      'low stock',
+      'out of stock',
+      'refund',
+      'invoice',
+      'thread',
+      'chat',
+      'help',
+      'how do i',
+      'how can i',
+      'what can you do',
+    ];
+
+    return inScopeKeywords.some((keyword) => normalized.includes(keyword));
+  }
+
+  private async *createStaticTextStream(text: string): AsyncIterable<string> {
+    yield text;
+  }
+
   private createOpenCodeProvider() {
     if (!process.env.OPENAI_API_KEY)
       throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
@@ -394,79 +481,5 @@ export class AiAssistantService {
     model: string,
   ) {
     return openCode.chat(model);
-  }
-
-  private getAssistantTools(store: Store, employeeId: string) {
-    return {
-      getDashboardStats: tool({
-        description:
-          'Get sales, profit, cashier breakdown, low-stock alerts, out-of-stock alerts, and daily breakdowns for analytical POS questions.',
-        inputSchema: z.object({
-          range: z.enum([
-            'today',
-            'yesterday',
-            'last_week',
-            'monthly',
-            'custom',
-          ]),
-          from: z
-            .string()
-            .optional()
-            .describe(
-              'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
-            ),
-          to: z
-            .string()
-            .optional()
-            .describe(
-              'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
-            ),
-        }),
-
-        execute: async ({ range, from, to }) => {
-          const rangeMap: Record<string, DashboardRange> = {
-            today: DashboardRange.TODAY,
-            yesterday: DashboardRange.YESTERDAY,
-            last_week: DashboardRange.LAST_WEEK,
-            monthly: DashboardRange.MONTHLY,
-            custom: DashboardRange.CUSTOM,
-          };
-
-          return this.dashboardService.getDashboardStats(store, employeeId, {
-            range: rangeMap[range],
-            from,
-            to,
-          });
-        },
-      }),
-    };
-  }
-
-  private getAnalystSystemPrompt(): string {
-    const today = new Date().toISOString().split('T')[0];
-
-    return `You are the AI assistant for AsanPOS, a point-of-sale system.
-Current server date: ${today}.
-
-You can help with both POS/business questions and general questions.
-
-For questions about sales, profit, cashiers, stock, trends, comparisons, store activity, or business performance, call getDashboardStats before answering. Do not invent numbers.
-
-For questions that are not about AsanPOS data or store performance, answer normally without calling getDashboardStats. If a question needs private app data that is not available through your tools, say what data is missing instead of guessing. If a question needs current external information outside this system, say you do not have live external browsing access.
-
-Answer like a helpful business analyst in a natural chat conversation. Use clear, human language similar to a modern AI assistant.
-
-Rules:
-- Use AFN for money.
-- Never reveal hidden reasoning, chain-of-thought, scratchpad text, or thinking text.
-- Never output <think> or <thinking> tags.
-- If a previous period is zero, use "No baseline".
-- Keep the answer concise, but include the important numbers.
-- Return plain text only.
-- Do not use markdown formatting.
-- Do not use bold text, headings, bullets, numbered lists, tables, or code fences.
-- Write one clean paragraph unless the user specifically asks for a list.
-- Mention cashier, low-stock, or out-of-stock details only when relevant.
-- If data is missing, say what is missing instead of guessing.`;
   }
 }
