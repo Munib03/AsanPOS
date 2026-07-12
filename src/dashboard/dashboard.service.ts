@@ -66,6 +66,9 @@ const DAY_WINDOW_CONFIG: Partial<
 @Injectable()
 export class DashboardService {
   private static readonly TAX_RATE = 0.1;
+  private static readonly DEFAULT_STOCK_PAGE = 1;
+  private static readonly DEFAULT_STOCK_PAGE_SIZE = 20;
+  private static readonly MAX_STOCK_PAGE_SIZE = 100;
 
   constructor(private readonly em: EntityManager) {}
 
@@ -156,17 +159,65 @@ export class DashboardService {
       };
 
     if (includeSessionInfo) {
-      const stockRecords = await this.em.find(
+      const lowStockPage = this.getPage(query.lowStockPage);
+      const lowStockPageSize = this.getPageSize(query.lowStockPageSize);
+      const outOfStockPage = this.getPage(query.outOfStockPage);
+      const outOfStockPageSize = this.getPageSize(query.outOfStockPageSize);
+
+      const lowStockBaseWhere = {
+        inventory: { store },
+        quantity: { $gt: 0, $lte: 10 },
+      };
+      const outOfStockBaseWhere = {
+        inventory: { store },
+        quantity: 0,
+      };
+
+      const [lowStockTotal, outOfStockTotal] = await Promise.all([
+        this.em.count(StockQuantity, lowStockBaseWhere),
+        this.em.count(StockQuantity, outOfStockBaseWhere),
+      ]);
+
+      const lowStockRecords = await this.em.find(
         StockQuantity,
-        { inventory: { store }, quantity: { $lte: 10 } },
-        { populate: ['product', 'inventory'], refresh: true },
+        lowStockBaseWhere,
+        {
+          populate: ['product', 'inventory'],
+          refresh: true,
+          orderBy: { quantity: 'ASC', id: 'ASC' },
+          limit: lowStockPageSize,
+          offset: (lowStockPage - 1) * lowStockPageSize,
+        },
       );
-      response.lowStockProducts = stockRecords
-        .filter((r) => (r.quantity ?? 0) >= 1)
-        .map(this.toStockSummary);
-      response.outOfStockProducts = stockRecords
-        .filter((r) => (r.quantity ?? 0) === 0)
-        .map(this.toStockSummary);
+      const outOfStockRecords = await this.em.find(
+        StockQuantity,
+        outOfStockBaseWhere,
+        {
+          populate: ['product', 'inventory'],
+          refresh: true,
+          orderBy: { id: 'ASC' },
+          limit: outOfStockPageSize,
+          offset: (outOfStockPage - 1) * outOfStockPageSize,
+        },
+      );
+
+      response.lowStockProducts = {
+        items: lowStockRecords.map(this.toStockSummary),
+        total: lowStockTotal,
+        page: lowStockPage,
+        pageSize: lowStockPageSize,
+        totalPages: Math.max(1, Math.ceil(lowStockTotal / lowStockPageSize)),
+      };
+      response.outOfStockProducts = {
+        items: outOfStockRecords.map(this.toStockSummary),
+        total: outOfStockTotal,
+        page: outOfStockPage,
+        pageSize: outOfStockPageSize,
+        totalPages: Math.max(
+          1,
+          Math.ceil(outOfStockTotal / outOfStockPageSize),
+        ),
+      };
     }
 
     if (includeDailyBreakdown) {
@@ -189,6 +240,22 @@ export class DashboardService {
     quantity: record.quantity ?? 0,
     inventoryName: record.inventory.name ?? '',
   });
+
+  private getPage(rawValue?: string): number {
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value <= 0) {
+      return DashboardService.DEFAULT_STOCK_PAGE;
+    }
+    return value;
+  }
+
+  private getPageSize(rawValue?: string): number {
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value <= 0) {
+      return DashboardService.DEFAULT_STOCK_PAGE_SIZE;
+    }
+    return Math.min(value, DashboardService.MAX_STOCK_PAGE_SIZE);
+  }
 
   private sumCashMovements(
     cashMovements: { type: string; amount?: number; createdAt?: Date }[],
