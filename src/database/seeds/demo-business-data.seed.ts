@@ -52,18 +52,18 @@ type SaleSeed = {
 };
 
 export async function seed(knex: Knex): Promise<void> {
-  const alreadySeeded = await knex('products')
-    .where({ barcode: `${SEED_PREFIX}-product-0001` })
-    .first('id');
-
-  if (alreadySeeded) {
-    await deleteExistingSeedData(knex);
-  }
-
   const now = new Date();
   const { storeId, employeeId } = await getOrCreateSeedTarget(knex, now);
 
-  const accounts = await createSeedAccounts(knex, now);
+  const alreadySeeded = await knex('products')
+    .where({ store_id: storeId, barcode: `${SEED_PREFIX}-product-0001` })
+    .first('id');
+
+  if (alreadySeeded) {
+    await deleteExistingSeedData(knex, storeId);
+  }
+
+  const accounts = await createSeedAccounts(knex, now, storeId);
   const sessionId = await createSeedSession(knex, storeId, now, employeeId);
 
   const inventories = buildInventories(storeId, now);
@@ -195,26 +195,35 @@ export async function seed(knex: Knex): Promise<void> {
   await insertChunks(knex, 'receipt', receipts);
 }
 
-async function deleteExistingSeedData(knex: Knex): Promise<void> {
+async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void> {
   const products = await knex('products')
+    .where({ store_id: storeId })
     .whereLike('barcode', `${SEED_PREFIX}-product-%`)
     .select('id');
   const productIds = products.map((product) => product.id);
 
   const customers = await knex('customer')
+    .where({ store_id: storeId })
     .whereLike('name', 'Seed Customer %')
     .select('id');
   const customerIds = customers.map((customer) => customer.id);
 
   const inventories = await knex('inventory')
+    .where({ store_id: storeId })
     .whereLike('name', 'Seed Inventory %')
     .select('id');
   const inventoryIds = inventories.map((inventory) => inventory.id);
 
   const sessions = await knex('store_session')
-    .where({ opening_note: 'Seed demo session' })
+    .where({ store_id: storeId, opening_note: 'Seed demo session' })
     .select('id');
   const sessionIds = sessions.map((session) => session.id);
+
+  const categories = await knex('categories')
+    .where({ store_id: storeId })
+    .whereLike('name', 'Seed Category %')
+    .select('id');
+  const categoryIds = categories.map((category) => category.id);
 
   const saleItems = productIds.length
     ? await knex('sale_items')
@@ -290,11 +299,15 @@ async function deleteExistingSeedData(knex: Knex): Promise<void> {
     await knex('customer').whereIn('id', customerIds).delete();
   if (inventoryIds.length)
     await knex('inventory').whereIn('id', inventoryIds).delete();
-  await knex('categories').whereLike('name', 'Seed Category %').delete();
+  if (categoryIds.length)
+    await knex('category_product').whereIn('category_id', categoryIds).delete();
+  if (categoryIds.length)
+    await knex('categories').whereIn('id', categoryIds).delete();
   if (sessionIds.length)
     await knex('store_session').whereIn('id', sessionIds).delete();
   await knex('accounts')
-    .whereIn('name', ['Seed Demo Cash', 'Seed Demo Sales Revenue'])
+    .whereLike('name', `Seed Demo Cash (${storeId}%)`)
+    .orWhereLike('name', `Seed Demo Sales Revenue (${storeId}%)`)
     .delete();
 }
 
@@ -366,21 +379,26 @@ async function getOrCreateSeedTarget(
   return { storeId };
 }
 
-async function createSeedAccounts(knex: Knex, now: Date) {
+async function createSeedAccounts(
+  knex: Knex,
+  now: Date,
+  storeId: string,
+) {
   const cashAccountId = uuidv4();
   const salesAccountId = uuidv4();
+  const accountSuffix = `(${storeId})`;
 
   await knex('accounts').insert([
     {
       id: cashAccountId,
-      name: 'Seed Demo Cash',
+      name: `Seed Demo Cash ${accountSuffix}`,
       type: 'asset',
       created_at: now,
       updated_at: now,
     },
     {
       id: salesAccountId,
-      name: 'Seed Demo Sales Revenue',
+      name: `Seed Demo Sales Revenue ${accountSuffix}`,
       type: 'revenue',
       created_at: now,
       updated_at: now,

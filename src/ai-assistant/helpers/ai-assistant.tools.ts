@@ -10,9 +10,12 @@ import { Inventory } from '../../database/entites/inventory.entity';
 import { Product } from '../../database/entites/product.entity';
 import { Purchase } from '../../database/entites/purchase.entity';
 import { Sale } from '../../database/entites/sale.entity';
+import { Payment } from '../../database/entites/payments.entity';
 import { StockQuantity } from '../../database/entites/stock-quantity.entity';
 import { Store } from '../../database/entites/store.entity';
 import { StoreSession } from '../../database/entites/store-session.entity';
+import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
+import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
 import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
 
 const DEFAULT_TOOL_LIMIT = 10;
@@ -70,6 +73,45 @@ export function createAiAssistantTools({
           from,
           to,
         });
+      },
+    }),
+
+    getMyDashboardStats: tool({
+      description:
+        'Get sales, profit, cashier metrics, and breakdowns only for the current logged-in employee.',
+      inputSchema: z.object({
+        range: z.enum(['today', 'yesterday', 'last_week', 'monthly', 'custom']),
+        from: z
+          .string()
+          .optional()
+          .describe(
+            'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
+          ),
+        to: z
+          .string()
+          .optional()
+          .describe(
+            'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
+          ),
+      }),
+      execute: async ({ range, from, to }) => {
+        const rangeMap: Record<string, DashboardRange> = {
+          today: DashboardRange.TODAY,
+          yesterday: DashboardRange.YESTERDAY,
+          last_week: DashboardRange.LAST_WEEK,
+          monthly: DashboardRange.MONTHLY,
+          custom: DashboardRange.CUSTOM,
+        };
+
+        return dashboardService.getDashboardStats(
+          store,
+          employeeId,
+          {
+            range: rangeMap[range],
+            from,
+            to,
+          },
+        );
       },
     }),
 
@@ -197,25 +239,33 @@ export function createAiAssistantTools({
 
     getSalesSummary: tool({
       description:
-        'Get sales totals, status breakdown, recent sales, and top products for a date range.',
+        'Get sales totals, status breakdown, recent sales, and top products for a date range for the current logged-in employee.',
       inputSchema: rangeSchema.extend({
         limit: z.number().optional(),
       }),
       execute: async ({ range, from, to, limit }) => {
         const take = clampToolLimit(limit);
         const bounds = getToolRange(range, from, to);
-        const sales = await em.find(
-          Sale,
-          {
-            store,
-            createdAt: { $gte: bounds.from, $lte: bounds.to },
-          },
-          {
-            populate: ['items', 'items.product', 'customer'],
-            orderBy: { createdAt: 'DESC' },
-            refresh: true,
-          },
+        const saleIds = await getEmployeeSaleIdsByRange(
+          em,
+          store,
+          employeeId,
+          bounds,
         );
+        const sales = saleIds.length
+          ? await em.find(
+              Sale,
+              {
+                id: { $in: saleIds },
+                createdAt: { $gte: bounds.from, $lte: bounds.to },
+              },
+              {
+                populate: ['items', 'items.product', 'customer'],
+                orderBy: { createdAt: 'DESC' },
+                refresh: true,
+              },
+            )
+          : [];
 
         const statusBreakdown = sales.reduce<Record<string, number>>(
           (summary, sale) => {
@@ -271,17 +321,37 @@ export function createAiAssistantTools({
 
     getPurchaseSummary: tool({
       description:
-        'Get purchase totals, status breakdown, recent purchases, and purchased products for a date range.',
+        'Get purchase totals, status breakdown, recent purchases, and purchased products for a date range for the current logged-in employee.',
       inputSchema: rangeSchema.extend({
         limit: z.number().optional(),
       }),
       execute: async ({ range, from, to, limit }) => {
         const take = clampToolLimit(limit);
         const bounds = getToolRange(range, from, to);
+        const purchaseIds = await getEmployeeCreatedEntityIds(
+          em,
+          store,
+          employeeId,
+          AuditEntityType.Purchase,
+          bounds,
+        );
+
+        if (!purchaseIds.length) {
+          return {
+            from: bounds.from.toISOString(),
+            to: bounds.to.toISOString(),
+            count: 0,
+            totalPurchases: 0,
+            statusBreakdown: {},
+            recentPurchases: [],
+          };
+        }
+
         const purchases = await em.find(
           Purchase,
           {
             store,
+            id: { $in: purchaseIds },
             createdAt: { $gte: bounds.from, $lte: bounds.to },
           },
           {
@@ -330,13 +400,23 @@ export function createAiAssistantTools({
 
     getCustomerSummary: tool({
       description:
-        'Search customers and summarize their sale and purchase counts.',
+        'Search customers and summarize their sale and purchase counts for the current logged-in employee.',
       inputSchema: z.object({
         query: z.string().optional(),
         limit: z.number().optional(),
       }),
       execute: async ({ query, limit }) => {
         const take = clampToolLimit(limit);
+        const [saleIds, purchaseIds] = await Promise.all([
+          getEmployeeSaleIdsByRange(em, store, employeeId),
+          getEmployeeCreatedEntityIds(
+            em,
+            store,
+            employeeId,
+            AuditEntityType.Purchase,
+          ),
+        ]);
+
         const where: Record<string, any> = { store };
         if (query?.trim()) {
           const q = `%${query.trim()}%`;
@@ -352,8 +432,12 @@ export function createAiAssistantTools({
         return Promise.all(
           customers.map(async (customer) => {
             const [saleCount, purchaseCount] = await Promise.all([
-              em.count(Sale, { store, customer }),
-              em.count(Purchase, { store, customer }),
+              saleIds.length
+                ? em.count(Sale, { store, customer, id: { $in: saleIds } })
+                : Promise.resolve(0),
+              purchaseIds.length
+                ? em.count(Purchase, { store, customer, id: { $in: purchaseIds } })
+                : Promise.resolve(0),
             ]);
 
             return {
@@ -372,7 +456,7 @@ export function createAiAssistantTools({
 
     getOpenSessions: tool({
       description:
-        'Get currently open cashier sessions with payments and cash movement totals.',
+        'Get currently open cashier sessions for the current logged-in employee with payments and cash movement totals.',
       inputSchema: z.object({
         limit: z.number().optional(),
       }),
@@ -380,7 +464,7 @@ export function createAiAssistantTools({
         const take = clampToolLimit(limit);
         const sessions = await em.find(
           StoreSession,
-          { store, closedAt: null },
+          { store, openedBy: { id: employeeId }, closedAt: null },
           {
             populate: ['openedBy', 'payments', 'cashMovements'],
             orderBy: { openedAt: 'DESC' },
@@ -416,7 +500,7 @@ export function createAiAssistantTools({
     }),
 
     getAuditActivity: tool({
-      description: 'Get recent audit activity for the current store employees.',
+      description: 'Get recent audit activity for the current logged-in employee.',
       inputSchema: rangeSchema.extend({
         limit: z.number().optional(),
       }),
@@ -426,7 +510,7 @@ export function createAiAssistantTools({
         const logs = await em.find(
           AuditLog,
           {
-            employee: { store },
+            employee: { id: employeeId, store },
             createdAt: { $gte: bounds.from, $lte: bounds.to },
           },
           {
@@ -509,4 +593,60 @@ function calcSaleTotal(sale: Sale): number {
       (sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
       0,
     );
+}
+
+type DateBounds = { from: Date; to: Date };
+
+async function getEmployeeSaleIdsByRange(
+  em: EntityManager,
+  store: Store,
+  employeeId: string,
+  bounds?: DateBounds,
+): Promise<string[]> {
+  const payments = await em.find(
+    Payment,
+    {
+      sale: { store },
+      storeSession: { store, openedBy: { id: employeeId } },
+      ...(bounds ? { createdAt: { $gte: bounds.from, $lte: bounds.to } } : {}),
+    },
+    { populate: ['sale'], refresh: true },
+  );
+
+  return [
+    ...new Set(
+      payments
+        .map((payment) => payment.sale?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+}
+
+async function getEmployeeCreatedEntityIds(
+  em: EntityManager,
+  store: Store,
+  employeeId: string,
+  entityType: AuditEntityType,
+  bounds?: DateBounds,
+): Promise<string[]> {
+  const logs = await em.find(
+    AuditLog,
+    {
+      employee: { id: employeeId, store },
+      entityType,
+      actionType: AuditActionType.Create,
+      ...(bounds
+        ? { createdAt: { $gte: bounds.from, $lte: bounds.to } }
+        : {}),
+    },
+    { refresh: true },
+  );
+
+  return [
+    ...new Set(
+      logs
+        .map((log) => log.entityId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
 }
