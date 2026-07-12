@@ -182,6 +182,37 @@ export class AiAssistantService {
     };
   }
 
+  async updateThreadTitle(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+    title: string,
+  ): Promise<AiChatThreadSummary> {
+    const normalizedTitle = title?.trim();
+    if (!normalizedTitle) throw new BadRequestException('title is required');
+
+    const thread = await this.findOwnedThread(store, employeeId, threadId);
+    thread.title = normalizedTitle;
+    thread.updatedAt = new Date();
+
+    await this.em.flush();
+    return this.toThreadSummary(thread);
+  }
+
+  async deleteThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<{ message: string; id: string }> {
+    const thread = await this.findOwnedThread(store, employeeId, threadId);
+    const now = new Date();
+    thread.deletedAt = now;
+    thread.updatedAt = now;
+
+    await this.em.flush();
+    return { message: 'AI chat thread deleted successfully.', id: thread.id };
+  }
+
   private async prepareChatTurn(
     store: Store,
     employeeId: string,
@@ -256,6 +287,22 @@ export class AiAssistantService {
     });
 
     await this.em.persistAndFlush(thread);
+    return thread;
+  }
+
+  private async findOwnedThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<AiChatThread> {
+    const thread = await this.em.findOne(AiChatThread, {
+      id: threadId,
+      store,
+      employee: { id: employeeId },
+      deletedAt: null,
+    });
+    if (!thread) throw new NotFoundException('AI chat thread not found');
+
     return thread;
   }
 
