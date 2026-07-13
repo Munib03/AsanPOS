@@ -16,6 +16,7 @@ import { StoreSession } from '../database/entites/store-session.entity';
 import { StockOut } from '../database/entites/stock-out.entity';
 import { StockOutItem } from '../database/entites/stock-out-item.entity';
 import { Payment } from '../database/entites/payments.entity';
+import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 import { JournalEntryService } from '../journal/journal-entry.service';
 import { SequenceService } from '../sequence/sequence.service';
 import { StockQuantityService } from '../stock-quantity/stock-quantity.service';
@@ -26,6 +27,7 @@ import { StockOutStatus } from '../shared/utils/stock-out-status.enum';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
+import { SalePaymentStatus } from '../shared/utils/sale-payment-status.enum';
 import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { ReceiptService } from '../receipt/receipt.service';
@@ -36,17 +38,29 @@ import { EntityName } from '@mikro-orm/core';
 
 export interface SaleListItem {
   id: string;
-  sequenceId?: string;
+  sequenceId: string;
+  status: string;
+  paymentStatus: SalePaymentStatus;
   createdAt?: Date;
-  customer: { id?: string; name?: string };
-  items: {
-    id?: string;
-    quantity?: number;
-    unitPrice?: number;
-    product: { id?: string; name?: string; price?: number };
-  }[];
+  customer: { id: string; name: string };
   totalPrice: number;
 }
+
+export interface SaleDetail extends SaleListItem {
+  items: {
+    id: string;
+    quantity: number;
+    unitPrice: number;
+    subTotal: number;
+    product: { id: string; name: string };
+  }[];
+}
+
+type SaleTotalRow = {
+  saleId: string;
+  quantity: string | number | null;
+  unitPrice: string | number | null;
+};
 
 @Injectable()
 export class SaleService {
@@ -68,14 +82,52 @@ export class SaleService {
     const [sales, meta] = await this.saleRepository.findAndPaginate(
       { store },
       {
-        populate: ['customer', 'items', 'items.product', 'sequence'],
+        populate: ['customer', 'sequence'],
         fields: [
           'id',
           'createdAt',
           'status',
+          'paymentStatus',
           'sequence.prefix',
           'sequence.lastIndex',
-          'sequence.entity',
+          'customer.id',
+          'customer.name',
+        ],
+      },
+      { searchable: ['customer.name'] },
+      query,
+    );
+
+    const totals = await this.getSaleTotals(sales.map((sale) => sale.id));
+
+    const data: SaleListItem[] = sales.map((sale) => ({
+      id: sale.id,
+      sequenceId: this.formatSequence(sale.sequence),
+      status: sale.status,
+      paymentStatus: sale.paymentStatus,
+      customer: {
+        id: sale.customer.id,
+        name: sale.customer.name,
+      },
+      totalPrice: totals.get(sale.id) ?? 0,
+      createdAt: sale.createdAt,
+    }));
+
+    return { data, meta };
+  }
+
+  async findOne(store: Store, id: string): Promise<SaleDetail> {
+    const sale = await this.saleRepository.findOneOrFail(
+      { id, store },
+      {
+        populate: ['customer', 'items', 'items.product', 'sequence'],
+        fields: [
+          'id',
+          'status',
+          'paymentStatus',
+          'createdAt',
+          'sequence.prefix',
+          'sequence.lastIndex',
           'customer.id',
           'customer.name',
           'items.id',
@@ -83,27 +135,40 @@ export class SaleService {
           'items.unitPrice',
           'items.product.id',
           'items.product.name',
-          'items.product.price',
         ],
+        notFoundMessage: `Sale with id ${id} not found`,
       },
-      { searchable: ['customer.name'] },
-      query,
     );
 
-    const serialized = serialize(sales, {
-      populate: ['customer', 'items', 'items.product', 'sequence'],
+    const items = sale.items.getItems().map((item) => {
+      const quantity = item.quantity ?? 0;
+      const unitPrice = item.unitPrice ?? 0;
+
+      return {
+        id: item.id,
+        quantity,
+        unitPrice,
+        subTotal: quantity * unitPrice,
+        product: {
+          id: item.product.id,
+          name: item.product.name ?? '',
+        },
+      };
     });
 
-    const data: SaleListItem[] = sales.map((sale, index) => ({
-      ...serialized[index],
-      sequenceId: this.sequenceService.formatSequence(sale.sequence),
-      totalPrice: serialized[index].items.reduce(
-        (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
-        0,
-      ),
-    }));
-
-    return { data, meta };
+    return {
+      id: sale.id,
+      sequenceId: this.formatSequence(sale.sequence),
+      status: sale.status,
+      paymentStatus: sale.paymentStatus,
+      customer: {
+        id: sale.customer.id,
+        name: sale.customer.name,
+      },
+      items,
+      totalPrice: items.reduce((sum, item) => sum + item.subTotal, 0),
+      createdAt: sale.createdAt,
+    };
   }
 
 
@@ -133,12 +198,18 @@ export class SaleService {
 
       await this.validateStockAvailability(em, dto, inventory, productMap);
 
+      const totalAmount = dto.items.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice, 0,
+      );
+      const paymentAmount = this.resolveCheckoutPaymentAmount(dto, totalAmount);
+
       const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
       const sale = em.create(Sale, {
         customer,
         store,
         sequence,
         status: SaleStatus.DRAFT,
+        paymentStatus: dto.paymentStatus,
       });
       await em.persistAndFlush(sale);
 
@@ -203,25 +274,23 @@ export class SaleService {
       );
       stockOut.status = StockOutStatus.DONE;
 
-      const totalAmount = dto.items.reduce(
-        (sum, item) => sum + item.quantity * item.unitPrice, 0,
-      );
+      if (paymentAmount > 0) {
+        const payment = em.create(Payment, {
+          sale,
+          storeSession: activeSession,
+          amount: paymentAmount,
+          status: PaymentStatus.Done,
+        });
+        em.persist(payment);
 
-      const payment = em.create(Payment, {
-        sale,
-        storeSession: activeSession,
-        amount: totalAmount,
-        status: PaymentStatus.Done,
-      });
-      em.persist(payment);
+        this.auditService.log(
+          em, employee, AuditEntityType.Payment, payment.id,
+          AuditActionType.Create, null,
+          { saleId: sale.id, amount: paymentAmount, status: PaymentStatus.Done },
+        );
+      }
 
-      this.auditService.log(
-        em, employee, AuditEntityType.Payment, payment.id,
-        AuditActionType.Create, null,
-        { saleId: sale.id, amount: totalAmount, status: PaymentStatus.Done },
-      );
-
-      if (payment.amount === totalAmount) {
+      if (dto.paymentStatus === SalePaymentStatus.FullyPaid) {
         this.auditService.logStatusChange(
           em, employee, AuditEntityType.JournalEntry, journalEntry.id,
           AuditActionType.Update, JournalEntryStatus.PENDING, JournalEntryStatus.DONE,
@@ -271,16 +340,19 @@ export class SaleService {
       const sale = await em.findOne(Sale, { id, store });
       if (!sale) throw new NotFoundException(`Sale with id ${id} not found`);
 
-      if (sale.status === SaleStatus.DONE)
+      if (dto.status && sale.status === SaleStatus.DONE)
         throw new BadRequestException(`Cannot update a completed sale.`);
 
       if (sale.status === SaleStatus.CANCELLED)
         throw new BadRequestException(`Cannot update a cancelled sale.`);
 
+      const hasPaymentUpdate = dto.amount !== undefined || dto.paymentStatus !== undefined;
+      const employee = dto.status || hasPaymentUpdate
+        ? await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee')
+        : undefined;
+
       if (dto.status) {
         this.validateSaleTransition(sale.status as SaleStatus, dto.status as SaleStatus);
-
-        const employee = await this.findOrFail<Employee>(em, Employee, { id: employeeId }, 'Employee');
 
         if (dto.status === SaleStatus.DONE) {
           await em.populate(sale, ['items', 'items.product', 'customer']);
@@ -288,16 +360,169 @@ export class SaleService {
         }
 
         this.auditService.logStatusChange(
-          em, employee, AuditEntityType.Sale, sale.id,
+          em, employee!, AuditEntityType.Sale, sale.id,
           AuditActionType.Update, sale.status ?? '', dto.status,
         );
 
         sale.status = dto.status;
       }
 
+      if (hasPaymentUpdate) {
+        await this.addPaymentToSale(em, store, sale, employee!, employeeId, dto);
+      }
+
       await em.flush();
       return { message: `Sale with id ${id} updated successfully.` };
     });
+  }
+
+
+  private resolveCheckoutPaymentAmount(
+    dto: CreateSaleDto,
+    totalAmount: number,
+  ): number {
+    const total = this.roundMoney(totalAmount);
+    const amount = dto.amount === undefined ? undefined : this.roundMoney(dto.amount);
+
+    if (dto.paymentStatus === SalePaymentStatus.FullyPaid) {
+      if (amount === undefined)
+        throw new BadRequestException(
+          'Amount is required for a fully paid sale.',
+        );
+
+      if (amount !== total)
+        throw new BadRequestException(
+          `A fully paid sale must receive the full amount of ${total}.`,
+        );
+
+      return amount;
+    }
+
+    if (dto.paymentStatus === SalePaymentStatus.PartiallyPaid) {
+      if (amount === undefined)
+        throw new BadRequestException(
+          'Amount is required for a partially paid sale.',
+        );
+
+      if (amount >= total)
+        throw new BadRequestException(
+          'A partial payment must be less than the sale total.',
+        );
+
+      return amount;
+    }
+
+    if (amount !== undefined && amount !== 0)
+      throw new BadRequestException(
+        'The amount for an unpaid sale must be 0.',
+      );
+
+    return 0;
+  }
+
+  private async addPaymentToSale(
+    em: EntityManager,
+    store: Store,
+    sale: Sale,
+    employee: Employee,
+    employeeId: string,
+    dto: UpdateSaleDto,
+  ): Promise<void> {
+    if (dto.amount === undefined || dto.paymentStatus === undefined)
+      throw new BadRequestException(
+        'Both amount and paymentStatus are required when adding a payment.',
+      );
+
+    if (sale.paymentStatus === SalePaymentStatus.FullyPaid)
+      throw new BadRequestException('This sale is already fully paid.');
+
+    await em.populate(sale, ['items']);
+    const totalAmount = this.roundMoney(
+      sale.items
+        .getItems()
+        .reduce(
+          (sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+          0,
+        ),
+    );
+
+    const previousPayments = await em.find(Payment, {
+      sale,
+      status: PaymentStatus.Done,
+    });
+    const previouslyPaid = this.roundMoney(
+      previousPayments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+    );
+    const paymentAmount = this.roundMoney(dto.amount);
+    const remainingAmount = this.roundMoney(totalAmount - previouslyPaid);
+
+    if (paymentAmount > remainingAmount)
+      throw new BadRequestException(
+        `Payment exceeds the remaining balance of ${remainingAmount}.`,
+      );
+
+    const newPaidTotal = this.roundMoney(previouslyPaid + paymentAmount);
+    const newPaymentStatus = newPaidTotal === totalAmount
+      ? SalePaymentStatus.FullyPaid
+      : SalePaymentStatus.PartiallyPaid;
+
+    if (dto.paymentStatus !== newPaymentStatus)
+      throw new BadRequestException(
+        `paymentStatus must be '${newPaymentStatus}' for this payment amount.`,
+      );
+
+    const activeSession = await em.findOne(StoreSession, {
+      store,
+      openedBy: { id: employeeId },
+      closedAt: null,
+    });
+    if (!activeSession)
+      throw new BadRequestException(
+        'No active session found. Please open a session first.',
+      );
+
+    const payment = em.create(Payment, {
+      sale,
+      storeSession: activeSession,
+      amount: paymentAmount,
+      status: PaymentStatus.Done,
+    });
+    em.persist(payment);
+
+    this.auditService.log(
+      em, employee, AuditEntityType.Payment, payment.id,
+      AuditActionType.Create, null,
+      { saleId: sale.id, amount: paymentAmount, status: PaymentStatus.Done },
+    );
+
+    const previousPaymentStatus = sale.paymentStatus;
+    sale.paymentStatus = newPaymentStatus;
+    this.auditService.logStatusChange(
+      em, employee, AuditEntityType.Sale, sale.id,
+      AuditActionType.Update, previousPaymentStatus, newPaymentStatus,
+    );
+
+    if (newPaymentStatus === SalePaymentStatus.FullyPaid) {
+      const journalItem = await em.findOne(
+        JournalEntryItem,
+        { sale },
+        { populate: ['journalEntry'] },
+      );
+      if (!journalItem)
+        throw new NotFoundException('Journal entry for this sale not found.');
+
+      if (journalItem.journalEntry.status !== JournalEntryStatus.DONE) {
+        this.auditService.logStatusChange(
+          em, employee, AuditEntityType.JournalEntry, journalItem.journalEntry.id,
+          AuditActionType.Update, journalItem.journalEntry.status, JournalEntryStatus.DONE,
+        );
+        journalItem.journalEntry.status = JournalEntryStatus.DONE;
+      }
+    }
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
 
@@ -314,6 +539,31 @@ export class SaleService {
       throw new BadRequestException(
         `Cannot transition from '${currentStatus}' to '${newStatus}'.`,
       );
+  }
+
+  private async getSaleTotals(saleIds: string[]): Promise<Map<string, number>> {
+    if (saleIds.length === 0) return new Map();
+
+    const rows = (await this.em
+      .getKnex()<SaleTotalRow>('sale_items')
+      .whereIn('sale_id', saleIds)
+      .select(
+        'sale_id as saleId',
+        'quantity',
+        'unit_price as unitPrice',
+      )) as SaleTotalRow[];
+
+    const totals = new Map<string, number>();
+    for (const row of rows) {
+      const subTotal = Number(row.quantity ?? 0) * Number(row.unitPrice ?? 0);
+      totals.set(row.saleId, (totals.get(row.saleId) ?? 0) + subTotal);
+    }
+
+    return totals;
+  }
+
+  private formatSequence(sequence: { prefix: string; lastIndex: number }): string {
+    return `${sequence.prefix}-${String(sequence.lastIndex).padStart(4, '0')}`;
   }
 
 

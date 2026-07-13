@@ -26,6 +26,14 @@ export class SaleController {
         return this.saleService.findAll(store, query);
     }
 
+    @Get(':id')
+    findOne(
+        @CurrentStore() store: Store,
+        @Param('id') id: string,
+    ) {
+        return this.saleService.findOne(store, id);
+    }
+
     @Post('checkout')
     checkout(
         @CurrentStore() store: Store,
