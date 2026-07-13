@@ -108,6 +108,7 @@ export class AiAssistantService {
 
     const result = streamText({
       model: this.getChatModel(openCode, model),
+      temperature: 0,
       system: getAnalystSystemPrompt(),
       messages,
       stopWhen: stepCountIs(5),
@@ -117,6 +118,8 @@ export class AiAssistantService {
         store: verifiedStore,
         employeeId,
       }),
+      prepareStep: ({ stepNumber }) =>
+        stepNumber === 0 ? { toolChoice: 'required' as const } : {},
     });
 
     return {

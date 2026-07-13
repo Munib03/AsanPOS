@@ -43,6 +43,21 @@ export function createAiAssistantTools({
   });
 
   return {
+    answerWithoutBusinessData: tool({
+      description:
+        'Use only when the question does not request live AsanPOS database values. This includes general POS guidance, greetings, and out-of-scope questions. Never use this tool for counts, totals, lists, dashboard values, stock, sales, purchases, customers, sessions, or other factual store data.',
+      inputSchema: z.object({
+        reason: z.enum(['general_pos_guidance', 'out_of_scope']),
+      }),
+      execute: async ({ reason }) => ({
+        reason,
+        instruction:
+          reason === 'out_of_scope'
+            ? 'Explain briefly that you only help with AsanPOS and store operations.'
+            : 'Answer using general AsanPOS knowledge without inventing store-specific facts or numbers.',
+      }),
+    }),
+
     getDashboardStats: tool({
       description:
         'Get sales, profit, cashier breakdown, low-stock alerts, out-of-stock alerts, and daily breakdowns for analytical POS questions.',

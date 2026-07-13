@@ -33,6 +33,44 @@ type DashboardSale = {
   items: DashboardSaleItem[];
 };
 
+type DashboardSaleRow = {
+  saleId: string;
+  createdAt: Date | string | null;
+  itemId: string | null;
+  productId: string | null;
+  quantity: string | number | null;
+  unitPrice: string | number | null;
+};
+
+type PaymentSessionRow = {
+  saleId: string;
+  sessionId: string;
+};
+
+type PurchaseBatchRow = {
+  productId: string;
+  quantity: string | number;
+  unitPrice: string | number;
+};
+
+type HistoricalSaleItemRow = {
+  id: string;
+  productId: string;
+  quantity: string | number;
+};
+
+type StockSummaryRecord = {
+  quantity?: number;
+  product: {
+    id: string;
+    name?: string;
+    price?: number;
+  };
+  inventory: {
+    name: string;
+  };
+};
+
 const startOfUtcDay = (date: Date): Date => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
@@ -253,7 +291,7 @@ export class DashboardService {
     return response;
   }
 
-  private toStockSummary = (record: StockQuantity) => ({
+  private toStockSummary = (record: StockSummaryRecord) => ({
     id: record.product.id,
     name: record.product.name ?? '',
     price: record.product.price ?? 0,
@@ -285,7 +323,7 @@ export class DashboardService {
   ): number {
     return cashMovements
       .filter((cm) => {
-        if (cm.type !== type) return false;
+        if (cm.type !== String(type)) return false;
         if (!from || !to || !cm.createdAt) return true;
         return cm.createdAt >= from && cm.createdAt <= to;
       })
@@ -317,9 +355,9 @@ export class DashboardService {
     if (sessions.length === 0) return [];
 
     const saleIds = sales.map((s) => s.id);
-    const payments = saleIds.length
-      ? await this.em
-          .getKnex()('payments as payment')
+    const payments: PaymentSessionRow[] = saleIds.length
+      ? ((await this.em
+          .getKnex()<PaymentSessionRow>('payments as payment')
           .join(
             'store_session as session',
             'session.id',
@@ -330,7 +368,7 @@ export class DashboardService {
           .select(
             'payment.sale_id as saleId',
             'payment.store_session_id as sessionId',
-          )
+          )) as PaymentSessionRow[])
       : [];
 
     const saleById = new Map(sales.map((s) => [s.id, s]));
@@ -468,9 +506,9 @@ export class DashboardService {
       if (session.openedAt) bump(session.openedAt, 'opened', 1);
       if (session.closedAt) bump(session.closedAt, 'closed', 1);
       for (const cm of session.cashMovements.getItems()) {
-        if (cm.type === CashMovementType.CashIn)
+        if (cm.type === String(CashMovementType.CashIn))
           bump(cm.createdAt, 'cashIn', cm.amount ?? 0);
-        if (cm.type === CashMovementType.CashOut)
+        if (cm.type === String(CashMovementType.CashOut))
           bump(cm.createdAt, 'cashOut', cm.amount ?? 0);
       }
     }
@@ -514,8 +552,8 @@ export class DashboardService {
     from: Date,
     to: Date,
   ): Promise<DashboardSale[]> {
-    const rows = await this.em
-      .getKnex()('sale as sale')
+    const rows = (await this.em
+      .getKnex()<DashboardSaleRow>('sale as sale')
       .leftJoin('sale_items as item', 'item.sale_id', 'sale.id')
       .where('sale.store_id', storeId)
       .whereBetween('sale.created_at', [from, to])
@@ -527,7 +565,7 @@ export class DashboardService {
         'item.product_id as productId',
         'item.quantity',
         'item.unit_price as unitPrice',
-      );
+      )) as DashboardSaleRow[];
 
     const salesById = new Map<string, DashboardSale>();
     for (const row of rows) {
@@ -540,7 +578,7 @@ export class DashboardService {
       if (row.itemId) {
         sale.items.push({
           id: row.itemId,
-          productId: row.productId,
+          productId: row.productId ?? '',
           quantity: Number(row.quantity ?? 0),
           unitPrice: Number(row.unitPrice ?? 0),
         });
@@ -568,8 +606,8 @@ export class DashboardService {
     const costBySaleItemId = new Map<string, number>();
     if (productIds.length === 0) return costBySaleItemId;
 
-    const purchasedItems = await this.em
-      .getKnex()('purchased_items as item')
+    const purchasedItems = (await this.em
+      .getKnex()<PurchaseBatchRow>('purchased_items as item')
       .join('purchase', 'purchase.id', 'item.purchase_id')
       .where('purchase.store_id', store.id)
       .whereIn('item.product_id', productIds)
@@ -579,7 +617,7 @@ export class DashboardService {
         'item.product_id as productId',
         'item.quantity',
         'item.unit_price as unitPrice',
-      );
+      )) as PurchaseBatchRow[];
 
     const batchesByProduct = new Map<
       string,
@@ -595,14 +633,18 @@ export class DashboardService {
     }
     const nextBatchByProduct = new Map<string, number>();
 
-    const saleItems = await this.em
-      .getKnex()('sale_items as item')
+    const saleItems = (await this.em
+      .getKnex()<HistoricalSaleItemRow>('sale_items as item')
       .join('sale', 'sale.id', 'item.sale_id')
       .where('sale.store_id', store.id)
       .whereIn('item.product_id', productIds)
       .where('sale.created_at', '<=', upTo)
       .orderBy('sale.created_at', 'asc')
-      .select('item.id', 'item.product_id as productId', 'item.quantity');
+      .select(
+        'item.id',
+        'item.product_id as productId',
+        'item.quantity',
+      )) as HistoricalSaleItemRow[];
 
     for (const item of saleItems) {
       const batches = batchesByProduct.get(item.productId) ?? [];
