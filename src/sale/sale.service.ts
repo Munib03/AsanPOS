@@ -48,6 +48,16 @@ export interface SaleListItem {
 
 export interface SaleDetail extends SaleListItem {
   remainingBalance: number;
+  paymentHistory: {
+    id: string;
+    amount: number;
+    paidAt?: Date;
+    cashier: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    } | null;
+  }[];
   items: {
     id: string;
     quantity: number;
@@ -163,7 +173,19 @@ export class SaleService {
     const payments = await this.em.find(
       Payment,
       { sale: { id: sale.id }, status: PaymentStatus.Done },
-      { fields: ['amount'] },
+      {
+        populate: ['storeSession', 'storeSession.openedBy'],
+        fields: [
+          'id',
+          'amount',
+          'createdAt',
+          'storeSession.id',
+          'storeSession.openedBy.id',
+          'storeSession.openedBy.firstName',
+          'storeSession.openedBy.lastName',
+        ],
+        orderBy: { createdAt: 'ASC' },
+      },
     );
     const paidAmount = this.roundMoney(
       payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
@@ -181,6 +203,18 @@ export class SaleService {
       items,
       totalPrice,
       remainingBalance: this.roundMoney(Math.max(0, totalPrice - paidAmount)),
+      paymentHistory: payments.map((payment) => ({
+        id: payment.id,
+        amount: Number(payment.amount),
+        paidAt: payment.createdAt,
+        cashier: payment.storeSession?.openedBy
+          ? {
+              id: payment.storeSession.openedBy.id,
+              firstName: payment.storeSession.openedBy.firstName,
+              lastName: payment.storeSession.openedBy.lastName,
+            }
+          : null,
+      })),
       createdAt: sale.createdAt,
     };
   }
