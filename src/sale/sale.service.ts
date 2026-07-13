@@ -47,6 +47,7 @@ export interface SaleListItem {
 }
 
 export interface SaleDetail extends SaleListItem {
+  remainingBalance: number;
   items: {
     id: string;
     quantity: number;
@@ -156,6 +157,18 @@ export class SaleService {
       };
     });
 
+    const totalPrice = this.roundMoney(
+      items.reduce((sum, item) => sum + item.subTotal, 0),
+    );
+    const payments = await this.em.find(
+      Payment,
+      { sale: { id: sale.id }, status: PaymentStatus.Done },
+      { fields: ['amount'] },
+    );
+    const paidAmount = this.roundMoney(
+      payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+    );
+
     return {
       id: sale.id,
       sequenceId: this.formatSequence(sale.sequence),
@@ -166,7 +179,8 @@ export class SaleService {
         name: sale.customer.name,
       },
       items,
-      totalPrice: items.reduce((sum, item) => sum + item.subTotal, 0),
+      totalPrice,
+      remainingBalance: this.roundMoney(Math.max(0, totalPrice - paidAmount)),
       createdAt: sale.createdAt,
     };
   }
@@ -310,6 +324,11 @@ export class SaleService {
         saleId: sale.id,
         sequenceId: this.sequenceService.formatSequence(sequence),
         customerName: customer.name,
+        cashier: {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        },
         totalAmount,
         items: formattedItems,
       });
@@ -324,6 +343,11 @@ export class SaleService {
           storeName: receipt.store.name,
           sequenceId: this.sequenceService.formatSequence(sequence),
           customerName: customer.name,
+          cashier: {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          },
           totalAmount,
           items: formattedItems.map(({ productName, quantity, unitPrice, total }) => ({
             productName, quantity, unitPrice, subTotal: total,
