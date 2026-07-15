@@ -12,6 +12,7 @@ import {
   DashboardStats,
 } from './dto/dashboard.dto';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
+import { SalePaymentStatus } from '../shared/utils/sale-payment-status.enum';
 
 type RangeBounds = {
   currentStart: Date;
@@ -556,6 +557,7 @@ export class DashboardService {
       .getKnex()<DashboardSaleRow>('sale as sale')
       .leftJoin('sale_items as item', 'item.sale_id', 'sale.id')
       .where('sale.store_id', storeId)
+      .whereNot('sale.payment_status', SalePaymentStatus.PartiallyPaid)
       .whereBetween('sale.created_at', [from, to])
       .orderBy('sale.created_at', 'asc')
       .select(
