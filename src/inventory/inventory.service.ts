@@ -38,8 +38,34 @@ export class InventoryService {
       query,
     );
 
+    const inventoryIds = inventories.map((inventory) => inventory.id);
+    const stockQuantities = inventoryIds.length
+      ? await this.em.find(
+          StockQuantity,
+          {
+            inventory: { id: { $in: inventoryIds } },
+            quantity: { $gt: 0 },
+          },
+          {
+            fields: ['inventory.id', 'product.id'],
+          },
+        )
+      : [];
+    const productIdsByInventoryId = new Map<string, Set<string>>();
+
+    for (const stockQuantity of stockQuantities) {
+      const inventoryId = stockQuantity.inventory.id;
+      const productIds = productIdsByInventoryId.get(inventoryId) ?? new Set();
+      productIds.add(stockQuantity.product.id);
+      productIdsByInventoryId.set(inventoryId, productIds);
+    }
+
     return {
-      data: serialize(inventories),
+      data: serialize(inventories).map((inventory) => ({
+        ...inventory,
+        productTypeCount:
+          productIdsByInventoryId.get(inventory.id)?.size ?? 0,
+      })),
       meta,
     };
   }
