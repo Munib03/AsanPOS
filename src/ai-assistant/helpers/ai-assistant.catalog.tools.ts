@@ -20,7 +20,7 @@ export function createCatalogTools({
   return {
     searchProducts: tool({
       description:
-        'Search products by name or barcode and include current stock quantities by inventory.',
+        'Search products by name or product code and include current stock quantities by inventory.',
       inputSchema: z.object({
         query: z.string().optional(),
         lowStockOnly: z.boolean().optional(),
@@ -31,9 +31,17 @@ export function createCatalogTools({
         const where: Record<string, any> = { store: storeWhere };
         if (query?.trim()) {
           const queryPattern = `%${query.trim()}%`;
+          const code = /^([A-Za-z]+)-(\d+)$/.exec(query.trim());
           where.$or = [
             { name: { $ilike: queryPattern } },
-            { barcode: { $ilike: queryPattern } },
+            ...(code
+              ? [{
+                  sequence: {
+                    prefix: code[1],
+                    lastIndex: Number(code[2]),
+                  },
+                }]
+              : []),
           ];
         }
 
@@ -42,6 +50,7 @@ export function createCatalogTools({
           orderBy: { name: 'ASC' },
           limit: take,
           refresh: true,
+          populate: ['sequence'],
         });
         const productIds = products.map((product) => product.id);
         const stockRecords = productIds.length
@@ -63,7 +72,9 @@ export function createCatalogTools({
             .map((product) => ({
               id: product.id,
               name: product.name,
-              barcode: product.barcode,
+              productCode: product.sequence
+                ? `${product.sequence.prefix}-${String(product.sequence.lastIndex).padStart(4, '0')}`
+                : null,
               price: product.price,
               stock: stockRecords
                 .filter((record) => record.product.id === product.id)
@@ -84,15 +95,23 @@ export function createCatalogTools({
 
     getProductCount: tool({
       description:
-        'Return the total number of products in the current store, optionally filtered by name or barcode text.',
+        'Return the total number of products in the current store, optionally filtered by product name.',
       inputSchema: z.object({ query: z.string().optional() }),
       execute: async ({ query }) => {
         const where: Record<string, any> = { store: storeWhere };
         if (query?.trim()) {
           const queryPattern = `%${query.trim()}%`;
+          const code = /^([A-Za-z]+)-(\d+)$/.exec(query.trim());
           where.$or = [
             { name: { $ilike: queryPattern } },
-            { barcode: { $ilike: queryPattern } },
+            ...(code
+              ? [{
+                  sequence: {
+                    prefix: code[1],
+                    lastIndex: Number(code[2]),
+                  },
+                }]
+              : []),
           ];
         }
 

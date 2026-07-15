@@ -17,7 +17,7 @@ type ProductSeed = {
   name: string;
   price: number;
   purchasePrice: number;
-  barcode: string;
+  sequence_id: string;
 };
 
 type SequenceSeed = {
@@ -58,7 +58,8 @@ export async function seed(knex: Knex): Promise<void> {
   const { storeId, employeeId } = await getOrCreateSeedTarget(knex, now);
 
   const alreadySeeded = await knex('products')
-    .where({ store_id: storeId, barcode: `${SEED_PREFIX}-product-0001` })
+    .where({ store_id: storeId })
+    .whereLike('name', `${SEED_PREFIX} % Product %`)
     .first('id');
 
   if (alreadySeeded) {
@@ -74,7 +75,16 @@ export async function seed(knex: Knex): Promise<void> {
   const categories = buildCategories(storeId, now);
   await insertChunks(knex, 'categories', categories);
 
-  const products = buildProducts(storeId, now);
+  const productSequences = buildSequences(
+    storeId,
+    'Product',
+    'PDT',
+    PRODUCT_COUNT,
+    now,
+  );
+  await insertChunks(knex, 'sequence', productSequences);
+
+  const products = buildProducts(storeId, productSequences, now);
   await insertChunks(
     knex,
     'products',
@@ -210,9 +220,12 @@ export async function seed(knex: Knex): Promise<void> {
 async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void> {
   const products = await knex('products')
     .where({ store_id: storeId })
-    .whereLike('barcode', `${SEED_PREFIX}-product-%`)
-    .select('id');
+    .whereLike('name', `${SEED_PREFIX} % Product %`)
+    .select('id', 'sequence_id');
   const productIds = products.map((product) => product.id);
+  const productSequenceIds = products
+    .map((product) => product.sequence_id)
+    .filter((id): id is string => Boolean(id));
 
   const customers = await knex('customer')
     .where({ store_id: storeId })
@@ -331,6 +344,8 @@ async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void
     await knex('purchase').whereIn('id', purchaseIds).delete();
   if (productIds.length)
     await knex('products').whereIn('id', productIds).delete();
+  if (productSequenceIds.length)
+    await knex('sequence').whereIn('id', productSequenceIds).delete();
   if (customerIds.length)
     await knex('customer').whereIn('id', customerIds).delete();
   if (inventoryIds.length)
@@ -492,7 +507,11 @@ function buildCategories(storeId: string, now: Date) {
   }));
 }
 
-function buildProducts(storeId: string, now: Date): ProductSeed[] {
+function buildProducts(
+  storeId: string,
+  sequences: SequenceSeed[],
+  now: Date,
+): ProductSeed[] {
   const productTypes = [
     'Rice',
     'Flour',
@@ -510,12 +529,11 @@ function buildProducts(storeId: string, now: Date): ProductSeed[] {
     const price = 50 + ((index * 17) % 950);
     return {
       id: uuidv4(),
-      name: `${productTypes[index % productTypes.length]} Product ${index + 1}`,
+      name: `${SEED_PREFIX} ${productTypes[index % productTypes.length]} Product ${index + 1}`,
       price,
       purchasePrice: Math.max(1, Math.round(price * 0.72)),
-      barcode: `${SEED_PREFIX}-product-${String(index + 1).padStart(4, '0')}`,
       store_id: storeId,
-      sequence_id: null,
+      sequence_id: sequences[index].id,
       deleted_at: null,
       created_at: now,
       updated_at: now,

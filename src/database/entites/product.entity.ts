@@ -24,9 +24,6 @@ export class Product {
   @Property({ nullable: true })
   name?: string;
 
-  @Property({ nullable: true, fieldName: 'barcode' })
-  barcode?: string;
-
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
   price?: number;
 

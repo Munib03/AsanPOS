@@ -17,7 +17,6 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { BaseRepository } from '../shared/repositories/base.repository';
 import { SequenceService } from '../sequence/sequence.service';
-import { generateBarcode } from '../shared/utils/generate.barcode';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 
@@ -36,15 +35,24 @@ export class ProductService {
     const [products, meta] = await this.productRepository.findAndPaginate(
       { store },
       {
-        populate: ['images', 'categories'],
-        fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
+        populate: ['images', 'categories', 'sequence'],
+        fields: [
+          'id',
+          'name',
+          'price',
+          'sequence.prefix',
+          'sequence.lastIndex',
+          'images.imageUrl',
+          'categories.id',
+          'categories.name',
+        ],
       },
       { searchable: ['name', 'categories.name'] },
       query,
     );
 
     return {
-      data: serialize(products, { populate: ['images', 'categories'] }),
+      data: products.map((product) => this.toProductResponse(product)),
       meta,
     };
   }
@@ -53,8 +61,17 @@ export class ProductService {
     const product = await this.productRepository.findOneOrFail(
       { id, store },
       {
-        populate: ['images', 'categories'],
-        fields: ['id', 'name', 'price', 'images.imageUrl', 'categories.id', 'categories.name'],
+        populate: ['images', 'categories', 'sequence'],
+        fields: [
+          'id',
+          'name',
+          'price',
+          'sequence.prefix',
+          'sequence.lastIndex',
+          'images.imageUrl',
+          'categories.id',
+          'categories.name',
+        ],
         notFoundMessage: `Product with id ${id} not found`,
       },
     );
@@ -72,7 +89,7 @@ export class ProductService {
     }));
 
     return {
-      ...serialize(product, { populate: ['images', 'categories'] }),
+      ...this.toProductResponse(product),
       inventories,
     };
   }
@@ -83,8 +100,6 @@ export class ProductService {
     );
 
     const sequence = await this.sequenceService.generateSequence(store, 'Product', 'PDT');
-    const sequenceText = this.sequenceService.formatSequence(sequence);
-
     const product = this.em.create(Product, {
       ...stripUndefined({ name: dto.name, price: dto.price }),
       updatedAt: null,
@@ -93,8 +108,6 @@ export class ProductService {
     });
 
     product.categories.add(category);
-    product.barcode = await generateBarcode(sequenceText); // "PDT" + SEQUENCE_NUMBER
-
     if (dto.attachmentIds?.length) {
       await this.attachImages(product, dto.attachmentIds);
     }
@@ -136,11 +149,6 @@ export class ProductService {
     }
 
     this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
-
-    if (dto.name || dto.price) {
-      if (!product.sequence) throw new NotFoundException(`Sequence not found for product ${id}`);
-      product.barcode = await generateBarcode(this.sequenceService.formatSequence(product.sequence));
-    }
 
     if (dto.categoryName) {
       const category = await this.findOrFail<Category>(
@@ -220,6 +228,15 @@ export class ProductService {
     attachments.forEach((attachment) =>
       this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
     );
+  }
+
+  private toProductResponse(product: any) {
+    return {
+      ...serialize(product, { populate: ['images', 'categories'] }),
+      productCode: product.sequence
+        ? this.sequenceService.formatSequence(product.sequence)
+        : null,
+    };
   }
 
   private async findOrFail<T extends object>(
