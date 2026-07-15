@@ -27,6 +27,17 @@ const ASSISTANT_MESSAGE_ROLE = 'assistant';
 const MESSAGE_STATUS_COMPLETED = 'completed';
 const MESSAGE_STATUS_FAILED = 'failed';
 
+type FreshDataToolName =
+  | 'getProductCount'
+  | 'searchProducts'
+  | 'getInventorySummary'
+  | 'getMyDashboardStats'
+  | 'getSalesSummary'
+  | 'getPurchaseSummary'
+  | 'getCustomerSummary'
+  | 'getOpenSessions'
+  | 'getAuditActivity';
+
 export interface AiAssistantStreamResponse {
   threadId: string;
   userMessageId: string;
@@ -105,6 +116,7 @@ export class AiAssistantService {
 
     const openCode = this.createOpenCodeProvider();
     const model = this.getModelName();
+    const freshDataTool = this.getFreshDataTool(prompt);
 
     const result = streamText({
       model: this.getChatModel(openCode, model),
@@ -118,8 +130,18 @@ export class AiAssistantService {
         store: verifiedStore,
         employeeId,
       }),
-      prepareStep: ({ stepNumber }) =>
-        stepNumber === 0 ? { toolChoice: 'required' as const } : {},
+      prepareStep: ({ stepNumber }) => {
+        if (stepNumber !== 0) return {};
+
+        return freshDataTool
+          ? {
+              toolChoice: {
+                type: 'tool' as const,
+                toolName: freshDataTool,
+              },
+            }
+          : { toolChoice: 'required' as const };
+      },
     });
 
     return {
@@ -356,6 +378,41 @@ export class AiAssistantService {
     );
 
     return messages.reverse();
+  }
+
+  private getFreshDataTool(question: string): FreshDataToolName | undefined {
+    const normalizedQuestion = question.toLowerCase();
+
+    if (/\b(product|products|sku|skus)\b/.test(normalizedQuestion)) {
+      return /\b(how many|count|total number|number of)\b/.test(
+        normalizedQuestion,
+      )
+        ? 'getProductCount'
+        : 'searchProducts';
+    }
+
+    if (/\b(inventory|inventories|warehouse|warehouses|stock)\b/.test(normalizedQuestion))
+      return 'getInventorySummary';
+
+    if (/\b(dashboard|profit|revenue|performance)\b/.test(normalizedQuestion))
+      return 'getMyDashboardStats';
+
+    if (/\b(sale|sales)\b/.test(normalizedQuestion))
+      return 'getSalesSummary';
+
+    if (/\b(purchase|purchases)\b/.test(normalizedQuestion))
+      return 'getPurchaseSummary';
+
+    if (/\b(customer|customers)\b/.test(normalizedQuestion))
+      return 'getCustomerSummary';
+
+    if (/\b(session|sessions|cashier|cashiers)\b/.test(normalizedQuestion))
+      return 'getOpenSessions';
+
+    if (/\b(audit|activity|history)\b/.test(normalizedQuestion))
+      return 'getAuditActivity';
+
+    return undefined;
   }
 
   private toModelMessage(message: AiChatMessage): ModelMessage {
