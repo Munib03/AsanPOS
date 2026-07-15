@@ -14,63 +14,15 @@ import {
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { SalePaymentStatus } from '../shared/utils/sale-payment-status.enum';
 
-type RangeBounds = {
-  currentStart: Date;
-  currentEnd: Date;
-  previousStart: Date;
-  previousEnd: Date;
-};
-
-type DashboardSaleItem = {
-  id: string;
-  productId: string;
-  quantity: number;
-  unitPrice: number;
-};
-
-type DashboardSale = {
-  id: string;
-  createdAt?: Date;
-  items: DashboardSaleItem[];
-};
-
-type DashboardSaleRow = {
-  saleId: string;
-  createdAt: Date | string | null;
-  itemId: string | null;
-  productId: string | null;
-  quantity: string | number | null;
-  unitPrice: string | number | null;
-};
-
-type PaymentSessionRow = {
-  saleId: string;
-  sessionId: string;
-};
-
-type PurchaseBatchRow = {
-  productId: string;
-  quantity: string | number;
-  unitPrice: string | number;
-};
-
-type HistoricalSaleItemRow = {
-  id: string;
-  productId: string;
-  quantity: string | number;
-};
-
-type StockSummaryRecord = {
-  quantity?: number;
-  product: {
-    id: string;
-    name?: string;
-    price?: number;
-  };
-  inventory: {
-    name: string;
-  };
-};
+type RangeBounds = { currentStart: Date; currentEnd: Date; previousStart: Date; previousEnd: Date };
+type DashboardRangeContext = RangeBounds & { range: DashboardRange; customRange: { from: Date; to: Date } | null; isToday: boolean; includeDailyBreakdown: boolean };
+type DashboardSaleItem = { id: string; productId: string; quantity: number; unitPrice: number };
+type DashboardSale = { id: string; createdAt?: Date; items: DashboardSaleItem[] };
+type DashboardSaleRow = { saleId: string; createdAt: Date | string | null; itemId: string | null; productId: string | null; quantity: string | number | null; unitPrice: string | number | null };
+type PaymentSessionRow = { saleId: string; sessionId: string };
+type PurchaseBatchRow = { productId: string; quantity: string | number; unitPrice: string | number };
+type HistoricalSaleItemRow = { id: string; productId: string; quantity: string | number };
+type StockSummaryRecord = { quantity?: number; product: { id: string; name?: string; price?: number }; inventory: { name: string } };
 
 const startOfUtcDay = (date: Date): Date => {
   const d = new Date(date);
@@ -89,6 +41,10 @@ const addDays = (date: Date, days: number): Date => {
 };
 const toDay = (d: Date | string) => new Date(d).toISOString().split('T')[0];
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const STOCK_FIELDS = [
+  'id', 'quantity', 'product.id', 'product.name', 'product.price',
+  'inventory.id', 'inventory.name',
+] as any;
 
 function dayWindow(
   now: Date,
@@ -102,9 +58,7 @@ function dayWindow(
   return { currentStart, currentEnd, previousStart, previousEnd };
 }
 
-const DAY_WINDOW_CONFIG: Partial<
-  Record<DashboardRange, { windowDays: number; endOffsetDays: number }>
-> = {
+const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; endOffsetDays: number }>> = {
   [DashboardRange.TODAY]: { windowDays: 1, endOffsetDays: 0 },
   [DashboardRange.YESTERDAY]: { windowDays: 1, endOffsetDays: 1 },
   [DashboardRange.LAST_WEEK]: { windowDays: 7, endOffsetDays: 0 },
@@ -125,38 +79,20 @@ export class DashboardService {
     employeeId: string,
     query: DashboardQueryDto,
   ): Promise<DashboardStats> {
-    const customRange = this.parseAndValidateDateRange(query.from, query.to);
-    if (query.range === DashboardRange.CUSTOM && !customRange) {
-      throw new BadRequestException(
-        '"from" and "to" are required when range is "custom"',
-      );
-    }
-
-    const range = customRange
-      ? DashboardRange.CUSTOM
-      : (query.range ?? DashboardRange.TODAY);
-    const { currentStart, currentEnd, previousStart, previousEnd } = customRange
-      ? this.getCustomRangeBounds(customRange.from, customRange.to)
-      : this.getEnumRangeBounds(range);
-
-    const includeCashierBreakdown = range === DashboardRange.TODAY;
-    const includeSessionInfo = range === DashboardRange.TODAY;
-    const includeDailyBreakdown =
-      range === DashboardRange.LAST_WEEK ||
-      range === DashboardRange.MONTHLY ||
-      range === DashboardRange.CUSTOM;
+    const context = this.getRangeContext(query);
+    const {
+      range,
+      customRange,
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+    } = context;
 
     const [currentSales, previousSales] = await Promise.all([
       this.findDashboardSales(store.id, currentStart, currentEnd),
       this.findDashboardSales(store.id, previousStart, previousEnd),
     ]);
-
-    const currentTotalSales = this.calcTotalSales(currentSales);
-    const previousTotalSales = this.calcTotalSales(previousSales);
-    const salesPercentageChange = this.calcBoundedSignedPercentage(
-      currentTotalSales,
-      previousTotalSales,
-    );
 
     const productIds = [
       ...new Set(
@@ -167,7 +103,7 @@ export class DashboardService {
     ];
     const [costPriceMap, cashierBreakdown] = await Promise.all([
       this.buildSaleItemCostMap(store, productIds, currentEnd),
-      includeCashierBreakdown
+      context.isToday
         ? this.getCashierBreakdown(
             store,
             currentStart,
@@ -177,109 +113,20 @@ export class DashboardService {
         : Promise.resolve([]),
     ]);
 
-    const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
-    const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
-    const profitPercentageChange = this.calcBoundedSignedPercentage(
-      currentNetProfit,
-      previousNetProfit,
+    const response = this.createResponse(
+      range,
+      currentSales,
+      previousSales,
+      costPriceMap,
+      cashierBreakdown,
+      customRange,
+      currentStart,
+      currentEnd,
     );
 
-    const response: DashboardStats = {
-      range,
-      sales: {
-        total: round2(currentTotalSales),
-        percentageChange: salesPercentageChange,
-      },
-      profit: {
-        total: round2(currentNetProfit),
-        percentageChange: profitPercentageChange,
-      },
-    };
-
-    if (includeCashierBreakdown) response.cashierBreakdown = cashierBreakdown;
-    if (customRange)
-      response.customRange = {
-        from: currentStart.toISOString(),
-        to: currentEnd.toISOString(),
-      };
-
-    if (includeSessionInfo) {
-      const lowStockPage = this.getPage(query.lowStockPage);
-      const lowStockPageSize = this.getPageSize(query.lowStockPageSize);
-      const outOfStockPage = this.getPage(query.outOfStockPage);
-      const outOfStockPageSize = this.getPageSize(query.outOfStockPageSize);
-
-      const lowStockBaseWhere = {
-        inventory: { store },
-        quantity: { $gt: 0, $lte: 10 },
-      };
-      const outOfStockBaseWhere = {
-        inventory: { store },
-        quantity: 0,
-      };
-
-      const [
-        lowStockTotal,
-        outOfStockTotal,
-        lowStockRecords,
-        outOfStockRecords,
-      ] = await Promise.all([
-        this.em.count(StockQuantity, lowStockBaseWhere),
-        this.em.count(StockQuantity, outOfStockBaseWhere),
-        this.em.find(StockQuantity, lowStockBaseWhere, {
-          populate: ['product', 'inventory'],
-          fields: [
-            'id',
-            'quantity',
-            'product.id',
-            'product.name',
-            'product.price',
-            'inventory.id',
-            'inventory.name',
-          ],
-          refresh: true,
-          orderBy: { quantity: 'ASC', id: 'ASC' },
-          limit: lowStockPageSize,
-          offset: (lowStockPage - 1) * lowStockPageSize,
-        }),
-        this.em.find(StockQuantity, outOfStockBaseWhere, {
-          populate: ['product', 'inventory'],
-          fields: [
-            'id',
-            'quantity',
-            'product.id',
-            'product.name',
-            'product.price',
-            'inventory.id',
-            'inventory.name',
-          ],
-          refresh: true,
-          orderBy: { id: 'ASC' },
-          limit: outOfStockPageSize,
-          offset: (outOfStockPage - 1) * outOfStockPageSize,
-        }),
-      ]);
-
-      response.lowStockProducts = {
-        items: lowStockRecords.map(this.toStockSummary),
-        total: lowStockTotal,
-        page: lowStockPage,
-        pageSize: lowStockPageSize,
-        totalPages: Math.max(1, Math.ceil(lowStockTotal / lowStockPageSize)),
-      };
-      response.outOfStockProducts = {
-        items: outOfStockRecords.map(this.toStockSummary),
-        total: outOfStockTotal,
-        page: outOfStockPage,
-        pageSize: outOfStockPageSize,
-        totalPages: Math.max(
-          1,
-          Math.ceil(outOfStockTotal / outOfStockPageSize),
-        ),
-      };
-    }
-
-    if (includeDailyBreakdown) {
+    if (context.isToday)
+      await this.addStockBreakdowns(response, store, query);
+    if (context.includeDailyBreakdown)
       response.dailyBreakdown = await this.buildDailyBreakdown(
         store,
         currentSales,
@@ -287,9 +134,122 @@ export class DashboardService {
         currentStart,
         currentEnd,
       );
-    }
 
     return response;
+  }
+
+  private getRangeContext(query: DashboardQueryDto): DashboardRangeContext {
+    const customRange = this.parseAndValidateDateRange(query.from, query.to);
+    if (query.range === DashboardRange.CUSTOM && !customRange)
+      throw new BadRequestException(
+        '"from" and "to" are required when range is "custom"',
+      );
+
+    const range = customRange
+      ? DashboardRange.CUSTOM
+      : (query.range ?? DashboardRange.TODAY);
+    const bounds = customRange
+      ? this.getCustomRangeBounds(customRange.from, customRange.to)
+      : this.getEnumRangeBounds(range);
+
+    return {
+      ...bounds,
+      range,
+      customRange,
+      isToday: range === DashboardRange.TODAY,
+      includeDailyBreakdown: [
+        DashboardRange.LAST_WEEK,
+        DashboardRange.MONTHLY,
+        DashboardRange.CUSTOM,
+      ].includes(range),
+    };
+  }
+
+  private createResponse(
+    range: DashboardRange,
+    currentSales: DashboardSale[],
+    previousSales: DashboardSale[],
+    costPriceMap: Map<string, number>,
+    cashierBreakdown: CashierStats[],
+    customRange: { from: Date; to: Date } | null,
+    currentStart: Date,
+    currentEnd: Date,
+  ): DashboardStats {
+    const currentTotalSales = this.calcTotalSales(currentSales);
+    const previousTotalSales = this.calcTotalSales(previousSales);
+    const currentNetProfit = this.calcTotalProfit(currentSales, costPriceMap);
+    const previousNetProfit = this.calcTotalProfit(previousSales, costPriceMap);
+    const response: DashboardStats = {
+      range,
+      sales: {
+        total: round2(currentTotalSales),
+        percentageChange: this.calcBoundedSignedPercentage(
+          currentTotalSales,
+          previousTotalSales,
+        ),
+      },
+      profit: {
+        total: round2(currentNetProfit),
+        percentageChange: this.calcBoundedSignedPercentage(
+          currentNetProfit,
+          previousNetProfit,
+        ),
+      },
+    };
+
+    if (range === DashboardRange.TODAY)
+      response.cashierBreakdown = cashierBreakdown;
+    if (customRange)
+      response.customRange = {
+        from: currentStart.toISOString(),
+        to: currentEnd.toISOString(),
+      };
+    return response;
+  }
+
+  private async addStockBreakdowns(
+    response: DashboardStats,
+    store: Store,
+    query: DashboardQueryDto,
+  ): Promise<void> {
+    const [lowStock, outOfStock] = await Promise.all([
+      this.getStockPage(store, { quantity: { $gt: 0, $lte: 10 } }, query.lowStockPage, query.lowStockPageSize, { quantity: 'ASC', id: 'ASC' }),
+      this.getStockPage(store, { quantity: 0 }, query.outOfStockPage, query.outOfStockPageSize, { id: 'ASC' }),
+    ]);
+
+    response.lowStockProducts = lowStock;
+    response.outOfStockProducts = outOfStock;
+  }
+
+  private async getStockPage(
+    store: Store,
+    stockWhere: Record<string, unknown>,
+    rawPage: string | undefined,
+    rawPageSize: string | undefined,
+    orderBy: Record<string, 'ASC' | 'DESC'>,
+  ) {
+    const page = this.getPage(rawPage);
+    const pageSize = this.getPageSize(rawPageSize);
+    const where = { inventory: { store }, ...stockWhere };
+    const [total, records] = await Promise.all([
+      this.em.count(StockQuantity, where),
+      this.em.find(StockQuantity, where, {
+        populate: ['product', 'inventory'],
+        fields: STOCK_FIELDS,
+        refresh: true,
+        orderBy,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      }),
+    ]);
+
+    return {
+      items: records.map(this.toStockSummary),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   private toStockSummary = (record: StockSummaryRecord) => ({
