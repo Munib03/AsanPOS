@@ -2,31 +2,23 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { createOpenAI } from '@ai-sdk/openai';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { stepCountIs, streamText } from 'ai';
-import type { ModelMessage } from 'ai';
-import type { Response } from 'express';
+import type { MessageEvent } from '@nestjs/common';
+import { defer, Observable, switchMap } from 'rxjs';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { AiChatMessage } from '../database/entites/ai-chat-message.entity';
 import { AiChatThread } from '../database/entites/ai-chat-thread.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import {
-  AiAssistantStreamResponse,
-  AiChatMessageResponse,
   AiChatThreadDetail,
   AiChatThreadSummary,
-  PreparedAiChatTurn,
 } from '../shared/types/ai-assistant.types';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
-import {
-  AI_CHAT_PROVIDER,
-  createOpenCodeProvider,
-  getAiModelName,
-  getFreshDataTool,
-} from './helpers/ai-assistant.model';
-import { getAnalystSystemPrompt } from './helpers/ai-assistant.prompt';
 import { streamAiAssistantResponse } from './helpers/ai-assistant.sse';
 import { createAiAssistantTools } from './helpers/ai-assistant.tools';
 
@@ -34,6 +26,9 @@ const USER_MESSAGE_ROLE = 'user';
 const ASSISTANT_MESSAGE_ROLE = 'assistant';
 const MESSAGE_STATUS_COMPLETED = 'completed';
 const MESSAGE_STATUS_FAILED = 'failed';
+const AI_CHAT_PROVIDER = 'opencode';
+const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
+const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
 
 @Injectable()
 export class AiAssistantService {
@@ -42,152 +37,237 @@ export class AiAssistantService {
     private readonly em: EntityManager,
   ) {}
 
-  async streamAnswerToResponse(
+  streamAnswer(
     store: Store,
     employeeId: string,
     body: AskAiAssistantDto,
-    res: Response,
-  ): Promise<void> {
-    const result = await this.streamAnswer(
-      store,
-      employeeId,
-      body.question,
-      body.threadId,
-    );
-    const model = getAiModelName();
+  ): Observable<MessageEvent> {
+    const model =
+      process.env.OPENCODE_MODEL ??
+      process.env.OPENAI_MODEL ??
+      DEFAULT_OPENCODE_MODEL;
 
-    return streamAiAssistantResponse({
-      result,
-      res,
-      saveAssistantMessage: (threadId, content) =>
-        this.saveAssistantMessage(
-          threadId,
-          content,
-          model,
-          AI_CHAT_PROVIDER,
-        ),
-      saveFailedAssistantMessage: (threadId, content, error) =>
-        this.saveFailedAssistantMessage(
-          threadId,
-          content,
-          model,
-          AI_CHAT_PROVIDER,
-          error,
-        ),
-    });
+    return defer(async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new ServiceUnavailableException(
+          'OPENAI_API_KEY is not configured',
+        );
+      }
+
+      const prompt = body.question?.trim();
+      if (!prompt) throw new BadRequestException('question is required');
+
+      const employee = await this.em.findOne(
+        Employee,
+        { id: employeeId, store: { id: store.id } },
+        { populate: ['store'], refresh: true },
+      );
+      if (!employee) throw new NotFoundException('Employee or store not found');
+
+      const verifiedStore = employee.store;
+      let thread: AiChatThread;
+      if (body.threadId) {
+        const existingThread = await this.em.findOne(AiChatThread, {
+          id: body.threadId,
+          store: verifiedStore,
+          employee: { id: employeeId },
+          deletedAt: null,
+        });
+        if (!existingThread) {
+          throw new NotFoundException('AI chat thread not found');
+        }
+        thread = existingThread;
+      } else {
+        const now = new Date();
+        thread = this.em.create(AiChatThread, {
+          store: verifiedStore,
+          employee,
+          title: prompt.length <= 80 ? prompt : `${prompt.slice(0, 77)}...`,
+          lastMessageAt: now,
+          createdAt: now,
+        });
+        await this.em.persistAndFlush(thread);
+      }
+
+      const previousMessages = await this.em.find(
+        AiChatMessage,
+        {
+          thread,
+          role: { $in: [USER_MESSAGE_ROLE, ASSISTANT_MESSAGE_ROLE] },
+          status: MESSAGE_STATUS_COMPLETED,
+        },
+        { orderBy: { createdAt: 'DESC' }, limit: 20 },
+      );
+      previousMessages.reverse();
+
+      const userMessage = this.em.create(AiChatMessage, {
+        thread,
+        role: USER_MESSAGE_ROLE,
+        content: prompt,
+        status: MESSAGE_STATUS_COMPLETED,
+        metadata: { source: 'ai-assistant-sse' },
+      });
+      thread.lastMessageAt = new Date();
+      await this.em.persistAndFlush(userMessage);
+
+      const openCode = createOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
+        name: AI_CHAT_PROVIDER,
+      });
+      const result = streamText({
+        model: openCode.chat(model),
+        temperature: 0,
+        messages: [
+          ...previousMessages.map((message) => ({
+            role:
+              message.role === ASSISTANT_MESSAGE_ROLE
+                ? ('assistant' as const)
+                : ('user' as const),
+            content: message.content,
+          })),
+          { role: 'user' as const, content: prompt },
+        ],
+        stopWhen: stepCountIs(5),
+        tools: createAiAssistantTools({
+          dashboardService: this.dashboardService,
+          em: this.em,
+          store: verifiedStore,
+          employeeId,
+        }),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber === 0 ? { toolChoice: 'required' as const } : {},
+      });
+
+      return streamAiAssistantResponse({
+        result: {
+          threadId: thread.id,
+          userMessageId: userMessage.id,
+          fullStream: result.fullStream,
+        },
+        saveAssistantMessage: (threadId, content) =>
+          this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER),
+        saveFailedAssistantMessage: async (threadId, content, error) => {
+          await this.saveAssistantMessage(
+            threadId,
+            content,
+            model,
+            AI_CHAT_PROVIDER,
+            MESSAGE_STATUS_FAILED,
+            error instanceof Error
+              ? error.message
+              : 'Failed to stream assistant response.',
+          );
+        },
+      });
+    }).pipe(switchMap((events) => events));
   }
 
-  async streamAnswer(
+  
+  async findAllThreads(
     store: Store,
     employeeId: string,
-    question: string,
-    threadId?: string,
-  ): Promise<AiAssistantStreamResponse> {
-    const prompt = this.validateQuestion(question);
-    const verifiedStore = await this.getVerifiedStore(store.id, employeeId);
-    const { thread, userMessage, messages } = await this.prepareChatTurn(
-      verifiedStore,
-      employeeId,
-      prompt,
-      threadId,
+  ): Promise<AiChatThreadSummary[]> {
+    const threads = await this.em.find(
+      AiChatThread,
+      { store, employee: { id: employeeId }, deletedAt: null },
+      { orderBy: { lastMessageAt: 'DESC', createdAt: 'DESC' } },
     );
-    const freshDataTool = getFreshDataTool(prompt);
-    const openCode = createOpenCodeProvider();
+    return threads.map((thread) => ({
+      id: thread.id,
+      title: thread.title,
+      lastMessageAt: thread.lastMessageAt,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    }));
+  }
 
-    const result = streamText({
-      model: openCode.chat(getAiModelName()),
-      temperature: 0,
-      system: getAnalystSystemPrompt(),
-      messages,
-      stopWhen: stepCountIs(5),
-      tools: createAiAssistantTools({
-        dashboardService: this.dashboardService,
-        em: this.em,
-        store: verifiedStore,
-        employeeId,
-      }),
-      prepareStep: ({ stepNumber }) => {
-        if (stepNumber !== 0) return {};
-
-        return freshDataTool
-          ? { toolChoice: { type: 'tool' as const, toolName: freshDataTool } }
-          : { toolChoice: 'required' as const };
-      },
+  async findOneThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<AiChatThreadDetail> {
+    const thread = await this.em.findOne(AiChatThread, {
+      id: threadId,
+      store,
+      employee: { id: employeeId },
+      deletedAt: null,
     });
+    if (!thread) throw new NotFoundException('AI chat thread not found');
 
+    const messages = await this.em.find(
+      AiChatMessage,
+      { thread },
+      { orderBy: { createdAt: 'ASC' } },
+    );
     return {
-      threadId: thread.id,
-      userMessageId: userMessage.id,
-      textStream: result.textStream,
+      id: thread.id,
+      title: thread.title,
+      lastMessageAt: thread.lastMessageAt,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        model: message.model,
+        provider: message.provider,
+        metadata: message.metadata,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+      })),
     };
   }
 
-  findAllThreads(store: Store, employeeId: string) {
-    return this.getAllThreads(store, employeeId);
-  }
-
-  findOneThread(store: Store, employeeId: string, threadId: string) {
-    return this.getOneThread(store, employeeId, threadId);
-  }
-
-  updateThreadTitle(
+  async updateThreadTitle(
     store: Store,
     employeeId: string,
     threadId: string,
     title: string,
-  ) {
-    return this.renameThread(store, employeeId, threadId, title);
+  ): Promise<AiChatThreadSummary> {
+    const normalizedTitle = title?.trim();
+    if (!normalizedTitle) throw new BadRequestException('title is required');
+
+    const thread = await this.em.findOne(AiChatThread, {
+      id: threadId,
+      store,
+      employee: { id: employeeId },
+      deletedAt: null,
+    });
+    if (!thread) throw new NotFoundException('AI chat thread not found');
+
+    thread.title = normalizedTitle;
+    thread.updatedAt = new Date();
+    await this.em.flush();
+    return {
+      id: thread.id,
+      title: thread.title,
+      lastMessageAt: thread.lastMessageAt,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    };
   }
 
-  deleteThread(store: Store, employeeId: string, threadId: string) {
-    return this.removeThread(store, employeeId, threadId);
-  }
-
-  private async getVerifiedStore(
-    requestedStoreId: string,
-    employeeId: string,
-  ): Promise<Store> {
-    const employee = await this.em.findOne(
-      Employee,
-      { id: employeeId, store: { id: requestedStoreId } },
-      { populate: ['store'], refresh: true },
-    );
-    if (!employee) throw new NotFoundException('Employee or store not found');
-
-    return employee.store;
-  }
-
-  private async prepareChatTurn(
+  async deleteThread(
     store: Store,
     employeeId: string,
-    prompt: string,
-    threadId?: string,
-  ): Promise<PreparedAiChatTurn> {
-    const thread = await this.resolveThread(
+    threadId: string,
+  ): Promise<{ message: string; id: string }> {
+    const thread = await this.em.findOne(AiChatThread, {
+      id: threadId,
       store,
-      employeeId,
-      prompt,
-      threadId,
-    );
-    const previousMessages = await this.loadRecentThreadMessages(thread);
-    const userMessage = this.em.create(AiChatMessage, {
-      thread,
-      role: USER_MESSAGE_ROLE,
-      content: prompt,
-      status: MESSAGE_STATUS_COMPLETED,
-      metadata: { source: 'ai-assistant-sse' },
+      employee: { id: employeeId },
+      deletedAt: null,
     });
-    thread.lastMessageAt = new Date();
-    await this.em.persistAndFlush(userMessage);
+    if (!thread) throw new NotFoundException('AI chat thread not found');
 
-    return {
-      thread,
-      userMessage,
-      messages: [
-        ...previousMessages.map((message) => this.toModelMessage(message)),
-        { role: USER_MESSAGE_ROLE, content: prompt },
-      ],
-    };
+    const now = new Date();
+    thread.deletedAt = now;
+    thread.updatedAt = now;
+    await this.em.flush();
+    return { message: 'AI chat thread deleted successfully.', id: thread.id };
   }
 
   private async saveAssistantMessage(
@@ -197,7 +277,7 @@ export class AiAssistantService {
     provider: string,
     status: string = MESSAGE_STATUS_COMPLETED,
     errorMessage?: string,
-  ): Promise<AiChatMessage> {
+  ): Promise<{ id: string }> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       deletedAt: null,
@@ -215,176 +295,6 @@ export class AiAssistantService {
     });
     thread.lastMessageAt = new Date();
     await this.em.persistAndFlush(message);
-    return message;
-  }
-
-  private async saveFailedAssistantMessage(
-    threadId: string,
-    content: string,
-    model: string,
-    provider: string,
-    error: unknown,
-  ): Promise<void> {
-    await this.saveAssistantMessage(
-      threadId,
-      content,
-      model,
-      provider,
-      MESSAGE_STATUS_FAILED,
-      error instanceof Error
-        ? error.message
-        : 'Failed to stream assistant response.',
-    );
-  }
-
-  private async getAllThreads(
-    store: Store,
-    employeeId: string,
-  ): Promise<AiChatThreadSummary[]> {
-    const threads = await this.em.find(
-      AiChatThread,
-      { store, employee: { id: employeeId }, deletedAt: null },
-      { orderBy: { lastMessageAt: 'DESC', createdAt: 'DESC' } },
-    );
-    return threads.map((thread) => this.toThreadSummary(thread));
-  }
-
-  private async getOneThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<AiChatThreadDetail> {
-    const thread = await this.findOwnedThread(store, employeeId, threadId);
-    const messages = await this.em.find(
-      AiChatMessage,
-      { thread },
-      { orderBy: { createdAt: 'ASC' } },
-    );
-    return {
-      ...this.toThreadSummary(thread),
-      messages: messages.map((message) => this.toMessageResponse(message)),
-    };
-  }
-
-  private async renameThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-    title: string,
-  ): Promise<AiChatThreadSummary> {
-    const normalizedTitle = title?.trim();
-    if (!normalizedTitle) throw new BadRequestException('title is required');
-
-    const thread = await this.findOwnedThread(store, employeeId, threadId);
-    thread.title = normalizedTitle;
-    thread.updatedAt = new Date();
-    await this.em.flush();
-    return this.toThreadSummary(thread);
-  }
-
-  private async removeThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<{ message: string; id: string }> {
-    const thread = await this.findOwnedThread(store, employeeId, threadId);
-    const now = new Date();
-    thread.deletedAt = now;
-    thread.updatedAt = now;
-    await this.em.flush();
-    return { message: 'AI chat thread deleted successfully.', id: thread.id };
-  }
-
-  private async resolveThread(
-    store: Store,
-    employeeId: string,
-    prompt: string,
-    threadId?: string,
-  ): Promise<AiChatThread> {
-    const employee = await this.em.findOne(Employee, { id: employeeId, store });
-    if (!employee) throw new NotFoundException('Employee not found');
-    if (threadId) return this.findOwnedThread(store, employeeId, threadId);
-
-    const now = new Date();
-    const thread = this.em.create(AiChatThread, {
-      store,
-      employee,
-      title: prompt.length <= 80 ? prompt : `${prompt.slice(0, 77)}...`,
-      lastMessageAt: now,
-      createdAt: now,
-    });
-    await this.em.persistAndFlush(thread);
-    return thread;
-  }
-
-  private async findOwnedThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<AiChatThread> {
-    const thread = await this.em.findOne(AiChatThread, {
-      id: threadId,
-      store,
-      employee: { id: employeeId },
-      deletedAt: null,
-    });
-    if (!thread) throw new NotFoundException('AI chat thread not found');
-    return thread;
-  }
-
-  private async loadRecentThreadMessages(
-    thread: AiChatThread,
-  ): Promise<AiChatMessage[]> {
-    const messages = await this.em.find(
-      AiChatMessage,
-      {
-        thread,
-        role: { $in: [USER_MESSAGE_ROLE, ASSISTANT_MESSAGE_ROLE] },
-        status: MESSAGE_STATUS_COMPLETED,
-      },
-      { orderBy: { createdAt: 'DESC' }, limit: 20 },
-    );
-    return messages.reverse();
-  }
-
-  private toModelMessage(message: AiChatMessage): ModelMessage {
-    return {
-      role:
-        message.role === ASSISTANT_MESSAGE_ROLE
-          ? ASSISTANT_MESSAGE_ROLE
-          : USER_MESSAGE_ROLE,
-      content: message.content,
-    };
-  }
-
-  private toThreadSummary(thread: AiChatThread): AiChatThreadSummary {
-    return {
-      id: thread.id,
-      title: thread.title,
-      lastMessageAt: thread.lastMessageAt,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-    };
-  }
-
-  private toMessageResponse(message: AiChatMessage): AiChatMessageResponse {
-    return {
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      status: message.status,
-      errorMessage: message.errorMessage,
-      model: message.model,
-      provider: message.provider,
-      metadata: message.metadata,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-    };
-  }
-
-  private validateQuestion(question: string): string {
-    const prompt = question?.trim();
-    if (!prompt) throw new BadRequestException('question is required');
-    return prompt;
+    return { id: message.id };
   }
 }

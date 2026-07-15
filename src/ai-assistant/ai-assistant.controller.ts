@@ -6,10 +6,11 @@ import {
   Param,
   Post,
   Put,
-  Res,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { MessageEvent } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import { AiAssistantService } from './ai-assistant.service';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import { UpdateAiChatThreadDto } from './dto/update-ai-chat-thread.dto';
@@ -40,6 +41,7 @@ export class AiAssistantController {
     return this.aiAssistantService.findOneThread(store, user.id, id);
   }
 
+
   @Put('threads/:id')
   updateThreadTitle(
     @CurrentStore() store: Store,
@@ -55,6 +57,7 @@ export class AiAssistantController {
     );
   }
 
+
   @Delete('threads/:id')
   deleteThread(
     @CurrentStore() store: Store,
@@ -64,18 +67,14 @@ export class AiAssistantController {
     return this.aiAssistantService.deleteThread(store, user.id, id);
   }
 
-  @Post('ask/stream')
-  async askStream(
+
+  @Post('ask')
+  @Sse('ask')
+  askStream(
     @CurrentStore() store: Store,
     @CurrentUser() user: { id: string },
     @Body() body: AskAiAssistantDto,
-    @Res() res: Response,
-  ): Promise<void> {
-    return this.aiAssistantService.streamAnswerToResponse(
-      store,
-      user.id,
-      body,
-      res,
-    );
+  ): Observable<MessageEvent> {
+    return this.aiAssistantService.streamAnswer(store, user.id, body);
   }
 }

@@ -1,4 +1,6 @@
-import type { Response } from 'express';
+import type { MessageEvent } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import type { AiAssistantStreamPart } from '../../shared/types/ai-assistant.types';
 
 interface StreamSanitizerState {
   buffer: string;
@@ -9,9 +11,8 @@ interface StreamAiAssistantResponseParams {
   result: {
     threadId: string;
     userMessageId: string;
-    textStream: AsyncIterable<string>;
+    fullStream: AsyncIterable<AiAssistantStreamPart>;
   };
-  res: Response;
   saveAssistantMessage: (
     threadId: string,
     content: string,
@@ -23,82 +24,64 @@ interface StreamAiAssistantResponseParams {
   ) => Promise<void>;
 }
 
-export async function streamAiAssistantResponse({
+export function streamAiAssistantResponse({
   result,
-  res,
   saveAssistantMessage,
   saveFailedAssistantMessage,
-}: StreamAiAssistantResponseParams): Promise<void> {
-  prepareSseResponse(res);
+}: StreamAiAssistantResponseParams): Observable<MessageEvent> {
+  return new Observable((subscriber) => {
+    let closed = false;
+    let fullResponse = '';
+    let hasVisibleContent = false;
+    const sanitizer: StreamSanitizerState = { buffer: '', inHiddenBlock: false };
+    const emit = (type: string, data: Record<string, unknown>) => {
+      if (!closed) subscriber.next({ type, data });
+    };
 
-  let fullResponse = '';
-  const sanitizer: StreamSanitizerState = {
-    buffer: '',
-    inHiddenBlock: false,
-  };
+    void (async () => {
+      try {
+        for await (const part of result.fullStream) {
+          if (closed) return;
+          if (part.type === 'tool-call' || part.type === 'tool-result') {
+            emit(part.type, { toolCallId: part.toolCallId, toolName: part.toolName, status: part.type === 'tool-call' ? 'started' : 'completed' });
+            continue;
+          }
+          if (part.type === 'tool-error') {
+            emit('tool-result', { toolCallId: part.toolCallId, toolName: part.toolName, status: 'failed' });
+            continue;
+          }
+          if (part.type !== 'text-delta' || !part.text) continue;
+          const safeChunk = sanitizeStreamChunk(part.text, sanitizer);
+          const contentChunk = hasVisibleContent
+            ? safeChunk
+            : safeChunk.trimStart();
+          if (!contentChunk) continue;
+          hasVisibleContent = true;
+          fullResponse += contentChunk;
+          emit('chunk', { content: contentChunk });
+        }
 
-  try {
-    for await (const chunk of result.textStream) {
-      if (res.writableEnded) return;
+        const finalChunk = flushSanitizedStream(sanitizer);
+        const contentChunk = hasVisibleContent
+          ? finalChunk
+          : finalChunk.trimStart();
+        if (contentChunk) {
+          fullResponse += contentChunk;
+          emit('chunk', { content: contentChunk });
+        }
+        const finalResponse = fullResponse.trim();
+        const assistantMessage = await saveAssistantMessage(result.threadId, finalResponse);
+        emit('done', { content: finalResponse, threadId: result.threadId, userMessageId: result.userMessageId, assistantMessageId: assistantMessage.id });
+        if (!closed) subscriber.complete();
+      } catch (error) {
+        try { await saveFailedAssistantMessage(result.threadId, fullResponse, error); } catch { }
+        emit('error', { threadId: result.threadId, userMessageId: result.userMessageId, message: error instanceof Error ? error.message : 'Failed to stream assistant response.' });
+        if (!closed) subscriber.complete();
+      }
+    })();
 
-      const safeChunk = sanitizeStreamChunk(chunk, sanitizer);
-      if (!safeChunk) continue;
-
-      fullResponse += safeChunk;
-      writeSseEvent(res, 'chunk', { content: safeChunk });
-    }
-
-    const finalChunk = flushSanitizedStream(sanitizer);
-    if (finalChunk) {
-      fullResponse += finalChunk;
-      writeSseEvent(res, 'chunk', { content: finalChunk });
-    }
-
-    const assistantMessage = await saveAssistantMessage(
-      result.threadId,
-      fullResponse,
-    );
-
-    writeSseEvent(res, 'done', {
-      content: fullResponse,
-      threadId: result.threadId,
-      userMessageId: result.userMessageId,
-      assistantMessageId: assistantMessage.id,
-    });
-    res.end();
-  } catch (error) {
-    try {
-      await saveFailedAssistantMessage(result.threadId, fullResponse, error);
-    } catch {}
-
-    writeSseEvent(res, 'error', {
-      threadId: result.threadId,
-      userMessageId: result.userMessageId,
-      message:
-        error instanceof Error
-          ? error.message
-          : 'Failed to stream assistant response.',
-    });
-    res.end();
-  }
-}
-
-function prepareSseResponse(res: Response): void {
-  res.status(200);
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders?.();
-}
-
-function writeSseEvent(
-  res: Response,
-  event: string,
-  data: Record<string, unknown>,
-): void {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
+    return () => { closed = true; };
+  });
 }
 
 function sanitizeStreamChunk(

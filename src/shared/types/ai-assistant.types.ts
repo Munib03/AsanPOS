@@ -1,11 +1,8 @@
-import type { ModelMessage } from 'ai';
-import { AiChatMessage } from '../../database/entites/ai-chat-message.entity';
-import { AiChatThread } from '../../database/entites/ai-chat-thread.entity';
-
-export interface AiAssistantStreamResponse {
-  threadId: string;
-  userMessageId: string;
-  textStream: AsyncIterable<string>;
+export interface AiAssistantStreamPart {
+  type: string;
+  text?: string;
+  toolCallId?: string;
+  toolName?: string;
 }
 
 export interface AiChatThreadSummary {
@@ -31,10 +28,4 @@ export interface AiChatMessageResponse {
 
 export interface AiChatThreadDetail extends AiChatThreadSummary {
   messages: AiChatMessageResponse[];
-}
-
-export interface PreparedAiChatTurn {
-  thread: AiChatThread;
-  userMessage: AiChatMessage;
-  messages: ModelMessage[];
 }
