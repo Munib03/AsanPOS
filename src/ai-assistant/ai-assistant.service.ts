@@ -35,7 +35,7 @@ export class AiAssistantService {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly em: EntityManager,
-  ) {}
+  ) { }
 
   streamAnswer(
     store: Store,
@@ -55,17 +55,20 @@ export class AiAssistantService {
       }
 
       const prompt = body.question?.trim();
-      if (!prompt) throw new BadRequestException('question is required');
+      if (!prompt)
+        throw new BadRequestException('question is required');
 
       const employee = await this.em.findOne(
         Employee,
         { id: employeeId, store: { id: store.id } },
         { populate: ['store'], refresh: true },
       );
-      if (!employee) throw new NotFoundException('Employee or store not found');
+      if (!employee)
+        throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
       let thread: AiChatThread;
+
       if (body.threadId) {
         const existingThread = await this.em.findOne(AiChatThread, {
           id: body.threadId,
@@ -73,11 +76,13 @@ export class AiAssistantService {
           employee: { id: employeeId },
           deletedAt: null,
         });
-        if (!existingThread) {
+        if (!existingThread)
           throw new NotFoundException('AI chat thread not found');
-        }
+
         thread = existingThread;
-      } else {
+      }
+
+      else {
         const now = new Date();
         thread = this.em.create(AiChatThread, {
           store: verifiedStore,
@@ -86,6 +91,7 @@ export class AiAssistantService {
           lastMessageAt: now,
           createdAt: now,
         });
+
         await this.em.persistAndFlush(thread);
       }
 
@@ -135,6 +141,7 @@ export class AiAssistantService {
           store: verifiedStore,
           employeeId,
         }),
+
         prepareStep: ({ stepNumber }) =>
           stepNumber === 0 ? { toolChoice: 'required' as const } : {},
       });
@@ -163,7 +170,7 @@ export class AiAssistantService {
     }).pipe(switchMap((events) => events));
   }
 
-  
+
   async findAllThreads(
     store: Store,
     employeeId: string,
