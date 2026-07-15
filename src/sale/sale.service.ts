@@ -251,7 +251,7 @@ export class SaleService {
       );
       const paymentAmount = this.resolveCheckoutPaymentAmount(dto, totalAmount);
 
-      const sequence = await this.sequenceService.generateSequence('Sale', 'SAL');
+      const sequence = await this.sequenceService.generateSequence(store, 'Sale', 'SAL');
       const sale = em.create(Sale, {
         customer,
         store,
@@ -285,7 +285,7 @@ export class SaleService {
       );
       sale.status = SaleStatus.DONE;
 
-      const stockOutSequence = await this.sequenceService.generateSequence('StockOut', 'STO');
+      const stockOutSequence = await this.sequenceService.generateSequence(store, 'StockOut', 'STO');
       const stockOut = em.create(StockOut, {
         inventory,
         sale,

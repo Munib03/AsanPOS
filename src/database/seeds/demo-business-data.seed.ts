@@ -22,6 +22,7 @@ type ProductSeed = {
 
 type SequenceSeed = {
   id: string;
+  store_id: string;
   entity: string;
   prefix: string;
   last_index: number;
@@ -88,6 +89,7 @@ export async function seed(knex: Knex): Promise<void> {
   await insertChunks(knex, 'customer', customers);
 
   const purchaseSequences = buildSequences(
+    storeId,
     'Purchase',
     'PUR',
     PURCHASE_COUNT,
@@ -116,6 +118,7 @@ export async function seed(knex: Knex): Promise<void> {
   await insertChunks(knex, 'inventory_product', inventoryProducts);
 
   const stockInSequences = buildSequences(
+    storeId,
     'StockIn',
     'STK',
     PURCHASE_COUNT,
@@ -129,7 +132,7 @@ export async function seed(knex: Knex): Promise<void> {
   const stockInItems = buildStockInItems(stockIns, purchasedItems, now);
   await insertChunks(knex, 'stock_in_items', stockInItems);
 
-  const saleSequences = buildSequences('Sale', 'SAL', SALE_COUNT, now);
+  const saleSequences = buildSequences(storeId, 'Sale', 'SAL', SALE_COUNT, now);
   await insertChunks(knex, 'sequence', saleSequences);
 
   const sales = buildSales(storeId, saleSequences, customers, inventories, now);
@@ -150,7 +153,13 @@ export async function seed(knex: Knex): Promise<void> {
   );
   await insertChunks(knex, 'stock_quantity', stockQuantities);
 
-  const stockOutSequences = buildSequences('StockOut', 'STO', SALE_COUNT, now);
+  const stockOutSequences = buildSequences(
+    storeId,
+    'StockOut',
+    'STO',
+    SALE_COUNT,
+    now,
+  );
   await insertChunks(knex, 'sequence', stockOutSequences);
 
   const stockOuts = buildStockOuts(sales, stockOutSequences, now);
@@ -163,6 +172,7 @@ export async function seed(knex: Knex): Promise<void> {
   await insertChunks(knex, 'payments', salePayments);
 
   const journalSequences = buildSequences(
+    storeId,
     'JournalEntry',
     'JRN',
     SALE_COUNT,
@@ -234,6 +244,9 @@ async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void
     : [];
   const saleItemIds = saleItems.map((item) => item.id);
   const saleIds = [...new Set(saleItems.map((item) => item.sale_id))];
+  const sales = saleIds.length
+    ? await knex('sale').whereIn('id', saleIds).select('sequence_id')
+    : [];
 
   const purchasedItems = productIds.length
     ? await knex('purchased_items')
@@ -244,6 +257,9 @@ async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void
   const purchaseIds = [
     ...new Set(purchasedItems.map((item) => item.purchase_id)),
   ];
+  const purchases = purchaseIds.length
+    ? await knex('purchase').whereIn('id', purchaseIds).select('sequence_id')
+    : [];
 
   const journalItems = saleIds.length
     ? await knex('journal_entry_items')
@@ -255,14 +271,32 @@ async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void
   ];
 
   const stockOuts = saleIds.length
-    ? await knex('stock_out').whereIn('sale_id', saleIds).select('id')
+    ? await knex('stock_out')
+        .whereIn('sale_id', saleIds)
+        .select('id', 'sequence_id')
     : [];
   const stockOutIds = stockOuts.map((stockOut) => stockOut.id);
 
   const stockIns = purchaseIds.length
-    ? await knex('stock_in').whereIn('purchase_id', purchaseIds).select('id')
+    ? await knex('stock_in')
+        .whereIn('purchase_id', purchaseIds)
+        .select('id', 'sequence_id')
     : [];
   const stockInIds = stockIns.map((stockIn) => stockIn.id);
+  const journalEntries = journalEntryIds.length
+    ? await knex('journal_entry')
+        .whereIn('id', journalEntryIds)
+        .select('sequence_id')
+    : [];
+  const sequenceIds = [
+    ...sales,
+    ...purchases,
+    ...stockOuts,
+    ...stockIns,
+    ...journalEntries,
+  ]
+    .map((record) => record.sequence_id)
+    .filter((id): id is string => Boolean(id));
 
   if (sessionIds.length)
     await knex('receipt').whereIn('session_id', sessionIds).delete();
@@ -307,6 +341,8 @@ async function deleteExistingSeedData(knex: Knex, storeId: string): Promise<void
     await knex('categories').whereIn('id', categoryIds).delete();
   if (sessionIds.length)
     await knex('store_session').whereIn('id', sessionIds).delete();
+  if (sequenceIds.length)
+    await knex('sequence').whereIn('id', sequenceIds).delete();
   await knex('accounts')
     .whereLike('name', `Seed Demo Cash (${storeId}%)`)
     .orWhereLike('name', `Seed Demo Sales Revenue (${storeId}%)`)
@@ -499,6 +535,7 @@ function buildCategoryProducts(
 }
 
 function buildSequences(
+  storeId: string,
   entity: string,
   prefix: string,
   count: number,
@@ -506,6 +543,7 @@ function buildSequences(
 ): SequenceSeed[] {
   return Array.from({ length: count }, (_, index) => ({
     id: uuidv4(),
+    store_id: storeId,
     entity,
     prefix,
     last_index: index + 1,

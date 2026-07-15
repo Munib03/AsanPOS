@@ -107,7 +107,7 @@ export class PurchaseService {
       const customer = await this.findOrFail<Customer>(em, Customer, { id: dto.customerId }, `Customer with id ${dto.customerId}`);
       const inventory = await this.findOrFail<Inventory>(em, Inventory, { id: dto.inventoryId, store }, `Inventory with id ${dto.inventoryId}`);
 
-      const sequence = await this.sequenceService.generateSequence('Purchase', 'PUR');
+      const sequence = await this.sequenceService.generateSequence(store, 'Purchase', 'PUR');
       const purchase = em.create(Purchase, {
         customer,
         store,

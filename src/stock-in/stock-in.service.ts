@@ -113,6 +113,7 @@ export class StockInService {
       this.validateItems(dto.items, purchasedItemMap);
 
       const sequence = await this.sequenceService.generateSequence(
+        store,
         'StockIn',
         'STK',
       );

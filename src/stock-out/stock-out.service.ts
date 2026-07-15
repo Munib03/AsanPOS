@@ -101,6 +101,7 @@ export class StockOutService {
       this.validateItems(dto.items, saleItemMap);
 
       const sequence = await this.sequenceService.generateSequence(
+        store,
         'StockOut',
         'STO',
       );

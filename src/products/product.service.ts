@@ -82,7 +82,7 @@ export class ProductService {
       this.em, Category, { name: dto.categoryName, store }, `Category not found: ${dto.categoryName}`, true,
     );
 
-    const sequence = await this.sequenceService.generateSequence('Product', 'PDT');
+    const sequence = await this.sequenceService.generateSequence(store, 'Product', 'PDT');
     const sequenceText = this.sequenceService.formatSequence(sequence);
 
     const product = this.em.create(Product, {

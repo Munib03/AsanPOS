@@ -178,7 +178,7 @@ export class JournalEntryService {
   ): Promise<JournalEntry> {
     const { debitAccount, creditAccount, totalAmount, link, source, sourceId } = params;
 
-    const sequence = await this.sequenceService.generateSequence('JournalEntry', 'JRN');
+    const sequence = await this.sequenceService.generateSequence(store, 'JournalEntry', 'JRN');
 
     const journalEntry = em.create(JournalEntry, {
       sequence,
