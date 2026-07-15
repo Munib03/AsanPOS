@@ -10,16 +10,14 @@ import { Employee } from '../database/entites/employee.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { Store } from '../database/entites/store.entity';
 import { QueueService } from '../queue/queue.service';
-import { AuditService } from '../audit/audit.service';
-import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { Role } from '../shared/utils/role.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
+import { VerifyDto } from './dto/verify.dto';
 
 export interface EmployeeDetail {
   id: string;
@@ -58,8 +56,7 @@ export class EmployeeService {
     private readonly em: EntityManager,
     private readonly queueService: QueueService,
     private readonly attachmentService: AttachmentService,
-    private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async findAll(store: Store, query: EmployeeQueryDto) {
     const where: Record<string, any> = { store };
@@ -130,7 +127,6 @@ export class EmployeeService {
   async employeeRegister(
     dto: CreateEmployeeDto,
     store: Store,
-    employeeId: string,
   ) {
     const existing = await this.em.findOne(Employee, { email: dto.email });
 
@@ -173,19 +169,6 @@ export class EmployeeService {
     this.em.persist(employee);
     this.em.persist(securityAction);
 
-    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
-    if (!adminEmployee) throw new NotFoundException('Employee not found');
-
-    this.auditService.log(
-      this.em,
-      adminEmployee,
-      AuditEntityType.Employee,
-      employee.id,
-      AuditActionType.Create,
-      null,
-      null,
-    );
-
     await this.em.flush();
 
     return {
@@ -196,28 +179,10 @@ export class EmployeeService {
     };
   }
 
-  async remove(id: string, employeeId: string) {
+  async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
-
-    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
-    if (!adminEmployee) throw new NotFoundException('Employee not found');
-
-    this.auditService.log(
-      this.em,
-      adminEmployee,
-      AuditEntityType.Employee,
-      employee.id,
-      AuditActionType.Delete,
-      {
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        email: employee.email,
-        role: employee.role,
-      },
-      null,
-    );
 
     employee.deletedAt = new Date();
 
@@ -226,12 +191,13 @@ export class EmployeeService {
     return { message: `Employee ${id} deleted successfully` };
   }
 
+
   async updateEmployeeInfo(
     id: string,
-    employeeId: string,
     dto: UpdateEmployeeDto,
   ) {
-    if (!dto) return { message: 'No changes to update' };
+    if (!dto)
+      return { message: 'No changes to update' };
 
     const employee = await this.em.findOne(
       Employee,
@@ -241,15 +207,9 @@ export class EmployeeService {
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found`);
 
-    if (dto.role) throw new BadRequestException('Admin role cannot be updated');
+    if (dto.role)
+      throw new BadRequestException('Admin role cannot be updated');
 
-    const before = {
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-      email: employee.email,
-      phone: employee.phone,
-      role: employee.role,
-    };
 
     if (dto.attachmentId) {
       const attachment = await this.attachmentService.claimAttachment(
@@ -267,16 +227,15 @@ export class EmployeeService {
         );
 
       const isMatch = await bcrypt.compare(dto.oldPassword, employee.password);
-      if (!isMatch) throw new BadRequestException('Old password is incorrect');
+      if (!isMatch)
+        throw new BadRequestException('Old password is incorrect');
 
       dto.password = await bcrypt.hash(dto.password, 10);
     }
 
     if (dto.storeName) {
       if (dto.storeName === employee.store.name)
-        throw new BadRequestException(
-          'Store name is the same as the current one',
-        );
+        throw new BadRequestException('Store name is the same as the current one');
 
       const existingStore = await this.em.findOne(Store, {
         name: dto.storeName,
@@ -299,67 +258,89 @@ export class EmployeeService {
       const existing = await this.em.findOne(Employee, { email: dto.email });
       if (existing) throw new BadRequestException('Email already in use');
 
-      emailChange = true;
-
       const code = generateOTP();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
       const securityAction = this.em.create(SecurityAction, {
         employee,
         actionType: 'email-update',
         secret: code,
         metadata: { email: dto.email },
-        expiresAt,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
         createdAt: new Date(),
       });
 
       await this.em.persistAndFlush(securityAction);
       await this.queueService.sendVerificationEmail(dto.email, code);
+      emailChange = true;
     }
 
-    const { storeName, email, oldPassword, attachmentId, ...rest } = dto;
-    this.em.assign(employee, stripUndefined(rest));
-
-    const adminEmployee = await this.em.findOne(Employee, { id: employeeId });
-    if (!adminEmployee) throw new NotFoundException('Employee not found');
-
-    this.auditService.log(
-      this.em,
-      adminEmployee,
-      AuditEntityType.Employee,
-      employee.id,
-      AuditActionType.Update,
-      before,
-      {
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        email: employee.email,
-        phone: employee.phone,
-        role: employee.role,
-      },
+    this.em.assign(
+      employee,
+      stripUndefined({
+        password: dto.password,
+        phone: dto.phone,
+        imageUrl: dto.imageUrl,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        dob: dto.dob,
+        gender: dto.gender,
+      }),
     );
 
     await this.em.flush();
 
     if (emailChange)
-      return {
-        message: 'Profile updated. Please verify your new email address.',
-        id: employee.id,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        email: employee.email,
-        phone: employee.phone,
-      };
+      return { message: 'Profile updated. Please verify your new email address.' };
+
+    return { message: 'Profile updated successfully' };
+  }
+
+
+  async verifyUpdateEmail(
+    store: Store,
+    dto: VerifyDto,
+  ) {
+    const securityAction = await this.em.findOne(
+      SecurityAction,
+      {
+        employee: { store },
+        actionType: 'email-update',
+        secret: dto.code,
+      },
+      { populate: ['employee'] },
+    );
+    if (!securityAction)
+      throw new BadRequestException('Invalid verification code');
+
+    if (
+      securityAction.expiresAt &&
+      securityAction.expiresAt < new Date()
+    )
+      throw new BadRequestException('Verification code has expired');
+
+    const employee = securityAction.employee;
+    const newEmail = securityAction.metadata?.email;
+    if (!newEmail)
+      throw new BadRequestException('New email address was not found');
+
+    if (dto.email !== newEmail)
+      throw new BadRequestException('Invalid email or verification code');
+
+    const existing = await this.em.findOne(Employee, { email: newEmail });
+    if (existing && existing.id !== employee.id)
+      throw new BadRequestException('Email already in use');
+
+    employee.email = newEmail;
+    employee.verifiedAt = new Date();
+
+    this.em.remove(securityAction);
+    await this.em.flush();
 
     return {
-      message: 'Profile updated successfully',
-      id: employee.id,
-      firstName: employee.firstName,
-      lastName: employee.lastName,
+      message: 'Employee email updated successfully.',
       email: employee.email,
-      phone: employee.phone,
     };
   }
+
 
   async deleteEmployeeImage(id: string) {
     const employee = await this.em.findOne(Employee, { id });

@@ -21,6 +21,7 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeService } from './employee.service';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
+import { VerifyDto } from './dto/verify.dto';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,13 +32,11 @@ export class EmployeeController {
   @Post('register')
   registerEmployee(
     @CurrentStore() store: Store,
-    @CurrentUser() user: { id: string },
     @Body() dto: CreateEmployeeDto,
   ) {
     return this.employeeService.employeeRegister(
       { ...dto, storeName: store.name },
       store,
-      user.id,
     );
   }
 
@@ -62,19 +61,26 @@ export class EmployeeController {
     @Body() dto: UpdateEmployeeDto,
   ) {
     const targetId = dto.id ?? user.id;
-    return this.employeeService.updateEmployeeInfo(targetId, user.id, dto);
+    return this.employeeService.updateEmployeeInfo(targetId, dto);
   }
+
+  @Put('verify-employee-email')
+  verifyUpdateEmail(
+    @CurrentStore() store: Store,
+    @Body() dto: VerifyDto,
+  ) {
+    return this.employeeService.verifyUpdateEmail(store, dto);
+  }
+
 
   @Delete('profile-pic')
   deleteEmployeeImage(@CurrentUser() user: Employee) {
     return this.employeeService.deleteEmployeeImage(user.id);
   }
 
+
   @Delete(':id')
-  remove(
-    @CurrentUser() user: { id: string },
-    @Param('id') id: string,
-  ) {
-    return this.employeeService.remove(id, user.id);
+  remove(@Param('id') id: string) {
+    return this.employeeService.remove(id);
   }
 }

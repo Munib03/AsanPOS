@@ -223,8 +223,16 @@ export class SaleService {
   async checkout(store: Store, employeeId: string, dto: CreateSaleDto) {
     return await this.em.transactional(async (em) => {
       const customer = await this.findOrFail<Customer>(
-        em, Customer, { id: dto.customerId }, `Customer with id ${dto.customerId}`,
+        em, Customer, { id: dto.customerId, store }, `Customer with id ${dto.customerId}`,
       );
+
+      if (
+        customer.name === 'Walk-in Customer' &&
+        dto.paymentStatus !== SalePaymentStatus.FullyPaid
+      )
+        throw new BadRequestException(
+          'Walk-in Customer sales must be fully paid.',
+        );
 
       const activeSession = await em.findOne(StoreSession, {
         store,
@@ -494,7 +502,16 @@ export class SaleService {
     if (sale.paymentStatus === SalePaymentStatus.FullyPaid)
       throw new BadRequestException('This sale is already fully paid.');
 
-    await em.populate(sale, ['items']);
+    await em.populate(sale, ['items', 'customer']);
+
+    if (
+      sale.customer.name === 'Walk-in Customer' &&
+      dto.paymentStatus !== SalePaymentStatus.FullyPaid
+    )
+      throw new BadRequestException(
+        'Walk-in Customer sales must be fully paid.',
+      );
+
     const totalAmount = this.roundMoney(
       sale.items
         .getItems()

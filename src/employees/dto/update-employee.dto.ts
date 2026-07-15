@@ -1,9 +1,9 @@
 import {
-  IsString,
-  IsOptional,
-  IsEmail,
   IsDateString,
+  IsEmail,
   IsEnum,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
@@ -56,7 +56,6 @@ export class UpdateEmployeeDto {
   @IsEnum(EmployeeGender)
   gender?: EmployeeGender;
 
-  // Here although the create attachments is returning an array but you have to handle that in employees's updateEmployeeInfo to assign that value here
   @IsOptional()
   @IsString()
   attachmentId?: string;
