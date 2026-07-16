@@ -200,7 +200,7 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
 
     createBusinessGraph: tool({
       description:
-        'Create a verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only when the user explicitly asks for a graph, chart, trend, ranking, or visualization. Never invent values.',
+        'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only for one graph explicitly requested by the user. Never create extra graphs for context, comparison, recommendations, or decoration. Never invent values.',
       inputSchema: z.object({
         subject: z.enum([
           'dashboard_sales',
