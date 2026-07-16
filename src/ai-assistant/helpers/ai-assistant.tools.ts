@@ -3,7 +3,11 @@ import { sql, type RawQueryFragment } from '@mikro-orm/core';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { DashboardService } from '../../dashboard/dashboard.service';
-import { DailyStats, DashboardRange, DashboardStats } from '../../dashboard/dto/dashboard.dto';
+import {
+  DailyStats,
+  DashboardRange,
+  DashboardStats,
+} from '../../dashboard/dto/dashboard.dto';
 import { AuditLog } from '../../database/entites/audit-log.entity';
 import { CashMovement } from '../../database/entites/cash-movement.entity';
 import { Category } from '../../database/entites/category.entity';
@@ -30,18 +34,31 @@ import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
 import { PaymentStatus } from '../../shared/utils/payments-status.enum';
 import { PurchaseStatus } from '../../shared/utils/purchase-status-enum';
 import { SaleStatus } from '../../shared/utils/sale-status.enum';
-import { AiAssistantGraphSchema, type AiAssistantGraph } from './ai-assistant.response.schema';
+import {
+  AiAssistantGraphSchema,
+  type AiAssistantGraph,
+} from './ai-assistant.response.schema';
 
 const DEFAULT_TOOL_LIMIT = 10;
 const MAX_TOOL_LIMIT = 50;
-const TOOL_LIMIT = z.number().int().min(1).max(MAX_TOOL_LIMIT).optional().default(DEFAULT_TOOL_LIMIT);
+const TOOL_LIMIT = z
+  .number()
+  .int()
+  .min(1)
+  .max(MAX_TOOL_LIMIT)
+  .optional()
+  .default(DEFAULT_TOOL_LIMIT);
 const LIMIT_INPUT = z.object({ limit: TOOL_LIMIT });
 const PRODUCT_FILTER_FIELDS = {
   query: z.string().optional().describe('Product name only.'),
   productCode: z
     .object({
       prefix: z.string().describe('Product code prefix, for example PDT.'),
-      number: z.number().int().positive().describe('Numeric product code value, for example 1 for PDT-0001.'),
+      number: z
+        .number()
+        .int()
+        .positive()
+        .describe('Numeric product code value, for example 1 for PDT-0001.'),
     })
     .optional(),
 };
@@ -72,7 +89,13 @@ type LiveEntityResource =
   | 'receipts'
   | 'journal_entries';
 
-type DashboardGraphMetricName = 'sales' | 'profit' | 'cash_in' | 'cash_out' | 'sessions_opened' | 'sessions_closed';
+type DashboardGraphMetricName =
+  | 'sales'
+  | 'profit'
+  | 'cash_in'
+  | 'cash_out'
+  | 'sessions_opened'
+  | 'sessions_closed';
 type BusinessGraphSubject =
   | 'dashboard_sales'
   | 'dashboard_profit'
@@ -88,7 +111,18 @@ type BusinessGraphSubject =
   | 'products_by_purchase_cost'
   | 'purchase_customers_by_paid_amount'
   | 'sales_by_cashier';
-type BusinessGraphRange = 'all_time' | 'today' | 'last_week' | 'monthly' | 'custom';
+type BusinessGraphRange =
+  | 'all_time'
+  | 'today'
+  | 'yesterday'
+  | 'last_week'
+  | 'monthly'
+  | 'custom';
+type BusinessGraphComparisonPeriod = {
+  label: string;
+  from: string;
+  to: string;
+};
 type DashboardGraphMetric = {
   label: string;
   valueFormat: 'currency' | 'number';
@@ -103,7 +137,9 @@ type GraphDefinition = {
   loadRows: () => Promise<GraphRow[]>;
 };
 
-const DASHBOARD_SUBJECT_METRICS: Partial<Record<BusinessGraphSubject, DashboardGraphMetricName>> = {
+const DASHBOARD_SUBJECT_METRICS: Partial<
+  Record<BusinessGraphSubject, DashboardGraphMetricName>
+> = {
   dashboard_sales: 'sales',
   dashboard_profit: 'profit',
   dashboard_cash_in: 'cash_in',
@@ -112,7 +148,10 @@ const DASHBOARD_SUBJECT_METRICS: Partial<Record<BusinessGraphSubject, DashboardG
   dashboard_sessions_closed: 'sessions_closed',
 };
 
-const DASHBOARD_GRAPH_METRICS: Record<DashboardGraphMetricName, DashboardGraphMetric> = {
+const DASHBOARD_GRAPH_METRICS: Record<
+  DashboardGraphMetricName,
+  DashboardGraphMetric
+> = {
   sales: {
     label: 'Sales',
     valueFormat: 'currency',
@@ -129,13 +168,21 @@ const DASHBOARD_GRAPH_METRICS: Record<DashboardGraphMetricName, DashboardGraphMe
     label: 'Cash in',
     valueFormat: 'currency',
     getDailyValue: (day) => day.cashIn,
-    getTotalValue: (stats) => (stats.cashierBreakdown ?? []).reduce((total, cashier) => total + cashier.cashIn, 0),
+    getTotalValue: (stats) =>
+      (stats.cashierBreakdown ?? []).reduce(
+        (total, cashier) => total + cashier.cashIn,
+        0,
+      ),
   },
   cash_out: {
     label: 'Cash out',
     valueFormat: 'currency',
     getDailyValue: (day) => day.cashOut,
-    getTotalValue: (stats) => (stats.cashierBreakdown ?? []).reduce((total, cashier) => total + cashier.cashOut, 0),
+    getTotalValue: (stats) =>
+      (stats.cashierBreakdown ?? []).reduce(
+        (total, cashier) => total + cashier.cashOut,
+        0,
+      ),
   },
   sessions_opened: {
     label: 'Opened sessions',
@@ -147,7 +194,10 @@ const DASHBOARD_GRAPH_METRICS: Record<DashboardGraphMetricName, DashboardGraphMe
     label: 'Closed sessions',
     valueFormat: 'number',
     getDailyValue: (day) => day.sessionsClosed,
-    getTotalValue: (stats) => (stats.cashierBreakdown ?? []).filter((cashier) => cashier.status === 'closed').length,
+    getTotalValue: (stats) =>
+      (stats.cashierBreakdown ?? []).filter(
+        (cashier) => cashier.status === 'closed',
+      ).length,
   },
 };
 
@@ -158,7 +208,12 @@ interface CreateAiAssistantToolsParams {
   employeeId: string;
 }
 
-export function createAiAssistantTools({ dashboardService, em, store, employeeId }: CreateAiAssistantToolsParams) {
+export function createAiAssistantTools({
+  dashboardService,
+  em,
+  store,
+  employeeId,
+}: CreateAiAssistantToolsParams) {
   const storeWhere = { id: store.id };
   const scope = { storeId: store.id, storeName: store.name };
   return {
@@ -185,22 +240,33 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
         from: z
           .string()
           .optional()
-          .describe('ISO date string for custom range start, for example 2026-07-01. Required when range is custom.'),
-        to: z.string().optional().describe('ISO date string for custom range end, for example 2026-07-07. Required when range is custom.'),
+          .describe(
+            'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
+          ),
+        to: z
+          .string()
+          .optional()
+          .describe(
+            'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
+          ),
       }),
       execute: async ({ range, from, to }) => {
-        const stats = await dashboardService.getDashboardStats(store, employeeId, {
-          range: DASHBOARD_RANGES[range],
-          from,
-          to,
-        });
+        const stats = await dashboardService.getDashboardStats(
+          store,
+          employeeId,
+          {
+            range: DASHBOARD_RANGES[range],
+            from,
+            to,
+          },
+        );
         return { scope, stats };
       },
     }),
 
     createBusinessGraph: tool({
       description:
-        'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only for one graph explicitly requested by the user. Never create extra graphs for context, comparison, recommendations, or decoration. Never invent values.',
+        'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only for one graph explicitly requested by the user. When the user compares two or more periods, provide comparisonPeriods with every requested period and this tool will return one comparison graph. The periods are arbitrary; choose their exact inclusive ISO dates from the request. Historical comparisons work for time-based subjects; inventory quantity is a current snapshot. Never create unrequested graphs for context, recommendations, or decoration. Never invent values.',
       inputSchema: z.object({
         subject: z.enum([
           'dashboard_sales',
@@ -218,22 +284,77 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
           'purchase_customers_by_paid_amount',
           'sales_by_cashier',
         ]),
-        range: z.enum(['all_time', 'today', 'last_week', 'monthly', 'custom']).optional(),
-        from: z.string().optional().describe('ISO date string required for a custom range start.'),
-        to: z.string().optional().describe('ISO date string required for a custom range end.'),
+        range: z
+          .enum([
+            'all_time',
+            'today',
+            'yesterday',
+            'last_week',
+            'monthly',
+            'custom',
+          ])
+          .optional(),
+        from: z
+          .string()
+          .optional()
+          .describe('ISO date string required for a custom range start.'),
+        to: z
+          .string()
+          .optional()
+          .describe('ISO date string required for a custom range end.'),
+        comparisonPeriods: z
+          .array(
+            z.object({
+              label: z
+                .string()
+                .min(1)
+                .describe('Short label for this period in the chart.'),
+              from: z
+                .string()
+                .min(1)
+                .describe(
+                  'Inclusive ISO date for this period, for example 2026-07-01.',
+                ),
+              to: z
+                .string()
+                .min(1)
+                .describe(
+                  'Inclusive ISO date for this period, for example 2026-07-16.',
+                ),
+            }),
+          )
+          .min(2)
+          .optional()
+          .describe(
+            'Use only when the request compares two or more time periods. Send every requested period here, with exact dates and labels, to create one graph. This supports arbitrary comparison periods for every time-based subject.',
+          ),
         limit: z.number().int().min(1).max(20).optional().default(10),
-        type: z.enum(['line', 'bar', 'pie', 'doughnut']).optional().default('bar'),
+        type: z
+          .enum(['line', 'bar', 'pie', 'doughnut'])
+          .optional()
+          .default('bar'),
       }),
-      execute: async ({ subject, range, from, to, limit, type }) => {
+      execute: async ({
+        subject,
+        range,
+        from,
+        to,
+        comparisonPeriods,
+        limit,
+        type,
+      }) => {
         const graph = await createBusinessGraph({
           dashboardService,
           em,
           store,
           employeeId,
           subject,
-          range: range ?? (DASHBOARD_SUBJECT_METRICS[subject] ? 'monthly' : 'all_time'),
+          range:
+            range ??
+            (DASHBOARD_SUBJECT_METRICS[subject] ? 'monthly' : 'all_time'),
           from,
           to,
+          comparisonPeriods,
           limit,
           type,
         });
@@ -242,7 +363,8 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
     }),
 
     searchProducts: tool({
-      description: 'Search products by name or product code and include current stock quantities by inventory.',
+      description:
+        'Search products by name or product code and include current stock quantities by inventory.',
       inputSchema: z.object({
         ...PRODUCT_FILTER_FIELDS,
         lowStockOnly: z.boolean().optional(),
@@ -270,7 +392,10 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
               { populate: ['inventory', 'product'], refresh: true },
             )
           : [];
-        const stockByProduct = groupBy(stockRecords, (record) => record.product.id);
+        const stockByProduct = groupBy(
+          stockRecords,
+          (record) => record.product.id,
+        );
 
         return {
           scope,
@@ -280,7 +405,9 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
             .map((product) => ({
               id: product.id,
               name: product.name,
-              productCode: product.sequence ? `${product.sequence.prefix}-${String(product.sequence.lastIndex).padStart(4, '0')}` : null,
+              productCode: product.sequence
+                ? `${product.sequence.prefix}-${String(product.sequence.lastIndex).padStart(4, '0')}`
+                : null,
               price: product.price,
               stock: (stockByProduct.get(product.id) ?? []).map((record) => ({
                 inventoryId: record.inventory.id,
@@ -288,13 +415,18 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
                 quantity: record.quantity ?? 0,
               })),
             }))
-            .filter((product) => !lowStockOnly || product.stock.some((stock) => stock.quantity <= 10)),
+            .filter(
+              (product) =>
+                !lowStockOnly ||
+                product.stock.some((stock) => stock.quantity <= 10),
+            ),
         };
       },
     }),
 
     getProductCount: tool({
-      description: 'Return the total number of products in the current store, optionally filtered by product name or product code.',
+      description:
+        'Return the total number of products in the current store, optionally filtered by product name or product code.',
       inputSchema: PRODUCT_QUERY_INPUT,
       execute: async ({ query, productCode }) => {
         const where = createProductWhere(storeWhere, query, productCode);
@@ -303,7 +435,8 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
     }),
 
     getInventorySummary: tool({
-      description: 'Summarize inventories, total stock records, low-stock products, and out-of-stock products.',
+      description:
+        'Summarize inventories, total stock records, low-stock products, and out-of-stock products.',
       inputSchema: z.object({
         inventoryId: z.string().optional(),
         limit: TOOL_LIMIT,
@@ -323,7 +456,12 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
           }),
         ]);
         const inventoryIds = inventories.map((inventory) => inventory.id);
-        const [totalStockRecordCount, lowStockCount, outOfStockCount, stockRecords] = await Promise.all([
+        const [
+          totalStockRecordCount,
+          lowStockCount,
+          outOfStockCount,
+          stockRecords,
+        ] = await Promise.all([
           em.count(StockQuantity, { inventory: inventoryWhere }),
           em.count(StockQuantity, {
             inventory: inventoryWhere,
@@ -341,7 +479,10 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
               )
             : Promise.resolve([]),
         ]);
-        const recordsByInventory = groupBy(stockRecords, (record) => record.inventory.id);
+        const recordsByInventory = groupBy(
+          stockRecords,
+          (record) => record.inventory.id,
+        );
 
         return {
           scope,
@@ -357,9 +498,15 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
               name: inventory.name,
               address: inventory.address,
               productCount: records.length,
-              totalQuantity: records.reduce((sum, record) => sum + (record.quantity ?? 0), 0),
+              totalQuantity: records.reduce(
+                (sum, record) => sum + (record.quantity ?? 0),
+                0,
+              ),
               lowStockProducts: records
-                .filter((record) => (record.quantity ?? 0) > 0 && (record.quantity ?? 0) <= 10)
+                .filter(
+                  (record) =>
+                    (record.quantity ?? 0) > 0 && (record.quantity ?? 0) <= 10,
+                )
                 .map((record) => ({
                   id: record.product.id,
                   name: record.product.name,
@@ -397,12 +544,17 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
       execute: async ({ resource }) => ({
         scope,
         resource,
-        totalCount: await getLiveEntityCount(em, storeWhere, resource as LiveEntityResource),
+        totalCount: await getLiveEntityCount(
+          em,
+          storeWhere,
+          resource as LiveEntityResource,
+        ),
       }),
     }),
 
     getSalesSummary: tool({
-      description: 'Get all sales totals, status breakdown, recent sales, and top products for the current logged-in employee.',
+      description:
+        'Get all sales totals, status breakdown, recent sales, and top products for the current logged-in employee.',
       inputSchema: LIMIT_INPUT,
       execute: async ({ limit }) => {
         const take = limit;
@@ -422,10 +574,13 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
             )
           : [];
 
-        const statusBreakdown = sales.reduce<Record<string, number>>((summary, sale) => {
-          summary[sale.status] = (summary[sale.status] ?? 0) + 1;
-          return summary;
-        }, {});
+        const statusBreakdown = sales.reduce<Record<string, number>>(
+          (summary, sale) => {
+            summary[sale.status] = (summary[sale.status] ?? 0) + 1;
+            return summary;
+          },
+          {},
+        );
         const productTotals = new Map<
           string,
           {
@@ -455,7 +610,15 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
           scope,
           count: sales.length,
           totalSales: sales.reduce(
-            (sum, sale) => sum + sale.items.getItems().reduce((itemSum, item) => itemSum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
+            (sum, sale) =>
+              sum +
+              sale.items
+                .getItems()
+                .reduce(
+                  (itemSum, item) =>
+                    itemSum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+                  0,
+                ),
             0,
           ),
           statusBreakdown,
@@ -466,7 +629,13 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
             id: sale.id,
             status: sale.status,
             customerName: sale.customer?.name,
-            total: sale.items.getItems().reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
+            total: sale.items
+              .getItems()
+              .reduce(
+                (sum, item) =>
+                  sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+                0,
+              ),
             createdAt: sale.createdAt,
           })),
         };
@@ -479,7 +648,12 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
       inputSchema: LIMIT_INPUT,
       execute: async ({ limit }) => {
         const take = limit;
-        const purchaseIds = await getEmployeeCreatedEntityIds(em, store, employeeId, AuditEntityType.Purchase);
+        const purchaseIds = await getEmployeeCreatedEntityIds(
+          em,
+          store,
+          employeeId,
+          AuditEntityType.Purchase,
+        );
 
         if (!purchaseIds.length) {
           return {
@@ -504,16 +678,26 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
           },
         );
 
-        const statusBreakdown = purchases.reduce<Record<string, number>>((summary, purchase) => {
-          summary[purchase.status] = (summary[purchase.status] ?? 0) + 1;
-          return summary;
-        }, {});
+        const statusBreakdown = purchases.reduce<Record<string, number>>(
+          (summary, purchase) => {
+            summary[purchase.status] = (summary[purchase.status] ?? 0) + 1;
+            return summary;
+          },
+          {},
+        );
 
         return {
           scope,
           count: purchases.length,
           totalPurchases: purchases.reduce(
-            (sum, purchase) => sum + purchase.items.getItems().reduce((itemSum, item) => itemSum + item.quantity * item.unitPrice, 0),
+            (sum, purchase) =>
+              sum +
+              purchase.items
+                .getItems()
+                .reduce(
+                  (itemSum, item) => itemSum + item.quantity * item.unitPrice,
+                  0,
+                ),
             0,
           ),
           statusBreakdown,
@@ -521,7 +705,9 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
             id: purchase.id,
             status: purchase.status,
             customerName: purchase.customer?.name,
-            total: purchase.items.getItems().reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+            total: purchase.items
+              .getItems()
+              .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
             createdAt: purchase.createdAt,
           })),
         };
@@ -529,7 +715,8 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
     }),
 
     getCustomerSummary: tool({
-      description: 'Search customers and summarize their sale and purchase counts for the current logged-in employee.',
+      description:
+        'Search customers and summarize their sale and purchase counts for the current logged-in employee.',
       inputSchema: z.object({
         query: z.string().optional(),
         limit: TOOL_LIMIT,
@@ -538,7 +725,12 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
         const take = limit;
         const [saleIds, purchaseIds] = await Promise.all([
           getEmployeeSaleIds(em, store, employeeId),
-          getEmployeeCreatedEntityIds(em, store, employeeId, AuditEntityType.Purchase),
+          getEmployeeCreatedEntityIds(
+            em,
+            store,
+            employeeId,
+            AuditEntityType.Purchase,
+          ),
         ]);
 
         const where: Record<string, any> = { store: storeWhere };
@@ -588,7 +780,8 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
     }),
 
     getOpenSessions: tool({
-      description: 'Get currently open cashier sessions for the current logged-in employee with payments and cash movement totals.',
+      description:
+        'Get currently open cashier sessions for the current logged-in employee with payments and cash movement totals.',
       inputSchema: z.object({
         limit: TOOL_LIMIT,
       }),
@@ -635,7 +828,9 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
                 : null,
               openingAmount: session.openingAmount ?? 0,
               openedAt: session.openedAt,
-              paymentTotal: session.payments.getItems().reduce((sum, payment) => sum + (payment.amount ?? 0), 0),
+              paymentTotal: session.payments
+                .getItems()
+                .reduce((sum, payment) => sum + (payment.amount ?? 0), 0),
               cashIn: cashTotals.cashIn,
               cashOut: cashTotals.cashOut,
             };
@@ -645,7 +840,8 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
     }),
 
     getAuditActivity: tool({
-      description: 'Get recent audit activity for the current logged-in employee.',
+      description:
+        'Get recent audit activity for the current logged-in employee.',
       inputSchema: LIMIT_INPUT,
       execute: async ({ limit }) => {
         const take = limit;
@@ -688,6 +884,8 @@ async function createBusinessGraph({
   range,
   from,
   to,
+  comparisonPeriods,
+  comparisonPeriod,
   limit,
   type,
 }: {
@@ -699,18 +897,44 @@ async function createBusinessGraph({
   range: BusinessGraphRange;
   from?: string;
   to?: string;
+  comparisonPeriods?: BusinessGraphComparisonPeriod[];
+  comparisonPeriod?: boolean;
   limit: number;
   type: AiAssistantGraph['type'];
 }): Promise<AiAssistantGraph> {
   const dashboardMetricName = DASHBOARD_SUBJECT_METRICS[subject];
+  if (comparisonPeriods) {
+    return createBusinessComparisonGraph({
+      dashboardService,
+      em,
+      store,
+      employeeId,
+      subject,
+      periods: comparisonPeriods,
+      limit,
+      type,
+    });
+  }
+
   if (dashboardMetricName) {
     const dashboardRange = range === 'all_time' ? 'monthly' : range;
     const metric = DASHBOARD_GRAPH_METRICS[dashboardMetricName];
-    const stats = await dashboardService.getDashboardStats(store, employeeId, {
-      range: DASHBOARD_RANGES[dashboardRange],
-      from,
-      to,
-    });
+    const stats = await dashboardService.getDashboardStats(
+      store,
+      employeeId,
+      {
+        range: DASHBOARD_RANGES[dashboardRange],
+        from,
+        to,
+      },
+      comparisonPeriod
+        ? {
+            allowLongRange: true,
+            includeDailyBreakdown:
+              dashboardMetricName !== 'sales' && dashboardMetricName !== 'profit',
+          }
+        : undefined,
+    );
     const dailyStats = stats.dailyBreakdown ?? [];
     const rows = dailyStats.length
       ? dailyStats.map((day) => ({
@@ -777,7 +1001,8 @@ async function createBusinessGraph({
       title: 'Products by sold value',
       yAxisLabel: 'Sold value',
       valueFormat: 'currency',
-      loadRows: () => saleProductRows(sql`sum(item.quantity * item.unit_price)`),
+      loadRows: () =>
+        saleProductRows(sql`sum(item.quantity * item.unit_price)`),
     },
     inventory_by_quantity: {
       title: 'Inventory by quantity',
@@ -786,7 +1011,10 @@ async function createBusinessGraph({
       loadRows: () =>
         em
           .createQueryBuilder(StockQuantity, 'stock')
-          .select(['product.name as label', sql`sum(stock.quantity)`.as('value')])
+          .select([
+            'product.name as label',
+            sql`sum(stock.quantity)`.as('value'),
+          ])
           .innerJoin('stock.product', 'product')
           .innerJoin('stock.inventory', 'inventory')
           .where({ inventory: { store: { id: store.id } } })
@@ -802,7 +1030,10 @@ async function createBusinessGraph({
       loadRows: () =>
         em
           .createQueryBuilder(Payment, 'payment')
-          .select(['customer.name as label', sql`sum(payment.amount)`.as('value')])
+          .select([
+            'customer.name as label',
+            sql`sum(payment.amount)`.as('value'),
+          ])
           .innerJoin('payment.sale', 'sale')
           .innerJoin('sale.customer', 'customer')
           .where({ status: PaymentStatus.Done, sale: saleWhere })
@@ -821,7 +1052,8 @@ async function createBusinessGraph({
       title: 'Products by purchase cost',
       yAxisLabel: 'Purchase cost',
       valueFormat: 'currency',
-      loadRows: () => purchasedProductRows(sql`sum(item.quantity * item.unit_price)`),
+      loadRows: () =>
+        purchasedProductRows(sql`sum(item.quantity * item.unit_price)`),
     },
     purchase_customers_by_paid_amount: {
       title: 'Purchase customers by paid amount',
@@ -830,7 +1062,10 @@ async function createBusinessGraph({
       loadRows: () =>
         em
           .createQueryBuilder(Payment, 'payment')
-          .select(['customer.name as label', sql`sum(payment.amount)`.as('value')])
+          .select([
+            'customer.name as label',
+            sql`sum(payment.amount)`.as('value'),
+          ])
           .innerJoin('payment.purchase', 'purchase')
           .innerJoin('purchase.customer', 'customer')
           .where({ status: PaymentStatus.Done, purchase: purchaseWhere })
@@ -846,7 +1081,12 @@ async function createBusinessGraph({
       loadRows: () =>
         em
           .createQueryBuilder(Payment, 'payment')
-          .select([sql`concat(employee.first_name, ' ', employee.last_name)`.as('label'), sql`sum(payment.amount)`.as('value')])
+          .select([
+            sql`concat(employee.first_name, ' ', employee.last_name)`.as(
+              'label',
+            ),
+            sql`sum(payment.amount)`.as('value'),
+          ])
           .innerJoin('payment.sale', 'sale')
           .innerJoin('payment.storeSession', 'session')
           .innerJoin('session.openedBy', 'employee')
@@ -870,14 +1110,101 @@ async function createBusinessGraph({
   });
 }
 
-function getBusinessGraphDateRange(range: BusinessGraphRange, from?: string, to?: string): Record<string, unknown> {
+async function createBusinessComparisonGraph({
+  dashboardService,
+  em,
+  store,
+  employeeId,
+  subject,
+  periods,
+  limit,
+  type,
+}: {
+  dashboardService: DashboardService;
+  em: EntityManager;
+  store: Store;
+  employeeId: string;
+  subject: BusinessGraphSubject;
+  periods: BusinessGraphComparisonPeriod[];
+  limit: number;
+  type: AiAssistantGraph['type'];
+}): Promise<AiAssistantGraph> {
+  if (subject === 'inventory_by_quantity') {
+    throw new Error('Inventory quantity is a live snapshot and cannot be compared across historical periods.');
+  }
+
+  const graphs = await Promise.all(
+    periods.map((period) =>
+      createBusinessGraph({
+        dashboardService,
+        em,
+        store,
+        employeeId,
+        subject,
+        range: 'custom',
+        from: period.from,
+        to: period.to,
+        comparisonPeriod: true,
+        limit,
+        type,
+      }),
+    ),
+  );
+  const dashboardMetricName = DASHBOARD_SUBJECT_METRICS[subject];
+
+  if (dashboardMetricName) {
+    const metric = DASHBOARD_GRAPH_METRICS[dashboardMetricName];
+    return toGraph(
+      periods.map((period, index) => ({
+        label: period.label,
+        value: graphs[index].datasets[0].data.reduce((total, value) => total + value, 0),
+      })),
+      {
+        type,
+        title: `${metric.label} comparison`,
+        xAxisLabel: 'Period',
+        yAxisLabel: metric.label,
+        valueFormat: metric.valueFormat,
+      },
+    );
+  }
+
+  const labels = [...new Set(graphs.flatMap((graph) => graph.labels))];
+  return AiAssistantGraphSchema.parse({
+    type,
+    title: `${graphs[0].yAxisLabel} comparison`,
+    xAxisLabel: graphs[0].xAxisLabel,
+    yAxisLabel: graphs[0].yAxisLabel,
+    valueFormat: graphs[0].valueFormat,
+    labels,
+    datasets: graphs.map((graph, index) => ({
+      label: periods[index].label,
+      data: labels.map((label) => {
+        const labelIndex = graph.labels.indexOf(label);
+        return labelIndex === -1 ? 0 : graph.datasets[0].data[labelIndex];
+      }),
+    })),
+  });
+}
+
+function getBusinessGraphDateRange(
+  range: BusinessGraphRange,
+  from?: string,
+  to?: string,
+): Record<string, unknown> {
   if (range === 'all_time') return {};
 
   if (range === 'custom') {
-    if (!from || !to) throw new Error('from and to are required for a custom graph range.');
+    if (!from || !to)
+      throw new Error('from and to are required for a custom graph range.');
     const start = new Date(from);
     const end = new Date(to);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) throw new Error('The custom graph range is invalid.');
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start > end
+    )
+      throw new Error('The custom graph range is invalid.');
     end.setUTCHours(23, 59, 59, 999);
     return { createdAt: { $gte: start, $lte: end } };
   }
@@ -886,16 +1213,36 @@ function getBusinessGraphDateRange(range: BusinessGraphRange, from?: string, to?
   end.setUTCHours(23, 59, 59, 999);
   const start = new Date(end);
   start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - (range === 'today' ? 0 : range === 'last_week' ? 6 : 29));
+  const daysBeforeToday =
+    range === 'today'
+      ? 0
+      : range === 'yesterday'
+        ? 1
+        : range === 'last_week'
+          ? 6
+          : 29;
+  start.setUTCDate(start.getUTCDate() - daysBeforeToday);
+  end.setUTCDate(end.getUTCDate() - (range === 'yesterday' ? 1 : 0));
+  if (range === 'yesterday') end.setUTCHours(23, 59, 59, 999);
   return { createdAt: { $gte: start, $lte: end } };
 }
 
-function getBusinessGraphRangeLabel(range: BusinessGraphRange, from?: string, to?: string): string {
-  if (range === 'custom') return from && to ? `${from} to ${to}` : 'Custom range';
-  return range === 'all_time' ? 'All time' : getDashboardGraphRangeLabel(range, from, to);
+function getBusinessGraphRangeLabel(
+  range: BusinessGraphRange,
+  from?: string,
+  to?: string,
+): string {
+  if (range === 'custom')
+    return from && to ? `${from} to ${to}` : 'Custom range';
+  return range === 'all_time'
+    ? 'All time'
+    : getDashboardGraphRangeLabel(range, from, to);
 }
 
-function toGraph(rows: GraphRow[], config: Omit<AiAssistantGraph, 'labels' | 'datasets'>): AiAssistantGraph {
+function toGraph(
+  rows: GraphRow[],
+  config: Omit<AiAssistantGraph, 'labels' | 'datasets'>,
+): AiAssistantGraph {
   return AiAssistantGraphSchema.parse({
     ...config,
     labels: rows.map((row) => row.label),
@@ -908,8 +1255,13 @@ function toGraph(rows: GraphRow[], config: Omit<AiAssistantGraph, 'labels' | 'da
   });
 }
 
-function getDashboardGraphRangeLabel(range: string, from?: string, to?: string): string {
-  if (range === 'custom') return from && to ? `${from} to ${to}` : 'Custom range';
+function getDashboardGraphRangeLabel(
+  range: string,
+  from?: string,
+  to?: string,
+): string {
+  if (range === 'custom')
+    return from && to ? `${from} to ${to}` : 'Custom range';
   return GRAPH_RANGE_LABELS[range] ?? range;
 }
 
@@ -924,7 +1276,16 @@ function createProductWhere(
 
   where.$or = [
     ...(normalizedQuery ? [{ name: { $ilike: `%${normalizedQuery}%` } }] : []),
-    ...(productCode ? [{ sequence: { prefix: productCode.prefix, lastIndex: productCode.number } }] : []),
+    ...(productCode
+      ? [
+          {
+            sequence: {
+              prefix: productCode.prefix,
+              lastIndex: productCode.number,
+            },
+          },
+        ]
+      : []),
   ];
   return where;
 }
@@ -939,18 +1300,26 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   }, new Map<string, T[]>());
 }
 
-async function getLiveEntityCount(em: EntityManager, storeWhere: { id: string }, resource: LiveEntityResource): Promise<number> {
+async function getLiveEntityCount(
+  em: EntityManager,
+  storeWhere: { id: string },
+  resource: LiveEntityResource,
+): Promise<number> {
   const counters: Record<LiveEntityResource, () => Promise<number>> = {
     employees: () => em.count(Employee, { store: storeWhere }),
     categories: () => em.count(Category, { store: storeWhere }),
     payments: () =>
       em.count(Payment, {
-        $or: [{ sale: { store: storeWhere } }, { purchase: { store: storeWhere } }],
+        $or: [
+          { sale: { store: storeWhere } },
+          { purchase: { store: storeWhere } },
+        ],
       }),
     stock_ins: () => em.count(StockIn, { inventory: { store: storeWhere } }),
     stock_outs: () => em.count(StockOut, { sale: { store: storeWhere } }),
     stock_movements: () => em.count(StockMovement, { store: storeWhere }),
-    cash_movements: () => em.count(CashMovement, { storeSession: { store: storeWhere } }),
+    cash_movements: () =>
+      em.count(CashMovement, { storeSession: { store: storeWhere } }),
     receipts: () => em.count(Receipt, { store: storeWhere }),
     journal_entries: () => em.count(JournalEntry, { store: storeWhere }),
   };
@@ -958,7 +1327,11 @@ async function getLiveEntityCount(em: EntityManager, storeWhere: { id: string },
   return counters[resource]();
 }
 
-async function getEmployeeSaleIds(em: EntityManager, store: Store, employeeId: string): Promise<string[]> {
+async function getEmployeeSaleIds(
+  em: EntityManager,
+  store: Store,
+  employeeId: string,
+): Promise<string[]> {
   const payments = await em.find(
     Payment,
     {
@@ -971,7 +1344,13 @@ async function getEmployeeSaleIds(em: EntityManager, store: Store, employeeId: s
     { populate: ['sale'], refresh: true },
   );
 
-  return [...new Set(payments.map((payment) => payment.sale?.id).filter((id): id is string => Boolean(id)))];
+  return [
+    ...new Set(
+      payments
+        .map((payment) => payment.sale?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
 }
 
 async function getEmployeeCreatedEntityIds(
@@ -990,5 +1369,9 @@ async function getEmployeeCreatedEntityIds(
     { refresh: true },
   );
 
-  return [...new Set(logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)))];
+  return [
+    ...new Set(
+      logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)),
+    ),
+  ];
 }

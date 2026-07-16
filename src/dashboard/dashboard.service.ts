@@ -4,19 +4,44 @@ import { Store } from '../database/entites/store.entity';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { StoreSession } from '../database/entites/store-session.entity';
 import { CashMovementType } from '../shared/utils/cash-movement.enum';
-import { CashierStats, DailyStats, DashboardQueryDto, DashboardRange, DashboardStats } from './dto/dashboard.dto';
+import {
+  CashierStats,
+  DailyStats,
+  DashboardQueryDto,
+  DashboardRange,
+  DashboardStats,
+} from './dto/dashboard.dto';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 
-type RangeBounds = { currentStart: Date; currentEnd: Date; previousStart: Date; previousEnd: Date };
+type RangeBounds = {
+  currentStart: Date;
+  currentEnd: Date;
+  previousStart: Date;
+  previousEnd: Date;
+};
 type DashboardRangeContext = RangeBounds & {
   range: DashboardRange;
   customRange: { from: Date; to: Date } | null;
   isToday: boolean;
   includeDailyBreakdown: boolean;
 };
-type DashboardSaleItem = { id: string; productId: string; quantity: number; unitPrice: number };
-type DashboardSale = { id: string; createdAt?: Date; items: DashboardSaleItem[]; paidAmount: number };
+type DashboardStatsOptions = {
+  includeDailyBreakdown?: boolean;
+  allowLongRange?: boolean;
+};
+type DashboardSaleItem = {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+};
+type DashboardSale = {
+  id: string;
+  createdAt?: Date;
+  items: DashboardSaleItem[];
+  paidAmount: number;
+};
 type DashboardSaleRow = {
   saleId: string;
   createdAt: Date | string | null;
@@ -27,8 +52,16 @@ type DashboardSaleRow = {
 };
 type PaymentTotalRow = { saleId: string; paidAmount: string | number | null };
 type PaymentSessionRow = { saleId: string; sessionId: string };
-type PurchaseBatchRow = { productId: string; quantity: string | number; unitPrice: string | number };
-type HistoricalSaleItemRow = { id: string; productId: string; quantity: string | number };
+type PurchaseBatchRow = {
+  productId: string;
+  quantity: string | number;
+  unitPrice: string | number;
+};
+type HistoricalSaleItemRow = {
+  id: string;
+  productId: string;
+  quantity: string | number;
+};
 type StockSummaryRecord = {
   quantity?: number;
   product: { id: string; name?: string; price?: number };
@@ -68,7 +101,11 @@ const STOCK_FIELDS = [
   'inventory.name',
 ] as any;
 
-function dayWindow(now: Date, windowDays: number, endOffsetDays: number): RangeBounds {
+function dayWindow(
+  now: Date,
+  windowDays: number,
+  endOffsetDays: number,
+): RangeBounds {
   const currentEnd = endOfUtcDay(addDays(now, -endOffsetDays));
   const currentStart = startOfUtcDay(addDays(currentEnd, -(windowDays - 1)));
   const previousEnd = endOfUtcDay(addDays(currentStart, -1));
@@ -76,7 +113,9 @@ function dayWindow(now: Date, windowDays: number, endOffsetDays: number): RangeB
   return { currentStart, currentEnd, previousStart, previousEnd };
 }
 
-const DAY_WINDOW_CONFIG: Partial<Record<DashboardRange, { windowDays: number; endOffsetDays: number }>> = {
+const DAY_WINDOW_CONFIG: Partial<
+  Record<DashboardRange, { windowDays: number; endOffsetDays: number }>
+> = {
   [DashboardRange.TODAY]: { windowDays: 1, endOffsetDays: 0 },
   [DashboardRange.YESTERDAY]: { windowDays: 1, endOffsetDays: 1 },
   [DashboardRange.LAST_WEEK]: { windowDays: 7, endOffsetDays: 0 },
@@ -92,9 +131,21 @@ export class DashboardService {
 
   constructor(private readonly em: EntityManager) {}
 
-  async getDashboardStats(store: Store, employeeId: string, query: DashboardQueryDto): Promise<DashboardStats> {
-    const context = this.getRangeContext(query);
-    const { range, customRange, currentStart, currentEnd, previousStart, previousEnd } = context;
+  async getDashboardStats(
+    store: Store,
+    employeeId: string,
+    query: DashboardQueryDto,
+    options: DashboardStatsOptions = {},
+  ): Promise<DashboardStats> {
+    const context = this.getRangeContext(query, options);
+    const {
+      range,
+      customRange,
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+    } = context;
 
     const [currentSales, previousSales] = await Promise.all([
       this.findDashboardSales(store.id, currentStart, currentEnd),
@@ -102,11 +153,22 @@ export class DashboardService {
     ]);
 
     const productIds = [
-      ...new Set([...currentSales, ...previousSales].flatMap((s) => s.items.map((i) => i.productId))),
+      ...new Set(
+        [...currentSales, ...previousSales].flatMap((s) =>
+          s.items.map((i) => i.productId),
+        ),
+      ),
     ];
     const [costPriceMap, cashierBreakdown] = await Promise.all([
       this.buildSaleItemCostMap(store, productIds, currentEnd),
-      context.isToday ? this.getCashierBreakdown(store, currentStart, currentEnd, currentSales) : Promise.resolve([]),
+      context.isToday
+        ? this.getCashierBreakdown(
+            store,
+            currentStart,
+            currentEnd,
+            currentSales,
+          )
+        : Promise.resolve([]),
     ]);
 
     const response = this.createResponse(
@@ -133,12 +195,23 @@ export class DashboardService {
     return response;
   }
 
-  private getRangeContext(query: DashboardQueryDto): DashboardRangeContext {
-    const customRange = this.parseAndValidateDateRange(query.from, query.to);
+  private getRangeContext(
+    query: DashboardQueryDto,
+    options: DashboardStatsOptions,
+  ): DashboardRangeContext {
+    const customRange = this.parseAndValidateDateRange(
+      query.from,
+      query.to,
+      options.allowLongRange,
+    );
     if (query.range === DashboardRange.CUSTOM && !customRange)
-      throw new BadRequestException('"from" and "to" are required when range is "custom"');
+      throw new BadRequestException(
+        '"from" and "to" are required when range is "custom"',
+      );
 
-    const range = customRange ? DashboardRange.CUSTOM : (query.range ?? DashboardRange.TODAY);
+    const range = customRange
+      ? DashboardRange.CUSTOM
+      : (query.range ?? DashboardRange.TODAY);
     const bounds = customRange
       ? this.getCustomRangeBounds(customRange.from, customRange.to)
       : this.getEnumRangeBounds(range);
@@ -148,7 +221,13 @@ export class DashboardService {
       range,
       customRange,
       isToday: range === DashboardRange.TODAY,
-      includeDailyBreakdown: [DashboardRange.LAST_WEEK, DashboardRange.MONTHLY, DashboardRange.CUSTOM].includes(range),
+      includeDailyBreakdown:
+        options.includeDailyBreakdown ??
+        [
+          DashboardRange.LAST_WEEK,
+          DashboardRange.MONTHLY,
+          DashboardRange.CUSTOM,
+        ].includes(range),
     };
   }
 
@@ -170,26 +249,53 @@ export class DashboardService {
       range,
       sales: {
         total: round2(currentTotalSales),
-        percentageChange: this.calcBoundedSignedPercentage(currentTotalSales, previousTotalSales),
+        percentageChange: this.calcBoundedSignedPercentage(
+          currentTotalSales,
+          previousTotalSales,
+        ),
       },
       profit: {
         total: round2(currentNetProfit),
-        percentageChange: this.calcBoundedSignedPercentage(currentNetProfit, previousNetProfit),
+        percentageChange: this.calcBoundedSignedPercentage(
+          currentNetProfit,
+          previousNetProfit,
+        ),
       },
     };
 
-    if (range === DashboardRange.TODAY) response.cashierBreakdown = cashierBreakdown;
-    if (customRange) response.customRange = { from: currentStart.toISOString(), to: currentEnd.toISOString() };
+    if (range === DashboardRange.TODAY)
+      response.cashierBreakdown = cashierBreakdown;
+    if (customRange)
+      response.customRange = {
+        from: currentStart.toISOString(),
+        to: currentEnd.toISOString(),
+      };
     return response;
   }
 
-  private async addStockBreakdowns(response: DashboardStats, store: Store, query: DashboardQueryDto): Promise<void> {
+  private async addStockBreakdowns(
+    response: DashboardStats,
+    store: Store,
+    query: DashboardQueryDto,
+  ): Promise<void> {
     const [lowStock, outOfStock] = await Promise.all([
-      this.getStockPage(store, { quantity: { $gt: 0, $lte: 10 } }, query.lowStockPage, query.lowStockPageSize, {
-        quantity: 'ASC',
-        id: 'ASC',
-      }),
-      this.getStockPage(store, { quantity: 0 }, query.outOfStockPage, query.outOfStockPageSize, { id: 'ASC' }),
+      this.getStockPage(
+        store,
+        { quantity: { $gt: 0, $lte: 10 } },
+        query.lowStockPage,
+        query.lowStockPageSize,
+        {
+          quantity: 'ASC',
+          id: 'ASC',
+        },
+      ),
+      this.getStockPage(
+        store,
+        { quantity: 0 },
+        query.outOfStockPage,
+        query.outOfStockPageSize,
+        { id: 'ASC' },
+      ),
     ]);
 
     response.lowStockProducts = lowStock;
@@ -237,13 +343,15 @@ export class DashboardService {
 
   private getPage(rawValue?: string): number {
     const value = Number(rawValue);
-    if (!Number.isInteger(value) || value <= 0) return DashboardService.DEFAULT_STOCK_PAGE;
+    if (!Number.isInteger(value) || value <= 0)
+      return DashboardService.DEFAULT_STOCK_PAGE;
     return value;
   }
 
   private getPageSize(rawValue?: string): number {
     const value = Number(rawValue);
-    if (!Number.isInteger(value) || value <= 0) return DashboardService.DEFAULT_STOCK_PAGE_SIZE;
+    if (!Number.isInteger(value) || value <= 0)
+      return DashboardService.DEFAULT_STOCK_PAGE_SIZE;
     return Math.min(value, DashboardService.MAX_STOCK_PAGE_SIZE);
   }
 
@@ -256,7 +364,11 @@ export class DashboardService {
     return cashMovements
       .filter(
         (cm) =>
-          cm.type === String(type) && (!from || !to || !cm.createdAt || (cm.createdAt >= from && cm.createdAt <= to)),
+          cm.type === String(type) &&
+          (!from ||
+            !to ||
+            !cm.createdAt ||
+            (cm.createdAt >= from && cm.createdAt <= to)),
       )
       .reduce((sum, cm) => sum + (cm.amount ?? 0), 0);
   }
@@ -277,7 +389,11 @@ export class DashboardService {
           { closedAt: { $gte: currentStart, $lte: currentEnd } },
         ],
       },
-      { populate: ['cashMovements', 'openedBy'], refresh: true, orderBy: { openedAt: 'ASC' } },
+      {
+        populate: ['cashMovements', 'openedBy'],
+        refresh: true,
+        orderBy: { openedAt: 'ASC' },
+      },
     );
     if (sessions.length === 0) return [];
 
@@ -285,10 +401,17 @@ export class DashboardService {
     const payments: PaymentSessionRow[] = saleIds.length
       ? ((await this.em
           .getKnex()<PaymentSessionRow>('payments as payment')
-          .join('store_session as session', 'session.id', 'payment.store_session_id')
+          .join(
+            'store_session as session',
+            'session.id',
+            'payment.store_session_id',
+          )
           .where('session.store_id', store.id)
           .whereIn('payment.sale_id', saleIds)
-          .select('payment.sale_id as saleId', 'payment.store_session_id as sessionId')) as PaymentSessionRow[])
+          .select(
+            'payment.sale_id as saleId',
+            'payment.store_session_id as sessionId',
+          )) as PaymentSessionRow[])
       : [];
 
     const saleById = new Map(sales.map((s) => [s.id, s]));
@@ -297,7 +420,9 @@ export class DashboardService {
       const sale = saleById.get(payment.saleId);
       if (!sale) continue;
 
-      const bucket = salesBySessionId.get(payment.sessionId) ?? new Map<string, DashboardSale>();
+      const bucket =
+        salesBySessionId.get(payment.sessionId) ??
+        new Map<string, DashboardSale>();
       bucket.set(sale.id, sale);
       salesBySessionId.set(payment.sessionId, bucket);
     }
@@ -307,7 +432,9 @@ export class DashboardService {
       .map((session) => {
         const employee = session.openedBy!;
         const cashMovements = session.cashMovements.getItems();
-        const sessionSales = Array.from(salesBySessionId.get(session.id)?.values() ?? []);
+        const sessionSales = Array.from(
+          salesBySessionId.get(session.id)?.values() ?? [],
+        );
 
         return {
           sessionId: session.id,
@@ -315,17 +442,36 @@ export class DashboardService {
           employeeName: getEmployeeFullName(employee),
           totalSales: round2(this.calcTotalSales(sessionSales)),
           openingAmount: round2(session.openingAmount ?? 0),
-          closingAmount: session.closedAt != null ? round2(session.closingAmount ?? 0) : null,
-          status: session.closedAt != null ? ('closed' as const) : ('open' as const),
-          cashIn: round2(this.sumCashMovements(cashMovements, CashMovementType.CashIn, currentStart, currentEnd)),
-          cashOut: round2(this.sumCashMovements(cashMovements, CashMovementType.CashOut, currentStart, currentEnd)),
+          closingAmount:
+            session.closedAt != null
+              ? round2(session.closingAmount ?? 0)
+              : null,
+          status:
+            session.closedAt != null ? ('closed' as const) : ('open' as const),
+          cashIn: round2(
+            this.sumCashMovements(
+              cashMovements,
+              CashMovementType.CashIn,
+              currentStart,
+              currentEnd,
+            ),
+          ),
+          cashOut: round2(
+            this.sumCashMovements(
+              cashMovements,
+              CashMovementType.CashOut,
+              currentStart,
+              currentEnd,
+            ),
+          ),
         };
       })
       .sort((a, b) => b.totalSales - a.totalSales);
   }
 
   private getEnumRangeBounds(range: DashboardRange): RangeBounds {
-    const config = DAY_WINDOW_CONFIG[range] ?? DAY_WINDOW_CONFIG[DashboardRange.TODAY]!;
+    const config =
+      DAY_WINDOW_CONFIG[range] ?? DAY_WINDOW_CONFIG[DashboardRange.TODAY]!;
     return dayWindow(new Date(), config.windowDays, config.endOffsetDays);
   }
 
@@ -359,21 +505,38 @@ export class DashboardService {
       StoreSession,
       {
         store,
-        $or: [{ openedAt: { $gte: start, $lte: end } }, { closedAt: { $gte: start, $lte: end } }],
+        $or: [
+          { openedAt: { $gte: start, $lte: end } },
+          { closedAt: { $gte: start, $lte: end } },
+        ],
       },
       { populate: ['cashMovements'], refresh: true },
     );
 
     const startDay = toDay(start);
     const endDay = toDay(end);
-    type DayBucket = { opened: number; closed: number; cashIn: number; cashOut: number };
+    type DayBucket = {
+      opened: number;
+      closed: number;
+      cashIn: number;
+      cashOut: number;
+    };
     const sessionsByDay = new Map<string, DayBucket>();
 
-    const bump = (date: Date | string | null | undefined, key: keyof DayBucket, value: number) => {
+    const bump = (
+      date: Date | string | null | undefined,
+      key: keyof DayBucket,
+      value: number,
+    ) => {
       if (!date) return;
       const d = toDay(date);
       if (d < startDay || d > endDay) return;
-      const bucket = sessionsByDay.get(d) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
+      const bucket = sessionsByDay.get(d) ?? {
+        opened: 0,
+        closed: 0,
+        cashIn: 0,
+        cashOut: 0,
+      };
       bucket[key] += value;
       sessionsByDay.set(d, bucket);
     };
@@ -382,8 +545,10 @@ export class DashboardService {
       if (session.openedAt) bump(session.openedAt, 'opened', 1);
       if (session.closedAt) bump(session.closedAt, 'closed', 1);
       for (const cm of session.cashMovements.getItems()) {
-        if (cm.type === String(CashMovementType.CashIn)) bump(cm.createdAt, 'cashIn', cm.amount ?? 0);
-        if (cm.type === String(CashMovementType.CashOut)) bump(cm.createdAt, 'cashOut', cm.amount ?? 0);
+        if (cm.type === String(CashMovementType.CashIn))
+          bump(cm.createdAt, 'cashIn', cm.amount ?? 0);
+        if (cm.type === String(CashMovementType.CashOut))
+          bump(cm.createdAt, 'cashOut', cm.amount ?? 0);
       }
     }
 
@@ -394,11 +559,19 @@ export class DashboardService {
     while (cursor.getTime() <= endCursor.getTime()) {
       const dateStr = toDay(cursor);
       const daySales = salesByDay.get(dateStr) ?? [];
-      const sessionInfo = sessionsByDay.get(dateStr) ?? { opened: 0, closed: 0, cashIn: 0, cashOut: 0 };
+      const sessionInfo = sessionsByDay.get(dateStr) ?? {
+        opened: 0,
+        closed: 0,
+        cashIn: 0,
+        cashOut: 0,
+      };
 
       days.push({
         date: dateStr,
-        dayName: cursor.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
+        dayName: cursor.toLocaleDateString('en-US', {
+          weekday: 'long',
+          timeZone: 'UTC',
+        }),
         sales: { total: round2(this.calcTotalSales(daySales)) },
         profit: { total: round2(this.calcTotalProfit(daySales, costPriceMap)) },
         sessionsOpened: sessionInfo.opened,
@@ -413,7 +586,11 @@ export class DashboardService {
     return days;
   }
 
-  private async findDashboardSales(storeId: string, from: Date, to: Date): Promise<DashboardSale[]> {
+  private async findDashboardSales(
+    storeId: string,
+    from: Date,
+    to: Date,
+  ): Promise<DashboardSale[]> {
     const rows = (await this.em
       .getKnex()<DashboardSaleRow>('sale as sale')
       .leftJoin('sale_items as item', 'item.sale_id', 'sale.id')
@@ -457,19 +634,31 @@ export class DashboardService {
       .groupBy('payment.sale_id')
       .select('payment.sale_id as saleId')
       .sum({ paidAmount: 'payment.amount' })) as PaymentTotalRow[];
-    const paidBySale = new Map(paymentRows.map((row) => [row.saleId, Number(row.paidAmount ?? 0)]));
+    const paidBySale = new Map(
+      paymentRows.map((row) => [row.saleId, Number(row.paidAmount ?? 0)]),
+    );
 
     return [...salesById.values()].map((sale) => ({
       ...sale,
-      paidAmount: Math.min(Math.max(paidBySale.get(sale.id) ?? 0, 0), grossSaleTotal(sale)),
+      paidAmount: Math.min(
+        Math.max(paidBySale.get(sale.id) ?? 0, 0),
+        grossSaleTotal(sale),
+      ),
     }));
   }
 
   private calcTotalSales(sales: DashboardSale[]): number {
-    return sales.reduce((sum, sale) => sum + grossSaleTotal(sale) * paidRatio(sale), 0);
+    return sales.reduce(
+      (sum, sale) => sum + grossSaleTotal(sale) * paidRatio(sale),
+      0,
+    );
   }
 
-  private async buildSaleItemCostMap(store: Store, productIds: string[], upTo: Date): Promise<Map<string, number>> {
+  private async buildSaleItemCostMap(
+    store: Store,
+    productIds: string[],
+    upTo: Date,
+  ): Promise<Map<string, number>> {
     const costBySaleItemId = new Map<string, number>();
     if (productIds.length === 0) return costBySaleItemId;
 
@@ -480,12 +669,22 @@ export class DashboardService {
       .whereIn('item.product_id', productIds)
       .where('item.created_at', '<=', upTo)
       .orderBy('item.created_at', 'asc')
-      .select('item.product_id as productId', 'item.quantity', 'item.unit_price as unitPrice')) as PurchaseBatchRow[];
+      .select(
+        'item.product_id as productId',
+        'item.quantity',
+        'item.unit_price as unitPrice',
+      )) as PurchaseBatchRow[];
 
-    const batchesByProduct = new Map<string, { remaining: number; unitPrice: number }[]>();
+    const batchesByProduct = new Map<
+      string,
+      { remaining: number; unitPrice: number }[]
+    >();
     for (const pi of purchasedItems) {
       const list = batchesByProduct.get(pi.productId) ?? [];
-      list.push({ remaining: Number(pi.quantity), unitPrice: Number(pi.unitPrice) });
+      list.push({
+        remaining: Number(pi.quantity),
+        unitPrice: Number(pi.unitPrice),
+      });
       batchesByProduct.set(pi.productId, list);
     }
     const nextBatchByProduct = new Map<string, number>();
@@ -497,7 +696,11 @@ export class DashboardService {
       .whereIn('item.product_id', productIds)
       .where('sale.created_at', '<=', upTo)
       .orderBy('sale.created_at', 'asc')
-      .select('item.id', 'item.product_id as productId', 'item.quantity')) as HistoricalSaleItemRow[];
+      .select(
+        'item.id',
+        'item.product_id as productId',
+        'item.quantity',
+      )) as HistoricalSaleItemRow[];
 
     for (const item of saleItems) {
       const batches = batchesByProduct.get(item.productId) ?? [];
@@ -520,13 +723,17 @@ export class DashboardService {
       nextBatchByProduct.set(item.productId, batchIndex);
 
       const consumedQty = Number(item.quantity) - qtyToConsume;
-      if (consumedQty > 0 && qtyToConsume === 0) costBySaleItemId.set(item.id, totalCost / consumedQty);
+      if (consumedQty > 0 && qtyToConsume === 0)
+        costBySaleItemId.set(item.id, totalCost / consumedQty);
     }
 
     return costBySaleItemId;
   }
 
-  private calcTotalProfit(sales: DashboardSale[], costBySaleItemId: Map<string, number>): number {
+  private calcTotalProfit(
+    sales: DashboardSale[],
+    costBySaleItemId: Map<string, number>,
+  ): number {
     let hasMissingCost = false;
 
     const profit = sales.reduce(
@@ -539,34 +746,54 @@ export class DashboardService {
             return total;
           }
           return (
-            total + (item.unitPrice / (1 + DashboardService.TAX_RATE) - costPrice) * item.quantity * paidRatio(sale)
+            total +
+            (item.unitPrice / (1 + DashboardService.TAX_RATE) - costPrice) *
+              item.quantity *
+              paidRatio(sale)
           );
         }, 0),
       0,
     );
 
     if (hasMissingCost)
-      console.warn('[profit] some sale items had no cost history — check for missing/orphaned purchase data');
+      console.warn(
+        '[profit] some sale items had no cost history — check for missing/orphaned purchase data',
+      );
 
     return profit;
   }
 
-  private calcBoundedSignedPercentage(current: number, previous: number): number {
+  private calcBoundedSignedPercentage(
+    current: number,
+    previous: number,
+  ): number {
     if (previous === 0) return current === 0 ? 0 : current > 0 ? 100 : -100;
     return round2(((current - previous) / Math.abs(previous)) * 100);
   }
 
-  private parseAndValidateDateRange(from: string | undefined, to: string | undefined): { from: Date; to: Date } | null {
+  private parseAndValidateDateRange(
+    from: string | undefined,
+    to: string | undefined,
+    allowLongRange = false,
+  ): { from: Date; to: Date } | null {
     if (from === undefined && to === undefined) return null;
     if (from === undefined || to === undefined)
-      throw new BadRequestException('Both "from" and "to" must be provided for a custom date range');
+      throw new BadRequestException(
+        'Both "from" and "to" must be provided for a custom date range',
+      );
 
     const fromDate = new Date(from);
     const toDate = new Date(to);
     if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()))
-      throw new BadRequestException('Invalid date format. Use ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)');
-    if (fromDate > toDate) throw new BadRequestException('"from" must be on or before "to"');
-    if (toDate.getTime() - fromDate.getTime() > 365 * 24 * 60 * 60 * 1000)
+      throw new BadRequestException(
+        'Invalid date format. Use ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ)',
+      );
+    if (fromDate > toDate)
+      throw new BadRequestException('"from" must be on or before "to"');
+    if (
+      !allowLongRange &&
+      toDate.getTime() - fromDate.getTime() > 365 * 24 * 60 * 60 * 1000
+    )
       throw new BadRequestException('Date range cannot exceed 1 year');
 
     return { from: fromDate, to: toDate };

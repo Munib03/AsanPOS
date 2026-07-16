@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { stepCountIs, streamText } from 'ai';
@@ -9,7 +14,10 @@ import { AiChatMessage } from '../database/entites/ai-chat-message.entity';
 import { AiChatThread } from '../database/entites/ai-chat-thread.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
-import { AiChatThreadDetail, AiChatThreadSummary } from '../shared/types/ai-assistant.types';
+import {
+  AiChatThreadDetail,
+  AiChatThreadSummary,
+} from '../shared/types/ai-assistant.types';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import { streamAiAssistantResponse } from './helpers/ai-assistant.sse';
 import { createAiAssistantTools } from './helpers/ai-assistant.tools';
@@ -22,7 +30,7 @@ const AI_CHAT_PROVIDER = 'opencode';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
 const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
 const AI_TOOL_INSTRUCTIONS =
-  'You are the AsanPOS assistant. For every question about current store data, call the matching tool in this turn and answer only from its latest result. Never reuse numbers from chat history, estimate missing values, or change tool values. Keep the answer concise and directly answer the question. Use plain text only, without Markdown, headings, bullets, code formatting, emojis, internal analysis, reasoning, thinking tags, or internal tool details. Create charts only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Create exactly the number of charts explicitly requested: a singular request means one createBusinessGraph call, and each distinct requested chart needs one call. Never create an extra chart for context, comparison, recommendation, or decoration. After the requested graph tool calls succeed, write the text explanation and do not call createBusinessGraph again. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
+  'You are the AsanPOS assistant. For every question about current store data, call the matching tool in this turn and answer only from its latest result. Never reuse numbers from chat history, estimate missing values, or change tool values. Keep the answer concise and directly answer the question. Use plain text only, without Markdown, headings, bullets, code formatting, emojis, internal analysis, reasoning, thinking tags, or internal tool details. Create charts only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Create exactly the number of charts explicitly requested: a singular request means one createBusinessGraph call, and each distinct requested chart needs one call. Interpret the complete request yourself to decide whether it compares two or more time periods. For every time-based period comparison, make exactly one createBusinessGraph call with comparisonPeriods, supplying every requested period as an exact inclusive ISO date range and a clear label. Resolve relative dates from the current UTC date supplied below. Use a bar or line chart for comparisons. Do not use fixed comparison presets or make separate graph calls for the compared periods. Never create an unrequested chart for context, recommendations, or decoration. After the requested graph tool calls succeed, write the text explanation and do not call createBusinessGraph again. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
 
 @Injectable()
 export class AiAssistantService {
@@ -31,18 +39,31 @@ export class AiAssistantService {
     private readonly em: EntityManager,
   ) {}
 
-  streamAnswer(store: Store, employeeId: string, body: AskAiAssistantDto): Observable<MessageEvent> {
-    const model = process.env.OPENCODE_MODEL ?? process.env.OPENAI_MODEL ?? DEFAULT_OPENCODE_MODEL;
+  streamAnswer(
+    store: Store,
+    employeeId: string,
+    body: AskAiAssistantDto,
+  ): Observable<MessageEvent> {
+    const model =
+      process.env.OPENCODE_MODEL ??
+      process.env.OPENAI_MODEL ??
+      DEFAULT_OPENCODE_MODEL;
 
     return defer(async () => {
       if (!process.env.OPENAI_API_KEY) {
-        throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
+        throw new ServiceUnavailableException(
+          'OPENAI_API_KEY is not configured',
+        );
       }
 
       const prompt = body.question?.trim();
       if (!prompt) throw new BadRequestException('question is required');
 
-      const employee = await this.em.findOne(Employee, { id: employeeId, store: { id: store.id } }, { populate: ['store'], refresh: true });
+      const employee = await this.em.findOne(
+        Employee,
+        { id: employeeId, store: { id: store.id } },
+        { populate: ['store'], refresh: true },
+      );
       if (!employee) throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
@@ -55,7 +76,8 @@ export class AiAssistantService {
           employee: { id: employeeId },
           deletedAt: null,
         });
-        if (!existingThread) throw new NotFoundException('AI chat thread not found');
+        if (!existingThread)
+          throw new NotFoundException('AI chat thread not found');
 
         thread = existingThread;
       } else {
@@ -100,10 +122,13 @@ export class AiAssistantService {
       const result = streamText({
         model: openCode.chat(model),
         temperature: 0,
-        system: AI_TOOL_INSTRUCTIONS,
+        system: `${AI_TOOL_INSTRUCTIONS} Current UTC date: ${new Date().toISOString().slice(0, 10)}.`,
         messages: [
           ...previousMessages.map((message) => ({
-            role: message.role === ASSISTANT_MESSAGE_ROLE ? ('assistant' as const) : ('user' as const),
+            role:
+              message.role === ASSISTANT_MESSAGE_ROLE
+                ? ('assistant' as const)
+                : ('user' as const),
             content: message.content,
           })),
           { role: 'user' as const, content: prompt },
@@ -116,7 +141,8 @@ export class AiAssistantService {
           employeeId,
         }),
 
-        prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: 'required' as const } : {}),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber === 0 ? { toolChoice: 'required' as const } : {},
       });
 
       return streamAiAssistantResponse({
@@ -126,7 +152,15 @@ export class AiAssistantService {
           fullStream: result.fullStream,
         },
         saveAssistantMessage: (threadId, content, metadata) =>
-          this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER, MESSAGE_STATUS_COMPLETED, undefined, metadata),
+          this.saveAssistantMessage(
+            threadId,
+            content,
+            model,
+            AI_CHAT_PROVIDER,
+            MESSAGE_STATUS_COMPLETED,
+            undefined,
+            metadata,
+          ),
         saveFailedAssistantMessage: async (threadId, content, error) => {
           await this.saveAssistantMessage(
             threadId,
@@ -134,14 +168,19 @@ export class AiAssistantService {
             model,
             AI_CHAT_PROVIDER,
             MESSAGE_STATUS_FAILED,
-            error instanceof Error ? error.message : 'Failed to stream assistant response.',
+            error instanceof Error
+              ? error.message
+              : 'Failed to stream assistant response.',
           );
         },
       });
     }).pipe(switchMap((events) => events));
   }
 
-  async findAllThreads(store: Store, employeeId: string): Promise<AiChatThreadSummary[]> {
+  async findAllThreads(
+    store: Store,
+    employeeId: string,
+  ): Promise<AiChatThreadSummary[]> {
     const threads = await this.em.find(
       AiChatThread,
       { store, employee: { id: employeeId }, deletedAt: null },
@@ -156,7 +195,11 @@ export class AiAssistantService {
     }));
   }
 
-  async findOneThread(store: Store, employeeId: string, threadId: string): Promise<AiChatThreadDetail> {
+  async findOneThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<AiChatThreadDetail> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       store,
@@ -165,7 +208,11 @@ export class AiAssistantService {
     });
     if (!thread) throw new NotFoundException('AI chat thread not found');
 
-    const messages = await this.em.find(AiChatMessage, { thread }, { orderBy: { createdAt: 'ASC' } });
+    const messages = await this.em.find(
+      AiChatMessage,
+      { thread },
+      { orderBy: { createdAt: 'ASC' } },
+    );
     return {
       id: thread.id,
       title: thread.title,
@@ -187,7 +234,12 @@ export class AiAssistantService {
     };
   }
 
-  async updateThreadTitle(store: Store, employeeId: string, threadId: string, title: string): Promise<AiChatThreadSummary> {
+  async updateThreadTitle(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+    title: string,
+  ): Promise<AiChatThreadSummary> {
     const normalizedTitle = title?.trim();
     if (!normalizedTitle) throw new BadRequestException('title is required');
 
@@ -211,7 +263,11 @@ export class AiAssistantService {
     };
   }
 
-  async deleteThread(store: Store, employeeId: string, threadId: string): Promise<{ message: string; id: string }> {
+  async deleteThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<{ message: string; id: string }> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       store,
