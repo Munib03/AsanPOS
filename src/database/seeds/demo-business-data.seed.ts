@@ -1,9 +1,9 @@
 import { Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
 
-const PRODUCT_COUNT = 100000;
-const PURCHASE_COUNT = 100000;
-const SALE_COUNT = 100000;
+const PRODUCT_COUNT = 20000;
+const PURCHASE_COUNT = 20000;
+const SALE_COUNT = 20000;
 const INVENTORY_COUNT = 1000;
 const CUSTOMER_COUNT = 1000;
 const CATEGORY_COUNT = 20;
@@ -66,6 +66,7 @@ export async function seed(knex: Knex): Promise<void> {
     await deleteExistingSeedData(knex, storeId);
   }
 
+  const sequenceLastIndexes = await getSequenceLastIndexes(knex, storeId);
   const accounts = await createSeedAccounts(knex, now, storeId);
   const sessionId = await createSeedSession(knex, storeId, now, employeeId);
 
@@ -81,6 +82,7 @@ export async function seed(knex: Knex): Promise<void> {
     'PDT',
     PRODUCT_COUNT,
     now,
+    sequenceLastIndexes.get('Product') ?? 0,
   );
   await insertChunks(knex, 'sequence', productSequences);
 
@@ -104,6 +106,7 @@ export async function seed(knex: Knex): Promise<void> {
     'PUR',
     PURCHASE_COUNT,
     now,
+    sequenceLastIndexes.get('Purchase') ?? 0,
   );
   await insertChunks(knex, 'sequence', purchaseSequences);
 
@@ -133,6 +136,7 @@ export async function seed(knex: Knex): Promise<void> {
     'STK',
     PURCHASE_COUNT,
     now,
+    sequenceLastIndexes.get('StockIn') ?? 0,
   );
   await insertChunks(knex, 'sequence', stockInSequences);
 
@@ -142,7 +146,14 @@ export async function seed(knex: Knex): Promise<void> {
   const stockInItems = buildStockInItems(stockIns, purchasedItems, now);
   await insertChunks(knex, 'stock_in_items', stockInItems);
 
-  const saleSequences = buildSequences(storeId, 'Sale', 'SAL', SALE_COUNT, now);
+  const saleSequences = buildSequences(
+    storeId,
+    'Sale',
+    'SAL',
+    SALE_COUNT,
+    now,
+    sequenceLastIndexes.get('Sale') ?? 0,
+  );
   await insertChunks(knex, 'sequence', saleSequences);
 
   const sales = buildSales(storeId, saleSequences, customers, inventories, now);
@@ -169,6 +180,7 @@ export async function seed(knex: Knex): Promise<void> {
     'STO',
     SALE_COUNT,
     now,
+    sequenceLastIndexes.get('StockOut') ?? 0,
   );
   await insertChunks(knex, 'sequence', stockOutSequences);
 
@@ -187,6 +199,7 @@ export async function seed(knex: Knex): Promise<void> {
     'JRN',
     SALE_COUNT,
     now,
+    sequenceLastIndexes.get('JournalEntry') ?? 0,
   );
   await insertChunks(knex, 'sequence', journalSequences);
 
@@ -558,16 +571,35 @@ function buildSequences(
   prefix: string,
   count: number,
   now: Date,
+  lastIndex = 0,
 ): SequenceSeed[] {
   return Array.from({ length: count }, (_, index) => ({
     id: uuidv4(),
     store_id: storeId,
     entity,
     prefix,
-    last_index: index + 1,
+    last_index: lastIndex + index + 1,
     created_at: now,
     updated_at: now,
   }));
+}
+
+async function getSequenceLastIndexes(
+  knex: Knex,
+  storeId: string,
+): Promise<Map<string, number>> {
+  const rows = (await knex('sequence')
+    .where({ store_id: storeId })
+    .select('entity')
+    .max({ last_index: 'last_index' })
+    .groupBy('entity')) as Array<{
+    entity: string;
+    last_index: string | number | null;
+  }>;
+
+  return new Map(
+    rows.map((row) => [row.entity as string, Number(row.last_index) || 0]),
+  );
 }
 
 async function getNextCustomerPhoneIndex(knex: Knex): Promise<number> {
