@@ -1,10 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
-import Instructor from '@instructor-ai/instructor';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { stepCountIs, streamText } from 'ai';
 import type { MessageEvent } from '@nestjs/common';
-import OpenAI from 'openai';
 import { defer, Observable, switchMap } from 'rxjs';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { AiChatMessage } from '../database/entites/ai-chat-message.entity';
@@ -14,7 +12,6 @@ import { Store } from '../database/entites/store.entity';
 import { AiChatThreadDetail, AiChatThreadSummary } from '../shared/types/ai-assistant.types';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import { streamAiAssistantResponse } from './helpers/ai-assistant.sse';
-import { AiAssistantResponseSchema } from './helpers/ai-assistant.response.schema';
 import { createAiAssistantTools } from './helpers/ai-assistant.tools';
 
 const USER_MESSAGE_ROLE = 'user';
@@ -25,9 +22,7 @@ const AI_CHAT_PROVIDER = 'opencode';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
 const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
 const AI_TOOL_INSTRUCTIONS =
-  'You are the AsanPOS assistant. For any current store data question, call the matching tool in this turn and use only its latest result. Never trust a prior assistant answer as current data. Use createBusinessGraph only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
-const AI_RESPONSE_INSTRUCTIONS =
-  'Turn the verified draft into a concise AsanPOS response. Preserve every number exactly. Use plain text only: no Markdown headings, bullets, bold text, code formatting, emojis, asterisks, hashes, or backticks. Do not add facts that are absent from the verified draft. If a verified graph is provided, return it exactly without changing labels, values, colors, or chart type; otherwise return null.';
+  'You are the AsanPOS assistant. For every question about current store data, call the matching tool in this turn and answer only from its latest result. Never reuse numbers from chat history, estimate missing values, or change tool values. Keep the answer concise and directly answer the question. Use plain text only, without Markdown, headings, bullets, code formatting, emojis, internal analysis, reasoning, thinking tags, or internal tool details. Use createBusinessGraph only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
 
 @Injectable()
 export class AiAssistantService {
@@ -47,11 +42,7 @@ export class AiAssistantService {
       const prompt = body.question?.trim();
       if (!prompt) throw new BadRequestException('question is required');
 
-      const employee = await this.em.findOne(
-        Employee,
-        { id: employeeId, store: { id: store.id } },
-        { populate: ['store'], refresh: true },
-      );
+      const employee = await this.em.findOne(Employee, { id: employeeId, store: { id: store.id } }, { populate: ['store'], refresh: true });
       if (!employee) throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
@@ -134,8 +125,7 @@ export class AiAssistantService {
           userMessageId: userMessage.id,
           fullStream: result.fullStream,
         },
-        saveAssistantMessage: (threadId, content) =>
-          this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER),
+        saveAssistantMessage: (threadId, content) => this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER),
         saveFailedAssistantMessage: async (threadId, content, error) => {
           await this.saveAssistantMessage(
             threadId,
@@ -145,37 +135,6 @@ export class AiAssistantService {
             MESSAGE_STATUS_FAILED,
             error instanceof Error ? error.message : 'Failed to stream assistant response.',
           );
-        },
-        formatResponse: async (draft, graph) => {
-          const instructor = Instructor({
-            client: new OpenAI({
-              apiKey: process.env.OPENAI_API_KEY,
-              baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
-            }),
-            mode: 'TOOLS',
-          });
-
-          return instructor.chat.completions.create({
-            model,
-            temperature: 0,
-            stream: true,
-            max_retries: 1,
-            response_model: {
-              schema: AiAssistantResponseSchema,
-              name: 'AsanPOSAssistantResponse',
-            },
-            messages: [
-              { role: 'system', content: AI_RESPONSE_INSTRUCTIONS },
-              {
-                role: 'user',
-                content: JSON.stringify({
-                  question: prompt,
-                  verifiedDraft: draft,
-                  verifiedGraph: graph,
-                }),
-              },
-            ],
-          });
         },
       });
     }).pipe(switchMap((events) => events));
@@ -227,12 +186,7 @@ export class AiAssistantService {
     };
   }
 
-  async updateThreadTitle(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-    title: string,
-  ): Promise<AiChatThreadSummary> {
+  async updateThreadTitle(store: Store, employeeId: string, threadId: string, title: string): Promise<AiChatThreadSummary> {
     const normalizedTitle = title?.trim();
     if (!normalizedTitle) throw new BadRequestException('title is required');
 
