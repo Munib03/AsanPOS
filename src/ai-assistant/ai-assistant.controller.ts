@@ -18,9 +18,13 @@ import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
+import { Role } from '../shared/utils/role.enum';
+import { Roles } from '../shared/decorators/role.decorator';
+
 
 @Controller('ai-assistant')
 @UseGuards(JwtAuthGuard)
+@Roles(Role.Admin)
 export class AiAssistantController {
   constructor(private readonly aiAssistantService: AiAssistantService) {}
 

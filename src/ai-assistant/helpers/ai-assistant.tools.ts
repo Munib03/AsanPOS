@@ -316,7 +316,14 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
         return {
           scope,
           count: sales.length,
-          totalSales: sales.reduce((sum, sale) => sum + calculateSaleTotal(sale), 0),
+          totalSales: sales.reduce(
+            (sum, sale) =>
+              sum +
+              sale.items
+                .getItems()
+                .reduce((itemSum, item) => itemSum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
+            0,
+          ),
           statusBreakdown,
           topProducts: Array.from(productTotals.values())
             .sort((a, b) => b.sales - a.sales)
@@ -325,7 +332,7 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
             id: sale.id,
             status: sale.status,
             customerName: sale.customer?.name,
-            total: calculateSaleTotal(sale),
+            total: sale.items.getItems().reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0),
             createdAt: sale.createdAt,
           })),
         };
@@ -371,13 +378,17 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
         return {
           scope,
           count: purchases.length,
-          totalPurchases: purchases.reduce((sum, purchase) => sum + calculatePurchaseTotal(purchase), 0),
+          totalPurchases: purchases.reduce(
+            (sum, purchase) =>
+              sum + purchase.items.getItems().reduce((itemSum, item) => itemSum + item.quantity * item.unitPrice, 0),
+            0,
+          ),
           statusBreakdown,
           recentPurchases: purchases.slice(0, take).map((purchase) => ({
             id: purchase.id,
             status: purchase.status,
             customerName: purchase.customer?.name,
-            total: calculatePurchaseTotal(purchase),
+            total: purchase.items.getItems().reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
             createdAt: purchase.createdAt,
           })),
         };
@@ -541,7 +552,12 @@ function createProductWhere(storeWhere: { id: string }, query?: string): Record<
   const normalizedQuery = query?.trim();
   if (!normalizedQuery) return where;
 
-  const code = parseProductCode(normalizedQuery);
+  const parts = normalizedQuery.split('-');
+  const lastIndex = parts.length === 2 ? Number(parts[1]) : 0;
+  const code =
+    parts.length === 2 && parts[0] && Number.isInteger(lastIndex) && lastIndex > 0
+      ? { prefix: parts[0], lastIndex }
+      : null;
   where.$or = [
     { name: { $ilike: `%${normalizedQuery}%` } },
     ...(code ? [{ sequence: { prefix: code.prefix, lastIndex: code.lastIndex } }] : []),
@@ -588,14 +604,6 @@ async function getLiveEntityCount(
   }
 }
 
-function calculateSaleTotal(sale: Sale): number {
-  return sale.items.getItems().reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0), 0);
-}
-
-function calculatePurchaseTotal(purchase: Purchase): number {
-  return purchase.items.getItems().reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-}
-
 async function getEmployeeSaleIds(em: EntityManager, store: Store, employeeId: string): Promise<string[]> {
   const payments = await em.find(
     Payment,
@@ -629,12 +637,4 @@ async function getEmployeeCreatedEntityIds(
   );
 
   return [...new Set(logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)))];
-}
-
-function parseProductCode(value: string): { prefix: string; lastIndex: number } | null {
-  const parts = value.split('-');
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
-
-  const lastIndex = Number(parts[1]);
-  return Number.isInteger(lastIndex) && lastIndex > 0 ? { prefix: parts[0], lastIndex } : null;
 }
