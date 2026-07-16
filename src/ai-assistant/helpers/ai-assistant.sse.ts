@@ -13,15 +13,8 @@ interface StreamAiAssistantResponseParams {
     userMessageId: string;
     fullStream: AsyncIterable<AiAssistantStreamPart>;
   };
-  saveAssistantMessage: (
-    threadId: string,
-    content: string,
-  ) => Promise<{ id: string }>;
-  saveFailedAssistantMessage: (
-    threadId: string,
-    content: string,
-    error: unknown,
-  ) => Promise<void>;
+  saveAssistantMessage: (threadId: string, content: string) => Promise<{ id: string }>;
+  saveFailedAssistantMessage: (threadId: string, content: string, error: unknown) => Promise<void>;
 }
 
 export function streamAiAssistantResponse({
@@ -43,7 +36,11 @@ export function streamAiAssistantResponse({
         for await (const part of result.fullStream) {
           if (closed) return;
           if (part.type === 'tool-call' || part.type === 'tool-result') {
-            emit(part.type, { toolCallId: part.toolCallId, toolName: part.toolName, status: part.type === 'tool-call' ? 'started' : 'completed' });
+            emit(part.type, {
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              status: part.type === 'tool-call' ? 'started' : 'completed',
+            });
             continue;
           }
           if (part.type === 'tool-error') {
@@ -52,9 +49,7 @@ export function streamAiAssistantResponse({
           }
           if (part.type !== 'text-delta' || !part.text) continue;
           const safeChunk = sanitizeStreamChunk(part.text, sanitizer);
-          const contentChunk = hasVisibleContent
-            ? safeChunk
-            : safeChunk.trimStart();
+          const contentChunk = removeEmojiCharacters(hasVisibleContent ? safeChunk : safeChunk.trimStart());
           if (!contentChunk) continue;
           hasVisibleContent = true;
           fullResponse += contentChunk;
@@ -62,32 +57,40 @@ export function streamAiAssistantResponse({
         }
 
         const finalChunk = flushSanitizedStream(sanitizer);
-        const contentChunk = hasVisibleContent
-          ? finalChunk
-          : finalChunk.trimStart();
+        const contentChunk = removeEmojiCharacters(hasVisibleContent ? finalChunk : finalChunk.trimStart());
         if (contentChunk) {
           fullResponse += contentChunk;
           emit('chunk', { content: contentChunk });
         }
         const finalResponse = fullResponse.trim();
         const assistantMessage = await saveAssistantMessage(result.threadId, finalResponse);
-        emit('done', { content: finalResponse, threadId: result.threadId, userMessageId: result.userMessageId, assistantMessageId: assistantMessage.id });
+        emit('done', {
+          content: finalResponse,
+          threadId: result.threadId,
+          userMessageId: result.userMessageId,
+          assistantMessageId: assistantMessage.id,
+        });
         if (!closed) subscriber.complete();
       } catch (error) {
-        try { await saveFailedAssistantMessage(result.threadId, fullResponse, error); } catch { }
-        emit('error', { threadId: result.threadId, userMessageId: result.userMessageId, message: error instanceof Error ? error.message : 'Failed to stream assistant response.' });
+        try {
+          await saveFailedAssistantMessage(result.threadId, fullResponse, error);
+        } catch {}
+        emit('error', {
+          threadId: result.threadId,
+          userMessageId: result.userMessageId,
+          message: error instanceof Error ? error.message : 'Failed to stream assistant response.',
+        });
         if (!closed) subscriber.complete();
       }
     })();
 
-    return () => { closed = true; };
+    return () => {
+      closed = true;
+    };
   });
 }
 
-function sanitizeStreamChunk(
-  chunk: string,
-  state: StreamSanitizerState,
-): string {
+function sanitizeStreamChunk(chunk: string, state: StreamSanitizerState): string {
   const startTags = ['<think>', '<thinking>'];
   const endTags = ['</think>', '</thinking>'];
   const maxStartTagLength = Math.max(...startTags.map((tag) => tag.length));
@@ -116,9 +119,7 @@ function sanitizeStreamChunk(
 
     if (startMatch) {
       output += state.buffer.slice(0, startMatch.index);
-      state.buffer = state.buffer.slice(
-        startMatch.index + startMatch.tag.length,
-      );
+      state.buffer = state.buffer.slice(startMatch.index + startMatch.tag.length);
       state.inHiddenBlock = true;
       continue;
     }
@@ -146,10 +147,25 @@ function flushSanitizedStream(state: StreamSanitizerState): string {
   return output;
 }
 
-function findEarliestTag(
-  text: string,
-  tags: string[],
-): { index: number; tag: string } | null {
+function removeEmojiCharacters(text: string): string {
+  let output = '';
+
+  for (const character of text) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    const isEmoji =
+      (codePoint >= 0x1f000 && codePoint <= 0x1faff) ||
+      (codePoint >= 0x2600 && codePoint <= 0x27bf) ||
+      codePoint === 0x200d ||
+      codePoint === 0x20e3 ||
+      codePoint === 0xfe0f;
+
+    if (!isEmoji) output += character;
+  }
+
+  return output;
+}
+
+function findEarliestTag(text: string, tags: string[]): { index: number; tag: string } | null {
   return tags.reduce<{ index: number; tag: string } | null>((best, tag) => {
     const index = text.indexOf(tag);
     if (index === -1) return best;
