@@ -2,7 +2,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { DashboardService } from '../../dashboard/dashboard.service';
-import { DashboardRange } from '../../dashboard/dto/dashboard.dto';
+import { DailyStats, DashboardRange, DashboardStats } from '../../dashboard/dto/dashboard.dto';
 import { AuditLog } from '../../database/entites/audit-log.entity';
 import { CashMovement } from '../../database/entites/cash-movement.entity';
 import { Category } from '../../database/entites/category.entity';
@@ -13,7 +13,9 @@ import { JournalEntry } from '../../database/entites/journal-entry.entity';
 import { Product } from '../../database/entites/product.entity';
 import { Purchase } from '../../database/entites/purchase.entity';
 import { Sale } from '../../database/entites/sale.entity';
+import { SaleItem } from '../../database/entites/sale-item.entity';
 import { Payment } from '../../database/entites/payments.entity';
+import { PurchasedItem } from '../../database/entites/purchased_item.entity';
 import { Receipt } from '../../database/entites/receipt.entity';
 import { StockQuantity } from '../../database/entites/stock-quantity.entity';
 import { StockIn } from '../../database/entites/stock-in.entity';
@@ -24,6 +26,10 @@ import { StoreSession } from '../../database/entites/store-session.entity';
 import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
 import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
 import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
+import { PaymentStatus } from '../../shared/utils/payments-status.enum';
+import { PurchaseStatus } from '../../shared/utils/purchase-status-enum';
+import { SaleStatus } from '../../shared/utils/sale-status.enum';
+import { AiAssistantGraphSchema, type AiAssistantGraph } from './ai-assistant.response.schema';
 
 const DEFAULT_TOOL_LIMIT = 10;
 const MAX_TOOL_LIMIT = 50;
@@ -48,6 +54,32 @@ type LiveEntityResource =
   | 'cash_movements'
   | 'receipts'
   | 'journal_entries';
+
+type DashboardGraphMetricName = 'sales' | 'profit' | 'cash_in' | 'cash_out' | 'sessions_opened' | 'sessions_closed';
+type BusinessGraphSubject =
+  | 'dashboard_sales'
+  | 'dashboard_profit'
+  | 'dashboard_cash_in'
+  | 'dashboard_cash_out'
+  | 'dashboard_sessions_opened'
+  | 'dashboard_sessions_closed'
+  | 'top_selling_products'
+  | 'products_by_sold_value'
+  | 'inventory_by_quantity'
+  | 'customers_by_paid_sales'
+  | 'top_purchased_products'
+  | 'products_by_purchase_cost'
+  | 'purchase_customers_by_paid_amount'
+  | 'sales_by_cashier';
+type BusinessGraphRange = 'all_time' | 'today' | 'last_week' | 'monthly' | 'custom';
+type DashboardGraphMetric = {
+  label: string;
+  valueFormat: 'currency' | 'number';
+  color: string;
+  getDailyValue: (day: DailyStats) => number;
+  getTotalValue: (stats: DashboardStats) => number;
+};
+type GraphRow = { label: string; value: string | number };
 
 interface CreateAiAssistantToolsParams {
   dashboardService: DashboardService;
@@ -96,6 +128,49 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
           to,
         });
         return { scope, stats };
+      },
+    }),
+
+    createBusinessGraph: tool({
+      description:
+        'Create a verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only when the user explicitly asks for a graph, chart, trend, ranking, or visualization. Never invent values.',
+      inputSchema: z.object({
+        subject: z.enum([
+          'dashboard_sales',
+          'dashboard_profit',
+          'dashboard_cash_in',
+          'dashboard_cash_out',
+          'dashboard_sessions_opened',
+          'dashboard_sessions_closed',
+          'top_selling_products',
+          'products_by_sold_value',
+          'inventory_by_quantity',
+          'customers_by_paid_sales',
+          'top_purchased_products',
+          'products_by_purchase_cost',
+          'purchase_customers_by_paid_amount',
+          'sales_by_cashier',
+        ]),
+        range: z.enum(['all_time', 'today', 'last_week', 'monthly', 'custom']).optional(),
+        from: z.string().optional().describe('ISO date string required for a custom range start.'),
+        to: z.string().optional().describe('ISO date string required for a custom range end.'),
+        limit: z.number().int().min(1).max(20).optional().default(10),
+        type: z.enum(['line', 'bar', 'pie', 'doughnut']).optional().default('bar'),
+      }),
+      execute: async ({ subject, range, from, to, limit, type }) => {
+        const graph = await createBusinessGraph({
+          dashboardService,
+          em,
+          store,
+          employeeId,
+          subject,
+          range: range ?? (isDashboardGraphSubject(subject) ? 'monthly' : 'all_time'),
+          from,
+          to,
+          limit,
+          type,
+        });
+        return { scope, graph };
       },
     }),
 
@@ -545,6 +620,344 @@ export function createAiAssistantTools({ dashboardService, em, store, employeeId
       },
     }),
   };
+}
+
+async function createBusinessGraph({
+  dashboardService,
+  em,
+  store,
+  employeeId,
+  subject,
+  range,
+  from,
+  to,
+  limit,
+  type,
+}: {
+  dashboardService: DashboardService;
+  em: EntityManager;
+  store: Store;
+  employeeId: string;
+  subject: BusinessGraphSubject;
+  range: BusinessGraphRange;
+  from?: string;
+  to?: string;
+  limit: number;
+  type: AiAssistantGraph['type'];
+}): Promise<AiAssistantGraph> {
+  if (isDashboardGraphSubject(subject)) {
+    const dashboardRange = range === 'all_time' ? 'monthly' : range;
+    const metric = getDashboardGraphMetric(getDashboardMetricName(subject));
+    const stats = await dashboardService.getDashboardStats(store, employeeId, {
+      range: DASHBOARD_RANGES[dashboardRange],
+      from,
+      to,
+    });
+    const dailyStats = stats.dailyBreakdown ?? [];
+    const rows = dailyStats.length
+      ? dailyStats.map((day) => ({ label: day.date, value: metric.getDailyValue(day) }))
+      : [{ label: getDashboardGraphRangeLabel(dashboardRange, from, to), value: metric.getTotalValue(stats) }];
+
+    return toGraph(rows, {
+      type,
+      title: `${metric.label} ${getDashboardGraphRangeLabel(dashboardRange, from, to)}`,
+      xAxisLabel: dailyStats.length ? 'Date' : 'Period',
+      yAxisLabel: metric.label,
+      valueFormat: metric.valueFormat,
+      color: metric.color,
+    });
+  }
+
+  const dateRange = getBusinessGraphDateRange(range, from, to);
+  const saleWhere = { store: { id: store.id }, status: SaleStatus.DONE, ...dateRange };
+  const purchaseWhere = { store: { id: store.id }, status: PurchaseStatus.DONE, ...dateRange };
+  let rows: GraphRow[];
+  let title: string;
+  let yAxisLabel: string;
+  let valueFormat: AiAssistantGraph['valueFormat'];
+  let color: string;
+
+  switch (subject) {
+    case 'top_selling_products':
+      rows = await em
+        .createQueryBuilder(SaleItem, 'item')
+        .select(['product.name as label', 'sum(item.quantity) as value'])
+        .innerJoin('item.sale', 'sale')
+        .innerJoin('item.product', 'product')
+        .where({ sale: saleWhere })
+        .groupBy(['product.id', 'product.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Top selling products';
+      yAxisLabel = 'Quantity sold';
+      valueFormat = 'number';
+      color = '#2563eb';
+      break;
+    case 'products_by_sold_value':
+      rows = await em
+        .createQueryBuilder(SaleItem, 'item')
+        .select(['product.name as label', 'sum(item.quantity * item.unit_price) as value'])
+        .innerJoin('item.sale', 'sale')
+        .innerJoin('item.product', 'product')
+        .where({ sale: saleWhere })
+        .groupBy(['product.id', 'product.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Products by sold value';
+      yAxisLabel = 'Sold value';
+      valueFormat = 'currency';
+      color = '#16a34a';
+      break;
+    case 'inventory_by_quantity':
+      rows = await em
+        .createQueryBuilder(StockQuantity, 'stock')
+        .select(['product.name as label', 'sum(stock.quantity) as value'])
+        .innerJoin('stock.product', 'product')
+        .innerJoin('stock.inventory', 'inventory')
+        .where({ inventory: { store: { id: store.id } } })
+        .groupBy(['product.id', 'product.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Inventory by quantity';
+      yAxisLabel = 'Available quantity';
+      valueFormat = 'number';
+      color = '#7c3aed';
+      break;
+    case 'customers_by_paid_sales':
+      rows = await em
+        .createQueryBuilder(Payment, 'payment')
+        .select(['customer.name as label', 'sum(payment.amount) as value'])
+        .innerJoin('payment.sale', 'sale')
+        .innerJoin('sale.customer', 'customer')
+        .where({ status: PaymentStatus.Done, sale: saleWhere })
+        .groupBy(['customer.id', 'customer.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Customers by paid sales';
+      yAxisLabel = 'Paid amount';
+      valueFormat = 'currency';
+      color = '#0891b2';
+      break;
+    case 'top_purchased_products':
+      rows = await em
+        .createQueryBuilder(PurchasedItem, 'item')
+        .select(['product.name as label', 'sum(item.quantity) as value'])
+        .innerJoin('item.purchase', 'purchase')
+        .innerJoin('item.product', 'product')
+        .where({ purchase: purchaseWhere })
+        .groupBy(['product.id', 'product.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Top purchased products';
+      yAxisLabel = 'Purchased quantity';
+      valueFormat = 'number';
+      color = '#ea580c';
+      break;
+    case 'products_by_purchase_cost':
+      rows = await em
+        .createQueryBuilder(PurchasedItem, 'item')
+        .select(['product.name as label', 'sum(item.quantity * item.unit_price) as value'])
+        .innerJoin('item.purchase', 'purchase')
+        .innerJoin('item.product', 'product')
+        .where({ purchase: purchaseWhere })
+        .groupBy(['product.id', 'product.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Products by purchase cost';
+      yAxisLabel = 'Purchase cost';
+      valueFormat = 'currency';
+      color = '#dc2626';
+      break;
+    case 'purchase_customers_by_paid_amount':
+      rows = await em
+        .createQueryBuilder(Payment, 'payment')
+        .select(['customer.name as label', 'sum(payment.amount) as value'])
+        .innerJoin('payment.purchase', 'purchase')
+        .innerJoin('purchase.customer', 'customer')
+        .where({ status: PaymentStatus.Done, purchase: purchaseWhere })
+        .groupBy(['customer.id', 'customer.name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Purchase customers by paid amount';
+      yAxisLabel = 'Paid amount';
+      valueFormat = 'currency';
+      color = '#9333ea';
+      break;
+    case 'sales_by_cashier':
+      rows = await em
+        .createQueryBuilder(Payment, 'payment')
+        .select(["concat(employee.first_name, ' ', employee.last_name) as label", 'sum(payment.amount) as value'])
+        .innerJoin('payment.sale', 'sale')
+        .innerJoin('payment.storeSession', 'session')
+        .innerJoin('session.openedBy', 'employee')
+        .where({ status: PaymentStatus.Done, sale: saleWhere })
+        .groupBy(['employee.id', 'employee.first_name', 'employee.last_name'])
+        .orderBy({ value: 'DESC' })
+        .limit(limit)
+        .execute<GraphRow[]>('all');
+      title = 'Sales received by cashier';
+      yAxisLabel = 'Received amount';
+      valueFormat = 'currency';
+      color = '#0f766e';
+      break;
+    default:
+      throw new Error('The graph subject is not supported.');
+  }
+
+  return toGraph(rows, {
+    type,
+    title: `${title} ${getBusinessGraphRangeLabel(range, from, to)}`,
+    xAxisLabel: 'Category',
+    yAxisLabel,
+    valueFormat,
+    color,
+  });
+}
+
+function isDashboardGraphSubject(subject: BusinessGraphSubject): boolean {
+  return [
+    'dashboard_sales',
+    'dashboard_profit',
+    'dashboard_cash_in',
+    'dashboard_cash_out',
+    'dashboard_sessions_opened',
+    'dashboard_sessions_closed',
+  ].includes(subject);
+}
+
+function getDashboardMetricName(subject: BusinessGraphSubject): DashboardGraphMetricName {
+  switch (subject) {
+    case 'dashboard_sales':
+      return 'sales';
+    case 'dashboard_profit':
+      return 'profit';
+    case 'dashboard_cash_in':
+      return 'cash_in';
+    case 'dashboard_cash_out':
+      return 'cash_out';
+    case 'dashboard_sessions_opened':
+      return 'sessions_opened';
+    case 'dashboard_sessions_closed':
+      return 'sessions_closed';
+    default:
+      throw new Error('The graph subject is not a dashboard metric.');
+  }
+}
+
+function getBusinessGraphDateRange(range: BusinessGraphRange, from?: string, to?: string): Record<string, unknown> {
+  if (range === 'all_time') return {};
+
+  if (range === 'custom') {
+    if (!from || !to) throw new Error('from and to are required for a custom graph range.');
+    const start = new Date(from);
+    const end = new Date(to);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end)
+      throw new Error('The custom graph range is invalid.');
+    end.setUTCHours(23, 59, 59, 999);
+    return { createdAt: { $gte: start, $lte: end } };
+  }
+
+  const end = new Date();
+  end.setUTCHours(23, 59, 59, 999);
+  const start = new Date(end);
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - (range === 'today' ? 0 : range === 'last_week' ? 6 : 29));
+  return { createdAt: { $gte: start, $lte: end } };
+}
+
+function getBusinessGraphRangeLabel(range: BusinessGraphRange, from?: string, to?: string): string {
+  if (range === 'custom') return from && to ? `${from} to ${to}` : 'Custom range';
+  return range === 'all_time' ? 'All time' : getDashboardGraphRangeLabel(range, from, to);
+}
+
+function toGraph(
+  rows: GraphRow[],
+  config: Omit<AiAssistantGraph, 'labels' | 'datasets'> & { color: string },
+): AiAssistantGraph {
+  return AiAssistantGraphSchema.parse({
+    ...config,
+    labels: rows.map((row) => row.label),
+    datasets: [
+      {
+        label: config.yAxisLabel,
+        data: rows.map((row) => Number(row.value) || 0),
+        color: config.color,
+      },
+    ],
+  });
+}
+
+function getDashboardGraphMetric(metric: DashboardGraphMetricName): DashboardGraphMetric {
+  const cashierTotal = (stats: DashboardStats, field: 'cashIn' | 'cashOut') =>
+    (stats.cashierBreakdown ?? []).reduce((sum, cashier) => sum + cashier[field], 0);
+  const sessionTotal = (stats: DashboardStats, closed: boolean) =>
+    (stats.cashierBreakdown ?? []).filter((cashier) => (closed ? cashier.status === 'closed' : true)).length;
+
+  switch (metric) {
+    case 'sales':
+      return {
+        label: 'Sales',
+        valueFormat: 'currency',
+        color: '#2563eb',
+        getDailyValue: (day) => day.sales.total,
+        getTotalValue: (stats) => stats.sales.total,
+      };
+    case 'profit':
+      return {
+        label: 'Profit',
+        valueFormat: 'currency',
+        color: '#16a34a',
+        getDailyValue: (day) => day.profit.total,
+        getTotalValue: (stats) => stats.profit.total,
+      };
+    case 'cash_in':
+      return {
+        label: 'Cash in',
+        valueFormat: 'currency',
+        color: '#0891b2',
+        getDailyValue: (day) => day.cashIn,
+        getTotalValue: (stats) => cashierTotal(stats, 'cashIn'),
+      };
+    case 'cash_out':
+      return {
+        label: 'Cash out',
+        valueFormat: 'currency',
+        color: '#dc2626',
+        getDailyValue: (day) => day.cashOut,
+        getTotalValue: (stats) => cashierTotal(stats, 'cashOut'),
+      };
+    case 'sessions_opened':
+      return {
+        label: 'Opened sessions',
+        valueFormat: 'number',
+        color: '#7c3aed',
+        getDailyValue: (day) => day.sessionsOpened,
+        getTotalValue: (stats) => sessionTotal(stats, false),
+      };
+    case 'sessions_closed':
+      return {
+        label: 'Closed sessions',
+        valueFormat: 'number',
+        color: '#ea580c',
+        getDailyValue: (day) => day.sessionsClosed,
+        getTotalValue: (stats) => sessionTotal(stats, true),
+      };
+  }
+}
+
+function getDashboardGraphRangeLabel(range: string, from?: string, to?: string): string {
+  if (range === 'custom') return from && to ? `${from} to ${to}` : 'Custom range';
+  return range
+    .split('_')
+    .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
+    .join(' ');
 }
 
 function createProductWhere(storeWhere: { id: string }, query?: string): Record<string, any> {

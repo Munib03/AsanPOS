@@ -3,6 +3,7 @@ export interface AiAssistantStreamPart {
   text?: string;
   toolCallId?: string;
   toolName?: string;
+  output?: unknown;
 }
 
 export interface AiChatThreadSummary {

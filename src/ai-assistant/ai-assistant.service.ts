@@ -1,25 +1,20 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
+import Instructor from '@instructor-ai/instructor';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { stepCountIs, streamText } from 'ai';
 import type { MessageEvent } from '@nestjs/common';
+import OpenAI from 'openai';
 import { defer, Observable, switchMap } from 'rxjs';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { AiChatMessage } from '../database/entites/ai-chat-message.entity';
 import { AiChatThread } from '../database/entites/ai-chat-thread.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
-import {
-  AiChatThreadDetail,
-  AiChatThreadSummary,
-} from '../shared/types/ai-assistant.types';
+import { AiChatThreadDetail, AiChatThreadSummary } from '../shared/types/ai-assistant.types';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import { streamAiAssistantResponse } from './helpers/ai-assistant.sse';
+import { AiAssistantResponseSchema } from './helpers/ai-assistant.response.schema';
 import { createAiAssistantTools } from './helpers/ai-assistant.tools';
 
 const USER_MESSAGE_ROLE = 'user';
@@ -29,42 +24,35 @@ const MESSAGE_STATUS_FAILED = 'failed';
 const AI_CHAT_PROVIDER = 'opencode';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
 const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
+const AI_TOOL_INSTRUCTIONS =
+  'You are the AsanPOS assistant. For any current store data question, call the matching tool in this turn and use only its latest result. Never trust a prior assistant answer as current data. Use createBusinessGraph only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
+const AI_RESPONSE_INSTRUCTIONS =
+  'Turn the verified draft into a concise AsanPOS response. Preserve every number exactly. Use plain text only: no Markdown headings, bullets, bold text, code formatting, emojis, asterisks, hashes, or backticks. Do not add facts that are absent from the verified draft. If a verified graph is provided, return it exactly without changing labels, values, colors, or chart type; otherwise return null.';
 
 @Injectable()
 export class AiAssistantService {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly em: EntityManager,
-  ) { }
+  ) {}
 
-  streamAnswer(
-    store: Store,
-    employeeId: string,
-    body: AskAiAssistantDto,
-  ): Observable<MessageEvent> {
-    const model =
-      process.env.OPENCODE_MODEL ??
-      process.env.OPENAI_MODEL ??
-      DEFAULT_OPENCODE_MODEL;
+  streamAnswer(store: Store, employeeId: string, body: AskAiAssistantDto): Observable<MessageEvent> {
+    const model = process.env.OPENCODE_MODEL ?? process.env.OPENAI_MODEL ?? DEFAULT_OPENCODE_MODEL;
 
     return defer(async () => {
       if (!process.env.OPENAI_API_KEY) {
-        throw new ServiceUnavailableException(
-          'OPENAI_API_KEY is not configured',
-        );
+        throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
       }
 
       const prompt = body.question?.trim();
-      if (!prompt)
-        throw new BadRequestException('question is required');
+      if (!prompt) throw new BadRequestException('question is required');
 
       const employee = await this.em.findOne(
         Employee,
         { id: employeeId, store: { id: store.id } },
         { populate: ['store'], refresh: true },
       );
-      if (!employee)
-        throw new NotFoundException('Employee or store not found');
+      if (!employee) throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
       let thread: AiChatThread;
@@ -76,13 +64,10 @@ export class AiAssistantService {
           employee: { id: employeeId },
           deletedAt: null,
         });
-        if (!existingThread)
-          throw new NotFoundException('AI chat thread not found');
+        if (!existingThread) throw new NotFoundException('AI chat thread not found');
 
         thread = existingThread;
-      }
-
-      else {
+      } else {
         const now = new Date();
         thread = this.em.create(AiChatThread, {
           store: verifiedStore,
@@ -124,12 +109,10 @@ export class AiAssistantService {
       const result = streamText({
         model: openCode.chat(model),
         temperature: 0,
+        system: AI_TOOL_INSTRUCTIONS,
         messages: [
           ...previousMessages.map((message) => ({
-            role:
-              message.role === ASSISTANT_MESSAGE_ROLE
-                ? ('assistant' as const)
-                : ('user' as const),
+            role: message.role === ASSISTANT_MESSAGE_ROLE ? ('assistant' as const) : ('user' as const),
             content: message.content,
           })),
           { role: 'user' as const, content: prompt },
@@ -142,8 +125,7 @@ export class AiAssistantService {
           employeeId,
         }),
 
-        prepareStep: ({ stepNumber }) =>
-          stepNumber === 0 ? { toolChoice: 'required' as const } : {},
+        prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: 'required' as const } : {}),
       });
 
       return streamAiAssistantResponse({
@@ -161,20 +143,45 @@ export class AiAssistantService {
             model,
             AI_CHAT_PROVIDER,
             MESSAGE_STATUS_FAILED,
-            error instanceof Error
-              ? error.message
-              : 'Failed to stream assistant response.',
+            error instanceof Error ? error.message : 'Failed to stream assistant response.',
           );
+        },
+        formatResponse: async (draft, graph) => {
+          const instructor = Instructor({
+            client: new OpenAI({
+              apiKey: process.env.OPENAI_API_KEY,
+              baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
+            }),
+            mode: 'TOOLS',
+          });
+
+          return instructor.chat.completions.create({
+            model,
+            temperature: 0,
+            stream: true,
+            max_retries: 1,
+            response_model: {
+              schema: AiAssistantResponseSchema,
+              name: 'AsanPOSAssistantResponse',
+            },
+            messages: [
+              { role: 'system', content: AI_RESPONSE_INSTRUCTIONS },
+              {
+                role: 'user',
+                content: JSON.stringify({
+                  question: prompt,
+                  verifiedDraft: draft,
+                  verifiedGraph: graph,
+                }),
+              },
+            ],
+          });
         },
       });
     }).pipe(switchMap((events) => events));
   }
 
-
-  async findAllThreads(
-    store: Store,
-    employeeId: string,
-  ): Promise<AiChatThreadSummary[]> {
+  async findAllThreads(store: Store, employeeId: string): Promise<AiChatThreadSummary[]> {
     const threads = await this.em.find(
       AiChatThread,
       { store, employee: { id: employeeId }, deletedAt: null },
@@ -189,11 +196,7 @@ export class AiAssistantService {
     }));
   }
 
-  async findOneThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<AiChatThreadDetail> {
+  async findOneThread(store: Store, employeeId: string, threadId: string): Promise<AiChatThreadDetail> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       store,
@@ -202,11 +205,7 @@ export class AiAssistantService {
     });
     if (!thread) throw new NotFoundException('AI chat thread not found');
 
-    const messages = await this.em.find(
-      AiChatMessage,
-      { thread },
-      { orderBy: { createdAt: 'ASC' } },
-    );
+    const messages = await this.em.find(AiChatMessage, { thread }, { orderBy: { createdAt: 'ASC' } });
     return {
       id: thread.id,
       title: thread.title,
@@ -257,11 +256,7 @@ export class AiAssistantService {
     };
   }
 
-  async deleteThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<{ message: string; id: string }> {
+  async deleteThread(store: Store, employeeId: string, threadId: string): Promise<{ message: string; id: string }> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       store,
