@@ -9,7 +9,7 @@ interface StreamAiAssistantResponseParams {
     userMessageId: string;
     fullStream: AsyncIterable<AiAssistantStreamPart>;
   };
-  saveAssistantMessage: (threadId: string, content: string) => Promise<{ id: string }>;
+  saveAssistantMessage: (threadId: string, content: string, metadata?: Record<string, unknown>) => Promise<{ id: string }>;
   saveFailedAssistantMessage: (threadId: string, content: string, error: unknown) => Promise<void>;
 }
 
@@ -21,6 +21,7 @@ export function streamAiAssistantResponse({
   return new Observable((subscriber) => {
     let closed = false;
     let draft = '';
+    let graph: AiAssistantGraph | null = null;
     const emit = (type: string, data: Record<string, unknown>) => {
       if (!closed) subscriber.next({ type, data });
     };
@@ -35,9 +36,10 @@ export function streamAiAssistantResponse({
           }
           if (part.type === 'tool-result') {
             emit('tool', { name: part.toolName, status: 'completed' });
-            const graph = part.toolName === 'createBusinessGraph' ? getVerifiedGraph(part.output) : null;
-            if (graph) {
-              emit('graph', graph);
+            const verifiedGraph = part.toolName === 'createBusinessGraph' ? getVerifiedGraph(part.output) : null;
+            if (verifiedGraph) {
+              graph = verifiedGraph;
+              emit('graph', verifiedGraph);
             }
             continue;
           }
@@ -58,7 +60,7 @@ export function streamAiAssistantResponse({
 
         draft = draft.trim();
         if (!draft) throw new Error('The assistant returned an empty response.');
-        const assistantMessage = await saveAssistantMessage(result.threadId, draft);
+        const assistantMessage = await saveAssistantMessage(result.threadId, draft, graph ? { graph } : undefined);
         emit('done', {
           content: draft,
           threadId: result.threadId,

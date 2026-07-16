@@ -125,7 +125,8 @@ export class AiAssistantService {
           userMessageId: userMessage.id,
           fullStream: result.fullStream,
         },
-        saveAssistantMessage: (threadId, content) => this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER),
+        saveAssistantMessage: (threadId, content, metadata) =>
+          this.saveAssistantMessage(threadId, content, model, AI_CHAT_PROVIDER, MESSAGE_STATUS_COMPLETED, undefined, metadata),
         saveFailedAssistantMessage: async (threadId, content, error) => {
           await this.saveAssistantMessage(
             threadId,
@@ -233,6 +234,7 @@ export class AiAssistantService {
     provider: string,
     status: string = MESSAGE_STATUS_COMPLETED,
     errorMessage?: string,
+    metadata?: Record<string, unknown>,
   ): Promise<{ id: string }> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
@@ -248,6 +250,7 @@ export class AiAssistantService {
       errorMessage,
       model,
       provider,
+      metadata,
     });
     thread.lastMessageAt = new Date();
     await this.em.persistAndFlush(message);
