@@ -63,20 +63,24 @@ const PRODUCT_FILTER_FIELDS = {
     .optional(),
 };
 const PRODUCT_QUERY_INPUT = z.object(PRODUCT_FILTER_FIELDS);
-const DASHBOARD_RANGES: Record<string, DashboardRange> = {
-  today: DashboardRange.TODAY,
-  yesterday: DashboardRange.YESTERDAY,
-  last_week: DashboardRange.LAST_WEEK,
-  monthly: DashboardRange.MONTHLY,
-  custom: DashboardRange.CUSTOM,
-};
-const GRAPH_RANGE_LABELS: Record<string, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  last_week: 'Last Week',
-  monthly: 'Monthly',
-  all_time: 'All Time',
-};
+const DATE_RANGE_INPUT = z.object({
+  from: z
+    .string()
+    .min(1)
+    .describe('Inclusive ISO date, for example 2026-07-01.'),
+  to: z
+    .string()
+    .min(1)
+    .describe('Inclusive ISO date, for example 2026-07-16.'),
+  label: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional human-readable label for this date range.'),
+});
+const COMPARISON_PERIOD_INPUT = DATE_RANGE_INPUT.extend({
+  label: z.string().min(1).describe('Human-readable label for this period.'),
+});
 
 type LiveEntityResource =
   | 'employees'
@@ -111,13 +115,11 @@ type BusinessGraphSubject =
   | 'products_by_purchase_cost'
   | 'purchase_customers_by_paid_amount'
   | 'sales_by_cashier';
-type BusinessGraphRange =
-  | 'all_time'
-  | 'today'
-  | 'yesterday'
-  | 'last_week'
-  | 'monthly'
-  | 'custom';
+type BusinessDateRange = {
+  from: string;
+  to: string;
+  label?: string;
+};
 type BusinessGraphComparisonPeriod = {
   label: string;
   from: string;
@@ -217,47 +219,20 @@ export function createAiAssistantTools({
   const storeWhere = { id: store.id };
   const scope = { storeId: store.id, storeName: store.name };
   return {
-    answerWithoutBusinessData: tool({
-      description:
-        'Use only when the question does not request live AsanPOS database values. This includes general POS guidance, greetings, and out-of-scope questions. Never use this tool for counts, totals, lists, dashboard values, stock, sales, purchases, customers, sessions, or other factual store data.',
-      inputSchema: z.object({
-        reason: z.enum(['general_pos_guidance', 'out_of_scope']),
-      }),
-      execute: async ({ reason }) => ({
-        reason,
-        instruction:
-          reason === 'out_of_scope'
-            ? 'Explain briefly that you only help with AsanPOS and store operations.'
-            : 'Answer using general AsanPOS knowledge without inventing store-specific facts or numbers.',
-      }),
-    }),
-
     getDashboardStats: tool({
       description:
-        'Get current-store sales, profit, cashier breakdown, low-stock alerts, out-of-stock alerts, and daily breakdowns for analytical POS questions.',
+        'Get live sales, profit, and daily business metrics for one explicit inclusive date range in the verified store. Use getInventorySummary for current stock alerts.',
       inputSchema: z.object({
-        range: z.enum(['today', 'yesterday', 'last_week', 'monthly', 'custom']),
-        from: z
-          .string()
-          .optional()
-          .describe(
-            'ISO date string for custom range start, for example 2026-07-01. Required when range is custom.',
-          ),
-        to: z
-          .string()
-          .optional()
-          .describe(
-            'ISO date string for custom range end, for example 2026-07-07. Required when range is custom.',
-          ),
+        dateRange: DATE_RANGE_INPUT,
       }),
-      execute: async ({ range, from, to }) => {
+      execute: async ({ dateRange }) => {
         const stats = await dashboardService.getDashboardStats(
           store,
           employeeId,
           {
-            range: DASHBOARD_RANGES[range],
-            from,
-            to,
+            range: DashboardRange.CUSTOM,
+            from: dateRange.from,
+            to: dateRange.to,
           },
         );
         return { scope, stats };
@@ -266,7 +241,7 @@ export function createAiAssistantTools({
 
     createBusinessGraph: tool({
       description:
-        'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, inventory quantity by product, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Use only for one graph explicitly requested by the user. When the user compares two or more periods, provide comparisonPeriods with every requested period and this tool will return one comparison graph. The periods are arbitrary; choose their exact inclusive ISO dates from the request. Historical comparisons work for time-based subjects; inventory quantity is a current snapshot. Never create unrequested graphs for context, recommendations, or decoration. Never invent values.',
+        'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, current inventory quantity, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Supply an explicit dateRange for a time-based graph, or comparisonPeriods for a comparison. Omit dateRange only when all available history is intended or when graphing current inventory. Historical comparisons work for time-based subjects; inventory quantity is a current snapshot.',
       inputSchema: z.object({
         subject: z.enum([
           'dashboard_sales',
@@ -284,45 +259,9 @@ export function createAiAssistantTools({
           'purchase_customers_by_paid_amount',
           'sales_by_cashier',
         ]),
-        range: z
-          .enum([
-            'all_time',
-            'today',
-            'yesterday',
-            'last_week',
-            'monthly',
-            'custom',
-          ])
-          .optional(),
-        from: z
-          .string()
-          .optional()
-          .describe('ISO date string required for a custom range start.'),
-        to: z
-          .string()
-          .optional()
-          .describe('ISO date string required for a custom range end.'),
+        dateRange: DATE_RANGE_INPUT.optional(),
         comparisonPeriods: z
-          .array(
-            z.object({
-              label: z
-                .string()
-                .min(1)
-                .describe('Short label for this period in the chart.'),
-              from: z
-                .string()
-                .min(1)
-                .describe(
-                  'Inclusive ISO date for this period, for example 2026-07-01.',
-                ),
-              to: z
-                .string()
-                .min(1)
-                .describe(
-                  'Inclusive ISO date for this period, for example 2026-07-16.',
-                ),
-            }),
-          )
+          .array(COMPARISON_PERIOD_INPUT)
           .min(2)
           .optional()
           .describe(
@@ -336,9 +275,7 @@ export function createAiAssistantTools({
       }),
       execute: async ({
         subject,
-        range,
-        from,
-        to,
+        dateRange,
         comparisonPeriods,
         limit,
         type,
@@ -349,11 +286,7 @@ export function createAiAssistantTools({
           store,
           employeeId,
           subject,
-          range:
-            range ??
-            (DASHBOARD_SUBJECT_METRICS[subject] ? 'monthly' : 'all_time'),
-          from,
-          to,
+          dateRange,
           comparisonPeriods,
           limit,
           type,
@@ -881,11 +814,8 @@ async function createBusinessGraph({
   store,
   employeeId,
   subject,
-  range,
-  from,
-  to,
+  dateRange,
   comparisonPeriods,
-  comparisonPeriod,
   limit,
   type,
 }: {
@@ -894,11 +824,8 @@ async function createBusinessGraph({
   store: Store;
   employeeId: string;
   subject: BusinessGraphSubject;
-  range: BusinessGraphRange;
-  from?: string;
-  to?: string;
+  dateRange?: BusinessDateRange;
   comparisonPeriods?: BusinessGraphComparisonPeriod[];
-  comparisonPeriod?: boolean;
   limit: number;
   type: AiAssistantGraph['type'];
 }): Promise<AiAssistantGraph> {
@@ -917,23 +844,23 @@ async function createBusinessGraph({
   }
 
   if (dashboardMetricName) {
-    const dashboardRange = range === 'all_time' ? 'monthly' : range;
+    if (!dateRange) {
+      throw new Error('An explicit dateRange is required for dashboard graph metrics.');
+    }
+
     const metric = DASHBOARD_GRAPH_METRICS[dashboardMetricName];
     const stats = await dashboardService.getDashboardStats(
       store,
       employeeId,
       {
-        range: DASHBOARD_RANGES[dashboardRange],
-        from,
-        to,
+        range: DashboardRange.CUSTOM,
+        from: dateRange.from,
+        to: dateRange.to,
       },
-      comparisonPeriod
-        ? {
-            allowLongRange: true,
-            includeDailyBreakdown:
-              dashboardMetricName !== 'sales' && dashboardMetricName !== 'profit',
-          }
-        : undefined,
+      {
+        allowLongRange: true,
+        includeDailyBreakdown: true,
+      },
     );
     const dailyStats = stats.dailyBreakdown ?? [];
     const rows = dailyStats.length
@@ -943,30 +870,30 @@ async function createBusinessGraph({
         }))
       : [
           {
-            label: getDashboardGraphRangeLabel(dashboardRange, from, to),
+            label: getBusinessDateRangeLabel(dateRange),
             value: metric.getTotalValue(stats),
           },
         ];
 
     return toGraph(rows, {
       type,
-      title: `${metric.label} ${getDashboardGraphRangeLabel(dashboardRange, from, to)}`,
+      title: `${metric.label} ${getBusinessDateRangeLabel(dateRange)}`,
       xAxisLabel: dailyStats.length ? 'Date' : 'Period',
       yAxisLabel: metric.label,
       valueFormat: metric.valueFormat,
     });
   }
 
-  const dateRange = getBusinessGraphDateRange(range, from, to);
+  const dateRangeWhere = getBusinessGraphDateRange(dateRange);
   const saleWhere = {
     store: { id: store.id },
     status: SaleStatus.DONE,
-    ...dateRange,
+    ...dateRangeWhere,
   };
   const purchaseWhere = {
     store: { id: store.id },
     status: PurchaseStatus.DONE,
-    ...dateRange,
+    ...dateRangeWhere,
   };
   const saleProductRows = (value: RawQueryFragment) =>
     em
@@ -1103,7 +1030,7 @@ async function createBusinessGraph({
 
   return toGraph(rows, {
     type,
-    title: `${definition.title} ${getBusinessGraphRangeLabel(range, from, to)}`,
+    title: `${definition.title} ${getBusinessDateRangeLabel(dateRange)}`,
     xAxisLabel: 'Category',
     yAxisLabel: definition.yAxisLabel,
     valueFormat: definition.valueFormat,
@@ -1141,10 +1068,7 @@ async function createBusinessComparisonGraph({
         store,
         employeeId,
         subject,
-        range: 'custom',
-        from: period.from,
-        to: period.to,
-        comparisonPeriod: true,
+        dateRange: period,
         limit,
         type,
       }),
@@ -1188,55 +1112,25 @@ async function createBusinessComparisonGraph({
 }
 
 function getBusinessGraphDateRange(
-  range: BusinessGraphRange,
-  from?: string,
-  to?: string,
+  dateRange?: BusinessDateRange,
 ): Record<string, unknown> {
-  if (range === 'all_time') return {};
+  if (!dateRange) return {};
 
-  if (range === 'custom') {
-    if (!from || !to)
-      throw new Error('from and to are required for a custom graph range.');
-    const start = new Date(from);
-    const end = new Date(to);
-    if (
-      Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime()) ||
-      start > end
-    )
-      throw new Error('The custom graph range is invalid.');
-    end.setUTCHours(23, 59, 59, 999);
-    return { createdAt: { $gte: start, $lte: end } };
-  }
-
-  const end = new Date();
+  const start = new Date(dateRange.from);
+  const end = new Date(dateRange.to);
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    start > end
+  )
+    throw new Error('The date range is invalid.');
   end.setUTCHours(23, 59, 59, 999);
-  const start = new Date(end);
-  start.setUTCHours(0, 0, 0, 0);
-  const daysBeforeToday =
-    range === 'today'
-      ? 0
-      : range === 'yesterday'
-        ? 1
-        : range === 'last_week'
-          ? 6
-          : 29;
-  start.setUTCDate(start.getUTCDate() - daysBeforeToday);
-  end.setUTCDate(end.getUTCDate() - (range === 'yesterday' ? 1 : 0));
-  if (range === 'yesterday') end.setUTCHours(23, 59, 59, 999);
   return { createdAt: { $gte: start, $lte: end } };
 }
 
-function getBusinessGraphRangeLabel(
-  range: BusinessGraphRange,
-  from?: string,
-  to?: string,
-): string {
-  if (range === 'custom')
-    return from && to ? `${from} to ${to}` : 'Custom range';
-  return range === 'all_time'
-    ? 'All time'
-    : getDashboardGraphRangeLabel(range, from, to);
+function getBusinessDateRangeLabel(dateRange?: BusinessDateRange): string {
+  if (!dateRange) return 'All time';
+  return dateRange.label ?? `${dateRange.from} to ${dateRange.to}`;
 }
 
 function toGraph(
@@ -1253,16 +1147,6 @@ function toGraph(
       },
     ],
   });
-}
-
-function getDashboardGraphRangeLabel(
-  range: string,
-  from?: string,
-  to?: string,
-): string {
-  if (range === 'custom')
-    return from && to ? `${from} to ${to}` : 'Custom range';
-  return GRAPH_RANGE_LABELS[range] ?? range;
 }
 
 function createProductWhere(

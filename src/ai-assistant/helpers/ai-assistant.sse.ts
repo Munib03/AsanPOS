@@ -21,7 +21,7 @@ export function streamAiAssistantResponse({
   return new Observable((subscriber) => {
     let closed = false;
     let draft = '';
-    let graph: AiAssistantGraph | null = null;
+    const graphs: AiAssistantGraph[] = [];
     const emit = (type: string, data: Record<string, unknown>) => {
       if (!closed) subscriber.next({ type, data });
     };
@@ -38,7 +38,7 @@ export function streamAiAssistantResponse({
             emit('tool', { name: part.toolName, status: 'completed' });
             const verifiedGraph = part.toolName === 'createBusinessGraph' ? getVerifiedGraph(part.output) : null;
             if (verifiedGraph) {
-              graph = verifiedGraph;
+              graphs.push(verifiedGraph);
               emit('graph', verifiedGraph);
             }
             continue;
@@ -60,7 +60,11 @@ export function streamAiAssistantResponse({
 
         draft = draft.trim();
         if (!draft) throw new Error('The assistant returned an empty response.');
-        const assistantMessage = await saveAssistantMessage(result.threadId, draft, graph ? { graph } : undefined);
+        const assistantMessage = await saveAssistantMessage(
+          result.threadId,
+          draft,
+          graphs.length ? { graph: graphs[0], graphs } : undefined,
+        );
         emit('done', {
           content: draft,
           threadId: result.threadId,

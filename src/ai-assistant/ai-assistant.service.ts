@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { stepCountIs, streamText } from 'ai';
+import { ToolLoopAgent } from 'ai';
 import type { MessageEvent } from '@nestjs/common';
 import { defer, Observable, switchMap } from 'rxjs';
 import { DashboardService } from '../dashboard/dashboard.service';
@@ -29,8 +29,8 @@ const MESSAGE_STATUS_FAILED = 'failed';
 const AI_CHAT_PROVIDER = 'opencode';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
 const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
-const AI_TOOL_INSTRUCTIONS =
-  'You are the AsanPOS assistant. For every question about current store data, call the matching tool in this turn and answer only from its latest result. Never reuse numbers from chat history, estimate missing values, or change tool values. Keep the answer concise and directly answer the question. Use plain text only, without Markdown, headings, bullets, code formatting, emojis, internal analysis, reasoning, thinking tags, or internal tool details. Create charts only when the user explicitly requests a graph, chart, trend, ranking, or visualization. Create exactly the number of charts explicitly requested: a singular request means one createBusinessGraph call, and each distinct requested chart needs one call. Interpret the complete request yourself to decide whether it compares two or more time periods. For every time-based period comparison, make exactly one createBusinessGraph call with comparisonPeriods, supplying every requested period as an exact inclusive ISO date range and a clear label. Resolve relative dates from the current UTC date supplied below. Use a bar or line chart for comparisons. Do not use fixed comparison presets or make separate graph calls for the compared periods. Never create an unrequested chart for context, recommendations, or decoration. After the requested graph tool calls succeed, write the text explanation and do not call createBusinessGraph again. Use answerWithoutBusinessData only for greetings, general POS guidance, or out-of-scope questions.';
+const AI_ASSISTANT_INSTRUCTIONS =
+  'You are the AsanPOS assistant. Interpret each request using the conversation, the current UTC date, and the available tool descriptions. Independently decide whether a tool is needed, which tool or tools to call, their inputs, and their order. For current business facts, use fresh results from the appropriate tools and never invent values or reuse stale values from chat history. Resolve time references into exact ISO date ranges when a selected tool needs dates. Decide whether a visualization is useful and use the graph tool only when it improves the answer. Do not rely on keyword rules, fixed request categories, or fixed tool sequences. For requests outside AsanPOS or unsupported capabilities, state the limitation plainly. Use plain text only, without Markdown, emojis, hidden reasoning, thinking tags, or internal tool details.';
 
 @Injectable()
 export class AiAssistantService {
@@ -119,10 +119,18 @@ export class AiAssistantService {
         baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
         name: AI_CHAT_PROVIDER,
       });
-      const result = streamText({
+      const agent = new ToolLoopAgent({
         model: openCode.chat(model),
         temperature: 0,
-        system: `${AI_TOOL_INSTRUCTIONS} Current UTC date: ${new Date().toISOString().slice(0, 10)}.`,
+        instructions: `${AI_ASSISTANT_INSTRUCTIONS} Current UTC date: ${new Date().toISOString().slice(0, 10)}.`,
+        tools: createAiAssistantTools({
+          dashboardService: this.dashboardService,
+          em: this.em,
+          store: verifiedStore,
+          employeeId,
+        }),
+      });
+      const result = await agent.stream({
         messages: [
           ...previousMessages.map((message) => ({
             role:
@@ -133,16 +141,6 @@ export class AiAssistantService {
           })),
           { role: 'user' as const, content: prompt },
         ],
-        stopWhen: stepCountIs(5),
-        tools: createAiAssistantTools({
-          dashboardService: this.dashboardService,
-          em: this.em,
-          store: verifiedStore,
-          employeeId,
-        }),
-
-        prepareStep: ({ stepNumber }) =>
-          stepNumber === 0 ? { toolChoice: 'required' as const } : {},
       });
 
       return streamAiAssistantResponse({
