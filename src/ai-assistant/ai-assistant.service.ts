@@ -37,13 +37,65 @@ export class AiAssistantService {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly em: EntityManager,
-  ) {}
+  ) { }
 
-  streamAnswer(
-    store: Store,
-    employeeId: string,
-    body: AskAiAssistantDto,
-  ): Observable<MessageEvent> {
+
+  async findAllThreads(store: Store, employeeId: string): Promise<AiChatThreadSummary[]> {
+    const threads = await this.em.find(
+      AiChatThread,
+      { store, employee: { id: employeeId }, deletedAt: null },
+      { orderBy: { lastMessageAt: 'DESC', createdAt: 'DESC' } },
+    );
+
+    return threads.map((thread) => ({
+      id: thread.id,
+      title: thread.title,
+      lastMessageAt: thread.lastMessageAt,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    }));
+  }
+
+
+  async findOneThread(store: Store, employeeId: string, threadId: string): Promise<AiChatThreadDetail> {
+    const thread = await this.em.findOne(AiChatThread, {
+      id: threadId,
+      store,
+      employee: { id: employeeId },
+      deletedAt: null,
+    });
+    if (!thread)
+      throw new NotFoundException('AI chat thread not found');
+
+    const messages = await this.em.find(
+      AiChatMessage,
+      { thread },
+      { orderBy: { createdAt: 'ASC' } },
+    );
+
+    return {
+      id: thread.id,
+      title: thread.title,
+      lastMessageAt: thread.lastMessageAt,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        status: message.status,
+        errorMessage: message.errorMessage,
+        model: message.model,
+        provider: message.provider,
+        metadata: message.metadata,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+      })),
+    };
+  }
+
+
+  streamAnswer(store: Store, employeeId: string, body: AskAiAssistantDto): Observable<MessageEvent> {
     const model =
       process.env.OPENCODE_MODEL ??
       process.env.OPENAI_MODEL ??
@@ -51,20 +103,21 @@ export class AiAssistantService {
 
     return defer(async () => {
       if (!process.env.OPENAI_API_KEY) {
-        throw new ServiceUnavailableException(
-          'OPENAI_API_KEY is not configured',
-        );
+        throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
       }
 
       const prompt = body.question?.trim();
-      if (!prompt) throw new BadRequestException('question is required');
+      if (!prompt)
+        throw new BadRequestException('question is required');
 
       const employee = await this.em.findOne(
         Employee,
         { id: employeeId, store: { id: store.id } },
         { populate: ['store'], refresh: true },
       );
-      if (!employee) throw new NotFoundException('Employee or store not found');
+
+      if (!employee)
+        throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
       let thread: AiChatThread;
@@ -76,11 +129,13 @@ export class AiAssistantService {
           employee: { id: employeeId },
           deletedAt: null,
         });
+
         if (!existingThread)
           throw new NotFoundException('AI chat thread not found');
 
         thread = existingThread;
-      } else {
+      }
+      else {
         const now = new Date();
         thread = this.em.create(AiChatThread, {
           store: verifiedStore,
@@ -111,6 +166,7 @@ export class AiAssistantService {
         status: MESSAGE_STATUS_COMPLETED,
         metadata: { source: 'ai-assistant-sse' },
       });
+
       thread.lastMessageAt = new Date();
       await this.em.persistAndFlush(userMessage);
 
@@ -119,6 +175,7 @@ export class AiAssistantService {
         baseURL: process.env.OPENCODE_BASE_URL ?? DEFAULT_OPENCODE_BASE_URL,
         name: AI_CHAT_PROVIDER,
       });
+
       const agent = new ToolLoopAgent({
         model: openCode.chat(model),
         temperature: 0,
@@ -130,6 +187,7 @@ export class AiAssistantService {
           employeeId,
         }),
       });
+
       const result = await agent.stream({
         messages: [
           ...previousMessages.map((message) => ({
@@ -149,6 +207,7 @@ export class AiAssistantService {
           userMessageId: userMessage.id,
           fullStream: result.fullStream,
         },
+
         saveAssistantMessage: (threadId, content, metadata) =>
           this.saveAssistantMessage(
             threadId,
@@ -159,6 +218,7 @@ export class AiAssistantService {
             undefined,
             metadata,
           ),
+
         saveFailedAssistantMessage: async (threadId, content, error) => {
           await this.saveAssistantMessage(
             threadId,
@@ -175,62 +235,6 @@ export class AiAssistantService {
     }).pipe(switchMap((events) => events));
   }
 
-  async findAllThreads(
-    store: Store,
-    employeeId: string,
-  ): Promise<AiChatThreadSummary[]> {
-    const threads = await this.em.find(
-      AiChatThread,
-      { store, employee: { id: employeeId }, deletedAt: null },
-      { orderBy: { lastMessageAt: 'DESC', createdAt: 'DESC' } },
-    );
-    return threads.map((thread) => ({
-      id: thread.id,
-      title: thread.title,
-      lastMessageAt: thread.lastMessageAt,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-    }));
-  }
-
-  async findOneThread(
-    store: Store,
-    employeeId: string,
-    threadId: string,
-  ): Promise<AiChatThreadDetail> {
-    const thread = await this.em.findOne(AiChatThread, {
-      id: threadId,
-      store,
-      employee: { id: employeeId },
-      deletedAt: null,
-    });
-    if (!thread) throw new NotFoundException('AI chat thread not found');
-
-    const messages = await this.em.find(
-      AiChatMessage,
-      { thread },
-      { orderBy: { createdAt: 'ASC' } },
-    );
-    return {
-      id: thread.id,
-      title: thread.title,
-      lastMessageAt: thread.lastMessageAt,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      messages: messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        status: message.status,
-        errorMessage: message.errorMessage,
-        model: message.model,
-        provider: message.provider,
-        metadata: message.metadata,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-      })),
-    };
-  }
 
   async updateThreadTitle(
     store: Store,
@@ -261,6 +265,7 @@ export class AiAssistantService {
     };
   }
 
+
   async deleteThread(
     store: Store,
     employeeId: string,
@@ -280,6 +285,9 @@ export class AiAssistantService {
     await this.em.flush();
     return { message: 'AI chat thread deleted successfully.', id: thread.id };
   }
+
+
+  
 
   private async saveAssistantMessage(
     threadId: string,

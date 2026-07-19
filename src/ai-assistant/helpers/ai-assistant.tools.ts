@@ -291,14 +291,14 @@ export function createAiAssistantTools({
         const productIds = products.map((product) => product.id);
         const stockRecords = productIds.length
           ? await em.find(
-              StockQuantity,
-              {
-                product: { id: { $in: productIds } },
-                inventory: { store: storeWhere },
-                ...(lowStockOnly ? { quantity: { $lte: 10 } } : {}),
-              },
-              { populate: ['inventory', 'product'], refresh: true },
-            )
+            StockQuantity,
+            {
+              product: { id: { $in: productIds } },
+              inventory: { store: storeWhere },
+              ...(lowStockOnly ? { quantity: { $lte: 10 } } : {}),
+            },
+            { populate: ['inventory', 'product'], refresh: true },
+          )
           : [];
         const stockByProduct = groupBy(
           stockRecords,
@@ -378,13 +378,13 @@ export function createAiAssistantTools({
           em.count(StockQuantity, { inventory: inventoryWhere, quantity: 0 }),
           inventoryIds.length
             ? em.find(
-                StockQuantity,
-                {
-                  inventory: { id: { $in: inventoryIds }, store: storeWhere },
-                  product: { store: storeWhere },
-                },
-                { populate: ['inventory', 'product'], refresh: true },
-              )
+              StockQuantity,
+              {
+                inventory: { id: { $in: inventoryIds }, store: storeWhere },
+                product: { store: storeWhere },
+              },
+              { populate: ['inventory', 'product'], refresh: true },
+            )
             : Promise.resolve([]),
         ]);
         const recordsByInventory = groupBy(
@@ -454,17 +454,17 @@ export function createAiAssistantTools({
         const saleIds = await getEmployeeSaleIds(em, store, employeeId);
         const sales = saleIds.length
           ? await em.find(
-              Sale,
-              {
-                id: { $in: saleIds },
-                store: storeWhere,
-              },
-              {
-                populate: ['items', 'items.product', 'customer'],
-                orderBy: { createdAt: 'DESC' },
-                refresh: true,
-              },
-            )
+            Sale,
+            {
+              id: { $in: saleIds },
+              store: storeWhere,
+            },
+            {
+              populate: ['items', 'items.product', 'customer'],
+              orderBy: { createdAt: 'DESC' },
+              refresh: true,
+            },
+          )
           : [];
         const summary = summarizeTransactions(sales, limit, true);
 
@@ -492,14 +492,14 @@ export function createAiAssistantTools({
         );
         const purchases = purchaseIds.length
           ? await em.find(
-              Purchase,
-              { store: storeWhere, id: { $in: purchaseIds } },
-              {
-                populate: ['items', 'items.product', 'customer'],
-                orderBy: { createdAt: 'DESC' },
-                refresh: true,
-              },
-            )
+            Purchase,
+            { store: storeWhere, id: { $in: purchaseIds } },
+            {
+              populate: ['items', 'items.product', 'customer'],
+              orderBy: { createdAt: 'DESC' },
+              refresh: true,
+            },
+          )
           : [];
         const summary = summarizeTransactions(purchases, limit);
 
@@ -549,17 +549,17 @@ export function createAiAssistantTools({
             const [saleCount, purchaseCount] = await Promise.all([
               saleIds.length
                 ? em.count(Sale, {
-                    store: storeWhere,
-                    customer,
-                    id: { $in: saleIds },
-                  })
+                  store: storeWhere,
+                  customer,
+                  id: { $in: saleIds },
+                })
                 : Promise.resolve(0),
               purchaseIds.length
                 ? em.count(Purchase, {
-                    store: storeWhere,
-                    customer,
-                    id: { $in: purchaseIds },
-                  })
+                  store: storeWhere,
+                  customer,
+                  id: { $in: purchaseIds },
+                })
                 : Promise.resolve(0),
             ]);
 
@@ -620,10 +620,10 @@ export function createAiAssistantTools({
               id: session.id,
               openedBy: session.openedBy
                 ? {
-                    id: session.openedBy.id,
-                    name: getEmployeeFullName(session.openedBy),
-                    email: session.openedBy.email,
-                  }
+                  id: session.openedBy.id,
+                  name: getEmployeeFullName(session.openedBy),
+                  email: session.openedBy.email,
+                }
                 : null,
               openingAmount: session.openingAmount ?? 0,
               openedAt: session.openedAt,
@@ -674,6 +674,7 @@ export function createAiAssistantTools({
   };
 }
 
+
 function summarizeTransactions(
   transactions: TransactionSummaryRecord[],
   limit: number,
@@ -716,8 +717,8 @@ function summarizeTransactions(
     statusBreakdown,
     topProducts: includeTopProducts
       ? [...productTotals.values()]
-          .sort((first, second) => second.sales - first.sales)
-          .slice(0, limit)
+        .sort((first, second) => second.sales - first.sales)
+        .slice(0, limit)
       : [],
     recentTransactions: transactions.slice(0, limit).map((transaction) => ({
       id: transaction.id,
@@ -733,6 +734,7 @@ function summarizeTransactions(
     })),
   };
 }
+
 
 async function createBusinessGraph({
   dashboardService,
@@ -793,15 +795,15 @@ async function createBusinessGraph({
     const dailyStats = stats.dailyBreakdown ?? [];
     const rows = dailyStats.length
       ? dailyStats.map((day) => ({
-          label: day.date,
-          value: metric.getDailyValue(day),
-        }))
+        label: day.date,
+        value: metric.getDailyValue(day),
+      }))
       : [
-          {
-            label: getBusinessDateRangeLabel(dateRange),
-            value: metric.getTotalValue(stats),
-          },
-        ];
+        {
+          label: getBusinessDateRangeLabel(dateRange),
+          value: metric.getTotalValue(stats),
+        },
+      ];
 
     return toGraph(rows, {
       type,
@@ -1044,6 +1046,7 @@ async function createBusinessComparisonGraph({
   });
 }
 
+
 function getBusinessGraphDateRange(
   dateRange?: BusinessDateRange,
 ): Record<string, unknown> {
@@ -1061,10 +1064,12 @@ function getBusinessGraphDateRange(
   return { createdAt: { $gte: start, $lte: end } };
 }
 
+
 function getBusinessDateRangeLabel(dateRange?: BusinessDateRange): string {
   if (!dateRange) return 'All time';
   return dateRange.label ?? `${dateRange.from} to ${dateRange.to}`;
 }
+
 
 function toGraph(
   rows: GraphRow[],
@@ -1082,6 +1087,7 @@ function toGraph(
   });
 }
 
+
 function createProductWhere(
   storeWhere: { id: string },
   query?: string,
@@ -1095,17 +1101,18 @@ function createProductWhere(
     ...(normalizedQuery ? [{ name: { $ilike: `%${normalizedQuery}%` } }] : []),
     ...(productCode
       ? [
-          {
-            sequence: {
-              prefix: productCode.prefix,
-              lastIndex: productCode.number,
-            },
+        {
+          sequence: {
+            prefix: productCode.prefix,
+            lastIndex: productCode.number,
           },
-        ]
+        },
+      ]
       : []),
   ];
   return where;
 }
+
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return items.reduce((groups, item) => {
@@ -1116,6 +1123,7 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
     return groups;
   }, new Map<string, T[]>());
 }
+
 
 async function getLiveEntityCount(
   em: EntityManager,
@@ -1144,6 +1152,7 @@ async function getLiveEntityCount(
   return counters[resource]();
 }
 
+
 async function getEmployeeSaleIds(
   em: EntityManager,
   store: Store,
@@ -1169,6 +1178,7 @@ async function getEmployeeSaleIds(
     ),
   ];
 }
+
 
 async function getEmployeeCreatedEntityIds(
   em: EntityManager,

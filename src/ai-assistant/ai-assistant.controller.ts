@@ -36,6 +36,7 @@ export class AiAssistantController {
     return this.aiAssistantService.findAllThreads(store, user.id);
   }
 
+  
   @Get('threads/:id')
   findOneThread(
     @CurrentStore() store: Store,
