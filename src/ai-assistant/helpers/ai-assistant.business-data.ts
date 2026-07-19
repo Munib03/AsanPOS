@@ -802,9 +802,7 @@ function getItemsTotal<T extends { quantity?: number; unitPrice?: number }>(
 ): number {
   return items.reduce(
     (total, item) =>
-      onItem
-        ? total + onItem(item)
-        : total + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+      total + (onItem?.(item) ?? (item.quantity ?? 0) * (item.unitPrice ?? 0)),
     0,
   );
 }
@@ -1024,13 +1022,7 @@ async function getEmployeeSaleIds({ em, store, employeeId }: DataContext) {
     },
     { populate: ['sale'], refresh: true },
   );
-  return [
-    ...new Set(
-      payments
-        .map((payment) => payment.sale?.id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
+  return uniqueIds(payments.map((payment) => payment.sale?.id));
 }
 
 async function getEmployeeCreatedEntityIds(
@@ -1046,11 +1038,11 @@ async function getEmployeeCreatedEntityIds(
     },
     { refresh: true },
   );
-  return [
-    ...new Set(
-      logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)),
-    ),
-  ];
+  return uniqueIds(logs.map((log) => log.entityId));
+}
+
+function uniqueIds(ids: Array<string | undefined>): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 async function getEmployeeTransactions(
