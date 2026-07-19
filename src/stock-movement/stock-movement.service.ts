@@ -93,7 +93,7 @@ export class StockMovementService {
 
             await this.assertSufficientStock(em, sourceInventory, dto.items);
 
-            const sequence = await this.sequenceService.generateSequence('StockMovement', 'MOV');
+            const sequence = await this.sequenceService.generateSequence(store, 'StockMovement', 'MOV');
             const movement = em.create(StockMovement, {
                 store,
                 sourceInventory,

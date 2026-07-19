@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -9,7 +14,7 @@ import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from '../employees/dto/verify.dto';
-import { VerifyTwoFactorDto } from "./dto/verify-2fa.dto";
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
@@ -21,8 +26,6 @@ import { StoreSettings } from '../database/entites/store-settings.entity';
 import { Role } from '../shared/utils/role.enum';
 import { Customer } from '../database/entites/customer.entity';
 
-
-
 @Injectable()
 export class AuthService {
   constructor(
@@ -32,17 +35,14 @@ export class AuthService {
 
     @Inject('REDIS_CLIENT')
     private readonly redis: Redis,
-  ) { }
-
+  ) {}
 
   async enableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const existing = await this.em.findOne(TwoFactorAuth, { employee });
-    if (existing)
-      throw new BadRequestException('2FA is already enabled');
+    if (existing) throw new BadRequestException('2FA is already enabled');
 
     const totp = new OTPAuth.TOTP({
       issuer: 'AsanPOS',
@@ -62,15 +62,15 @@ export class AuthService {
     return { qrCode };
   }
 
-
   async verifyTwoFactorSetup(employeeId: string, dto: VerifyTwoFactorDto) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const secret = await this.redis.get(`2fa_secret_${employeeId}`);
     if (!secret)
-      throw new BadRequestException('2FA setup expired. Please try enabling 2FA again');
+      throw new BadRequestException(
+        '2FA setup expired. Please try enabling 2FA again',
+      );
 
     const totp = new OTPAuth.TOTP({
       issuer: 'AsanPOS',
@@ -83,7 +83,9 @@ export class AuthService {
 
     const isValid = totp.validate({ token: dto.code, window: 1 });
     if (isValid === null)
-      throw new BadRequestException('Invalid code. Please scan the QR code again');
+      throw new BadRequestException(
+        'Invalid code. Please scan the QR code again',
+      );
 
     const twoFactor = this.em.create(TwoFactorAuth, {
       employee,
@@ -96,21 +98,17 @@ export class AuthService {
     return { message: '2FA enabled successfully' };
   }
 
-
   async disableTwoFactor(employeeId: string) {
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const twoFactor = await this.em.findOne(TwoFactorAuth, { employee });
-    if (!twoFactor)
-      throw new BadRequestException('2FA is not enabled');
+    if (!twoFactor) throw new BadRequestException('2FA is not enabled');
 
     await this.em.removeAndFlush(twoFactor);
 
     return { message: '2FA disabled successfully' };
   }
-
 
   async register(dto: RegisterDto) {
     const existing = await this.em.findOne(Employee, { email: dto.email });
@@ -131,7 +129,9 @@ export class AuthService {
       });
 
       if (existingEmployee)
-        throw new BadRequestException('This store already has an owner. Please create a new store.');
+        throw new BadRequestException(
+          'This store already has an owner. Please create a new store.',
+        );
     } else {
       const defaultAccount = this.em.create(Account, {
         name: 'Default Account',
@@ -148,11 +148,7 @@ export class AuthService {
         storeSettings,
       });
 
-      await this.em.persistAndFlush([
-        defaultAccount,
-        storeSettings,
-        store,
-      ]);
+      await this.em.persistAndFlush([defaultAccount, storeSettings, store]);
 
       const payable = this.em.create(Account, {
         name: 'Walk-in Customer - Accounts Payable',
@@ -175,7 +171,6 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const employee = this.em.create(Employee, {
-      name: dto.name,
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
@@ -204,9 +199,11 @@ export class AuthService {
     await this.em.flush();
     await this.queueService.sendVerificationEmail(dto.email, code);
 
-    return { message: 'OTP sent to your email. Please verify to complete registration.' };
+    return {
+      message:
+        'OTP sent to your email. Please verify to complete registration.',
+    };
   }
-
 
   private generateWalkInPhone(): string {
     let phone = '0';
@@ -216,11 +213,9 @@ export class AuthService {
     return phone;
   }
 
-
   async verifyRegister(dto: VerifyDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     const securityAction = await this.em.findOne(SecurityAction, {
       employee,
@@ -228,8 +223,7 @@ export class AuthService {
       actionType: 'sign-up',
     });
 
-    if (!securityAction)
-      throw new BadRequestException('Invalid OTP code');
+    if (!securityAction) throw new BadRequestException('Invalid OTP code');
 
     const now = new Date();
     if (securityAction.expiresAt && securityAction.expiresAt < now)
@@ -239,30 +233,30 @@ export class AuthService {
     await this.em.removeAndFlush(securityAction);
     await this.em.flush();
 
-    return { 
-      message: 'Email verified successfully', 
-      token: this.generateJWT(employee) 
+    return {
+      message: 'Email verified successfully',
+      token: this.generateJWT(employee),
     };
   }
 
-
   async login(dto: LoginDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
-    if (!employee)
-      throw new NotFoundException('Invalid email or password');
+    if (!employee) throw new NotFoundException('Invalid email or password');
 
     if (!employee.verifiedAt)
       throw new BadRequestException('Please verify your email first');
 
     const isMatch = await bcrypt.compare(dto.password, employee.password);
-    if (!isMatch)
-      throw new NotFoundException('Invalid email or password');
+    if (!isMatch) throw new NotFoundException('Invalid email or password');
 
     const twoFactor = await this.em.findOne(TwoFactorAuth, { employee });
 
     if (twoFactor) {
       if (!dto.code)
-        return { twoFactorRequired: true, message: 'Please provide your Google Authenticator code' };
+        return {
+          twoFactorRequired: true,
+          message: 'Please provide your Google Authenticator code',
+        };
 
       const totp = new OTPAuth.TOTP({
         issuer: 'AsanPOS',
@@ -280,11 +274,9 @@ export class AuthService {
 
     return {
       message: 'Login successful',
-      token: this.generateJWT(employee)
+      token: this.generateJWT(employee),
     };
   }
-
-
 
   private generateJWT(employee: Employee): string {
     return this.jwtService.sign({

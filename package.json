@@ -24,6 +24,8 @@
     "seed": "npx knex seed:run --knexfile knexfile.js"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.81",
+    "@instructor-ai/instructor": "^1.7.0",
     "@mikro-orm/cli": "^6.6.13",
     "@mikro-orm/core": "^6.6.13",
     "@mikro-orm/knex": "^6.6.13",
@@ -38,6 +40,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.19",
+    "ai": "^6.0.220",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.74.1",
     "bwip-js": "^4.11.1",
@@ -52,6 +55,7 @@
     "multer": "^2.1.1",
     "nest-knexjs": "^0.0.34",
     "nodemailer": "^8.0.5",
+    "openai": "^6.47.0",
     "otpauth": "^9.5.0",
     "otplib": "^13.4.0",
     "passport": "^0.7.0",
@@ -60,7 +64,8 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

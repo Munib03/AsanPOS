@@ -1,4 +1,11 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OnLoad, Filter } from '@mikro-orm/core';
+import {
+  Entity,
+  PrimaryKey,
+  Property,
+  ManyToOne,
+  OnLoad,
+  Filter,
+} from '@mikro-orm/core';
 import { Store } from './store.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
@@ -7,23 +14,17 @@ import { getSignedUrl } from '../../shared/utils/get.sgned.url';
 @Filter({
   name: 'notDeleted',
   cond: { deletedAt: null },
-  default: true, 
+  default: true,
 })
-
-
 @Entity({ tableName: 'employees' })
 export class Employee {
-
   @PrimaryKey({ type: 'uuid' })
   id: string = uuidv4();
 
   @Property({ unique: true })
   email!: string;
 
-  @Property()
-  name!: string;
-
-  @Property()
+  @Property({ hidden: true })
   password!: string;
 
   @Property({ nullable: true })
@@ -32,15 +33,14 @@ export class Employee {
   @Property({ nullable: true })
   role?: string;
 
-  @Property({ nullable: true })
-  firstName?: string;
+  @Property()
+  firstName!: string;
 
-  @Property({ nullable: true })
-  lastName?: string;
+  @Property()
+  lastName!: string;
 
   @Property({ nullable: true })
   imageUrl?: string | null;
-
 
   @Property({ persist: false })
   imageUrlSigned?: string | null;

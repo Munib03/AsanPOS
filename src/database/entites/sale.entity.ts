@@ -1,10 +1,11 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection, Enum } from "@mikro-orm/core";
 import { v4 as uuidv4 } from "uuid";
 import { Customer } from "./customer.entity";
 import { Store } from "./store.entity";
 import { Sequence } from "./sequence.entity";
 import { SaleItem } from "./sale-item.entity";
 import { SaleStatus } from "../../shared/utils/sale-status.enum";
+import { SalePaymentStatus } from "../../shared/utils/sale-payment-status.enum";
 
 @Entity({ tableName: "sale" })
 export class Sale {
@@ -14,6 +15,9 @@ export class Sale {
   
   @Property({ default: SaleStatus.DRAFT })
   status: string = SaleStatus.DRAFT;
+
+  @Enum({ items: () => SalePaymentStatus, fieldName: "payment_status", default: SalePaymentStatus.Unpaid })
+  paymentStatus: SalePaymentStatus = SalePaymentStatus.Unpaid;
 
   @ManyToOne(() => Sequence, { fieldName: "sequence_id" })
   sequence!: Sequence;

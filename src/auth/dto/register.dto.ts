@@ -1,18 +1,21 @@
-import { IsString, IsNotEmpty, IsEmail, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
 
 export class RegisterDto {
   @IsNotEmpty()
   @IsString()
-  name!: string;
+  firstName!: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  firstName?: string;
-
-  @IsOptional()
-  @IsString()
-  lastName?: string;
+  lastName!: string;
 
   @IsNotEmpty()
   @IsEmail()

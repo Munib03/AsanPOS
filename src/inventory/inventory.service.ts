@@ -1,5 +1,9 @@
 import { EntityManager, serialize } from '@mikro-orm/postgresql';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
@@ -13,6 +17,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { normalizePagination } from '../shared/utils/pagination';
 
 @Injectable()
 export class InventoryService {
@@ -21,68 +26,87 @@ export class InventoryService {
     private readonly inventoryRepository: BaseRepository<Inventory>,
     private readonly minioService: MinioService,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   async findAll(store: Store, query: PaginateQuery) {
     const [inventories, meta] = await this.inventoryRepository.findAndPaginate(
       { store },
       {
-        populate: ['products'],
-        fields: ['id', 'name', 'address', 'products.id', 'products.name', 'products.price'],
+        fields: ['id', 'name', 'address'],
       },
       { searchable: ['name'] },
       query,
     );
 
+    const inventoryIds = inventories.map((inventory) => inventory.id);
+    const stockQuantities = inventoryIds.length
+      ? await this.em.find(
+          StockQuantity,
+          {
+            inventory: { id: { $in: inventoryIds } },
+            quantity: { $gt: 0 },
+          },
+          {
+            fields: ['inventory.id', 'product.id'],
+          },
+        )
+      : [];
+    const productIdsByInventoryId = new Map<string, Set<string>>();
+
+    for (const stockQuantity of stockQuantities) {
+      const inventoryId = stockQuantity.inventory.id;
+      const productIds = productIdsByInventoryId.get(inventoryId) ?? new Set();
+      productIds.add(stockQuantity.product.id);
+      productIdsByInventoryId.set(inventoryId, productIds);
+    }
+
     return {
-      data: serialize(inventories, { populate: ['products'] }),
+      data: serialize(inventories).map((inventory) => ({
+        ...inventory,
+        productTypeCount:
+          productIdsByInventoryId.get(inventory.id)?.size ?? 0,
+      })),
       meta,
     };
   }
 
-
-  async findOne(store: Store, id: string) {
+  async findOne(store: Store, id: string, query: PaginateQuery = {}) {
     const inventory = await this.em.findOne(
       Inventory,
       { id, store },
       {
-        populate: [
-          'products',
-          'products.images',
-          'products.categories',
-          'products.sequence',
-        ],
-        fields: [
-          'id',
-          'name',
-          'address',
-          'products.id',
-          'products.name',
-          'products.price',
-          'products.images.id',
-          'products.images.imageUrl',
-          'products.categories.id',
-          'products.categories.name',
-          'products.barcode',
-          'products.sequence.prefix',
-          'products.sequence.lastIndex',
-        ],
+        fields: ['id', 'name', 'address'],
       },
     );
 
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 
-    const stockQuantities = await this.em.findAll(StockQuantity, {
-      where: { inventory: { id } },
-    });
-
-    const serialized = serialize(inventory, {
-      populate: ['products', 'products.images', 'products.categories', 'products.sequence'],
-    });
+    const { currentPage, limit, offset } = normalizePagination(
+      query.page,
+      query.itemsPerPage,
+    );
+    const [stockQuantities, totalItems] = await this.em.findAndCount(
+      StockQuantity,
+      { inventory: { id, store }, product: { store } },
+      {
+        populate: [
+          'product',
+          'product.images',
+          'product.categories',
+          'product.sequence',
+        ],
+        orderBy: { product: { name: 'ASC' } },
+        limit,
+        offset,
+      },
+    );
 
     const products = await Promise.all(
-      serialized.products.map(async (product) => {
+      stockQuantities.map(async (stockQuantity) => {
+        const product = serialize(stockQuantity.product, {
+          populate: ['images', 'categories', 'sequence'],
+        });
         const images = await Promise.all(
           (product.images ?? []).map(async (image) => ({
             id: image.id,
@@ -96,7 +120,7 @@ export class InventoryService {
           ...product,
           images,
           categories: product.categories ?? [],
-          quantity: stockQuantities.find(sq => sq.product.id === product.id)?.quantity ?? 0,
+          quantity: stockQuantity.quantity ?? 0,
           sequence: product.sequence
             ? `${product.sequence.prefix}-${String(product.sequence.lastIndex).padStart(4, '0')}`
             : null,
@@ -104,14 +128,29 @@ export class InventoryService {
       }),
     );
 
-    return { ...serialized, products };
+    return {
+      ...serialize(inventory),
+      products: {
+        data: products,
+        meta: {
+          currentPage,
+          itemsPerPage: limit,
+          totalItems,
+          totalPages: Math.ceil(totalItems / limit),
+        },
+      },
+    };
   }
 
-
   async create(store: Store, employeeId: string, dto: CreateInventoryDto) {
-    const existingInventory = await this.em.findOne(Inventory, { name: dto.name, store });
+    const existingInventory = await this.em.findOne(Inventory, {
+      name: dto.name,
+      store,
+    });
     if (existingInventory)
-      throw new BadRequestException(`Inventory with name ${dto.name} already exists.`);
+      throw new BadRequestException(
+        `Inventory with name ${dto.name} already exists.`,
+      );
 
     const inventory = this.em.create(Inventory, {
       name: dto.name,
@@ -122,8 +161,7 @@ export class InventoryService {
     await this.em.persistAndFlush(inventory);
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     this.auditService.log(
       this.em,
@@ -140,8 +178,12 @@ export class InventoryService {
     return { message: 'Inventory created successfully.' };
   }
 
-
-  async update(store: Store, id: string, employeeId: string, dto: UpdateInventoryDto) {
+  async update(
+    store: Store,
+    id: string,
+    employeeId: string,
+    dto: UpdateInventoryDto,
+  ) {
     const inventory = await this.em.findOne(Inventory, { id, store });
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
@@ -151,8 +193,7 @@ export class InventoryService {
     this.em.assign(inventory, stripUndefined(dto));
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     this.auditService.log(
       this.em,
@@ -168,7 +209,6 @@ export class InventoryService {
 
     return { message: `Inventory with id ${id} updated successfully.` };
   }
-
 
   async delete(store: Store, id: string, employeeId: string) {
     const inventory = await this.em.findOne(Inventory, { id, store });
@@ -186,8 +226,7 @@ export class InventoryService {
       );
 
     const employee = await this.em.findOne(Employee, { id: employeeId });
-    if (!employee)
-      throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Employee not found');
 
     this.auditService.log(
       this.em,

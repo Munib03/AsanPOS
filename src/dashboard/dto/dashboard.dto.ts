@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsDateString, IsEnum, IsNumberString, IsOptional } from 'class-validator';
 
 export enum DashboardRange {
   TODAY = 'today',
@@ -20,6 +20,30 @@ export class DashboardQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  lowStockPage?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  lowStockPageSize?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  outOfStockPage?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  outOfStockPageSize?: string;
+}
+
+export interface StockPagination<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export interface DailyStats {
@@ -51,19 +75,19 @@ export interface DashboardStats {
   sales: { total: number; percentageChange: number };
   profit: { total: number; percentageChange: number };
   cashierBreakdown?: CashierStats[];
-  lowStockProducts?: {
+  lowStockProducts?: StockPagination<{
     id: string;
     name: string;
     price: number;
     quantity: number;
     inventoryName: string;
-  }[];
-  outOfStockProducts?: {
+  }>;
+  outOfStockProducts?: StockPagination<{
     id: string;
     name: string;
     price: number;
     quantity: number;
     inventoryName: string;
-  }[];
+  }>;
   dailyBreakdown?: DailyStats[];
 }

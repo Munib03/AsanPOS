@@ -1,24 +1,32 @@
-import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
-import { v4 as uuidv4 } from "uuid";
+import { Entity, ManyToOne, PrimaryKey, Property } from '@mikro-orm/core';
+import { v4 as uuidv4 } from 'uuid';
+import { Store } from './store.entity';
 
-@Entity({ tableName: "sequence" })
+@Entity({ tableName: 'sequence' })
 export class Sequence {
-
-  @PrimaryKey({ type: "uuid" })
+  @PrimaryKey({ type: 'uuid' })
   id: string = uuidv4();
 
   @Property()
   entity!: string;
 
+  @ManyToOne(() => Store, { fieldName: 'store_id' })
+  store!: Store;
+
   @Property()
   prefix!: string;
 
-  @Property({ fieldName: "last_index" })
+  @Property({ fieldName: 'last_index' })
   lastIndex!: number;
 
-  @Property({ fieldName: "created_at", defaultRaw: "now()", nullable: true })
+  @Property({ fieldName: 'created_at', defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
 
-  @Property({ fieldName: "updated_at", defaultRaw: "now()", onUpdate: () => new Date(), nullable: true })
+  @Property({
+    fieldName: 'updated_at',
+    defaultRaw: 'now()',
+    onUpdate: () => new Date(),
+    nullable: true,
+  })
   updatedAt?: Date;
 }

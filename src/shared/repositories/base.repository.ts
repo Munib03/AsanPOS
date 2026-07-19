@@ -1,8 +1,23 @@
 import { NotFoundException } from '@nestjs/common';
-import { EntityManager, EntityName, EntityRepository, FilterQuery, FindOneOrFailOptions, FindOptions, Loaded } from '@mikro-orm/core';
+import {
+  EntityManager,
+  EntityName,
+  EntityRepository,
+  FilterQuery,
+  FindOneOrFailOptions,
+  FindOptions,
+  Loaded,
+} from '@mikro-orm/core';
 import { Meta, PaginateQuery } from '../types/paginate-query.types';
-import { sanitizeFilterQuery, mergeFilterOperators, unFlattenObject, sanitizeSortObject, mergeSortObjects, transformFilterQueryParams } from '../utils/pagination';
-
+import {
+  sanitizeFilterQuery,
+  mergeFilterOperators,
+  normalizePagination,
+  unFlattenObject,
+  sanitizeSortObject,
+  mergeSortObjects,
+  transformFilterQueryParams,
+} from '../utils/pagination';
 
 type NotFoundErrorFactory<Entity extends object> = (context: {
   id: string;
@@ -10,10 +25,9 @@ type NotFoundErrorFactory<Entity extends object> = (context: {
   where: FilterQuery<Entity>;
 }) => Error;
 
-
 export type Filterable<Entity> = Partial<Record<keyof Entity, any>>;
 export type Sortable<Entity> = (keyof Entity & string)[];
-export type Searchable<Entity> = (keyof Entity & string | string)[];
+export type Searchable<Entity> = ((keyof Entity & string) | string)[];
 
 export type FilterOptions<Entity> = {
   filterable?: Filterable<Entity>;
@@ -21,30 +35,31 @@ export type FilterOptions<Entity> = {
   sortable?: Sortable<Entity>;
 };
 
-
-
 function buildNestedCondition(path: string, operator: any) {
   const parts = path.split('.');
   return parts.reverse().reduce((acc, part) => ({ [part]: acc }), operator);
 }
 
-
-
-export class BaseRepository<Entity extends object> extends EntityRepository<Entity> {
-
+export class BaseRepository<
+  Entity extends object,
+> extends EntityRepository<Entity> {
   constructor(em: EntityManager, entityName: EntityName<Entity>) {
     super(em, entityName);
   }
 
-
-  async findOneOrFail<Hint extends string = never, Fields extends string = '*', Excludes extends string = never>(
+  async findOneOrFail<
+    Hint extends string = never,
+    Fields extends string = '*',
+    Excludes extends string = never,
+  >(
     where: FilterQuery<Entity>,
     options?: FindOneOrFailOptions<Entity, Hint, Fields, Excludes> & {
       notFoundError?: Error | NotFoundErrorFactory<Entity>;
       notFoundMessage?: string;
     },
   ): Promise<Loaded<Entity, Hint, Fields, Excludes>> {
-    const { failHandler, notFoundError, notFoundMessage, ...findOptions } = options ?? {};
+    const { failHandler, notFoundError, notFoundMessage, ...findOptions } =
+      options ?? {};
 
     if (failHandler) {
       return super.findOneOrFail(where, { ...findOptions, failHandler });
@@ -67,7 +82,9 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       if (notFoundError) return notFoundError;
 
       const readableName = entityName.replace(/([a-z])([A-Z])/g, '$1 $2');
-      return new NotFoundException(notFoundMessage ?? `${readableName} not found`);
+      return new NotFoundException(
+        notFoundMessage ?? `${readableName} not found`,
+      );
     };
 
     return super.findOneOrFail(where, {
@@ -76,18 +93,31 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
     });
   }
 
-  
-  async findAndPaginate<Hint extends string = never, Fields extends string = '*', Excludes extends string = never>(
+  async findAndPaginate<
+    Hint extends string = never,
+    Fields extends string = '*',
+    Excludes extends string = never,
+  >(
     where: FilterQuery<Entity>,
-    options?: Omit<FindOptions<Entity, Hint, Fields, Excludes>, 'offset' | 'limit'>,
+    options?: Omit<
+      FindOptions<Entity, Hint, Fields, Excludes>,
+      'offset' | 'limit'
+    >,
     filterOptions?: FilterOptions<Entity>,
     query?: PaginateQuery,
   ): Promise<[Loaded<Entity, Hint, Fields, Excludes>[], Meta]> {
-    const { page = 1, itemsPerPage = 20, search, filter = {}, sort = {} } = query || {};
+    const {
+      page = 1,
+      itemsPerPage = 20,
+      search,
+      filter = {},
+      sort = {},
+    } = query || {};
 
-    const currentPage = Math.max(1, Number(page));
-    const limit = Math.min(Math.max(1, Number(itemsPerPage)), 100);
-    const offset = (currentPage - 1) * limit;
+    const { currentPage, limit, offset } = normalizePagination(
+      page,
+      itemsPerPage,
+    );
 
     const transformedFilters = transformFilterQueryParams(filter);
     const sanitizedFilters = sanitizeFilterQuery(
@@ -113,8 +143,12 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       }
 
       const searchConditions = [
-        ...directFields.map((field) => ({ [field]: { $ilike: `%${search}%` } })),
-        ...relationFields.map((field) => buildNestedCondition(field, { $ilike: `%${search}%` })),
+        ...directFields.map((field) => ({
+          [field]: { $ilike: `%${search}%` },
+        })),
+        ...relationFields.map((field) =>
+          buildNestedCondition(field, { $ilike: `%${search}%` }),
+        ),
       ];
 
       if (searchConditions.length > 0) {
@@ -135,17 +169,24 @@ export class BaseRepository<Entity extends object> extends EntityRepository<Enti
       sanitizedSort,
     );
 
-    const [data, count] = await this.findAndCount(
-      finalWhere as FilterQuery<Entity>,
-      {
+    const hasFilteredResult =
+      Object.keys(sanitizedFilters).length > 0 ||
+      Boolean(search && filterOptions?.searchable?.length);
+    const [[data, count], unfilteredCount] = await Promise.all([
+      this.findAndCount(finalWhere as FilterQuery<Entity>, {
         ...options,
-        ...(Object.keys(mergedSort).length > 0 ? { orderBy: mergedSort as FindOptions<Entity>['orderBy'] } : {}),
+        ...(Object.keys(mergedSort).length > 0
+          ? { orderBy: mergedSort as FindOptions<Entity>['orderBy'] }
+          : {}),
         offset,
         limit,
-      },
-    );
+      }),
+      hasFilteredResult
+        ? this.count(where as FilterQuery<Entity>)
+        : Promise.resolve(undefined),
+    ]);
 
-    const totalCount = await this.count(where as FilterQuery<Entity>);  
+    const totalCount = unfilteredCount ?? count;
 
     const meta: Meta = {
       currentPage,

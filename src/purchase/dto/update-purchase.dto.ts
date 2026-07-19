@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsUUID, IsNumber } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsNumber,
+  IsPositive,
+} from 'class-validator';
+import { PurchasePaymentStatus } from '../../shared/utils/purchase-payment-status.enum';
 
 export class UpdatePurchaseDto {
   @IsOptional()
@@ -12,4 +20,13 @@ export class UpdatePurchaseDto {
   @IsOptional()
   @IsNumber()
   quantity?: number;
+
+  @IsOptional()
+  @IsEnum(PurchasePaymentStatus)
+  paymentStatus?: PurchasePaymentStatus;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount?: number;
 }

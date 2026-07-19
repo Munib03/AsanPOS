@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { StoreSessionService } from './store-session.service';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../shared/guards/role.guard';
@@ -9,18 +18,18 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
+import type { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('store-session')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin, Role.Cashier)
 export class StoreSessionController {
-  constructor(private readonly storeSessionService: StoreSessionService) { }
+  constructor(private readonly storeSessionService: StoreSessionService) {}
 
   @Get()
-  findAll(@CurrentStore() store: Store) {
-    return this.storeSessionService.findAll(store);
+  findAll(@CurrentStore() store: Store, @Query() query: PaginateQuery) {
+    return this.storeSessionService.findAll(store, query);
   }
-
 
   @Get('my-session')
   hasActiveSession(@CurrentUser() user: { id: string }) {
@@ -33,10 +42,7 @@ export class StoreSessionController {
   }
 
   @Get(':id')
-  findOne(
-    @CurrentStore() store: Store,
-    @Param('id') id: string,
-  ) {
+  findOne(@CurrentStore() store: Store, @Param('id') id: string) {
     return this.storeSessionService.findOne(store, id);
   }
 
@@ -57,5 +63,4 @@ export class StoreSessionController {
   ) {
     return this.storeSessionService.close(store, user.id, dto);
   }
-
 }

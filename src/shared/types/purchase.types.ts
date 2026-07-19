@@ -32,6 +32,7 @@ export interface PurchaseListItem {
   id: string;
   sequenceId?: string;
   status: string;
+  paymentStatus: import('../utils/purchase-payment-status.enum').PurchasePaymentStatus;
   customDate?: Date;
   createdAt?: Date;
   customer: {
@@ -41,7 +42,16 @@ export interface PurchaseListItem {
     address?: string;
   };
   items: PurchaseItemType[];
-  stockIns: StockInDetail[]; 
+  stockIns: StockInDetail[];
   totalPrice: number;
   inventoryId: string;
+}
+
+export interface PurchaseDetail extends PurchaseListItem {
+  remainingBalance: number;
+  paymentHistory: {
+    id: string;
+    amount: number;
+    paidAt?: Date;
+  }[];
 }

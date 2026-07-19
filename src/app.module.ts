@@ -12,7 +12,7 @@ import { SharedModule } from './shared/services/shared.module';
 import config from './mikro-orm.config';
 import { ProductModule } from './products/product.module';
 import { InventoryModule } from './inventory/inventory.module';
-import { CustomerModule } from './customer/customoer.module';
+import { CustomerModule } from './customer/customer.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { StockInModule } from './stock-in/stock-in.module';
 import { JournalEntryModule } from './journal/journal.module';
@@ -25,6 +25,7 @@ import { ReceiptModule } from './receipt/receipt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportModule } from './reports/report.module';
 import { StockMovementModule } from './stock-movement/stock-movement.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 
 @Module({
@@ -51,7 +52,8 @@ import { StockMovementModule } from './stock-movement/stock-movement.module';
     ReceiptModule,
     DashboardModule,
     ReportModule,
-    StockMovementModule
+    StockMovementModule,
+    AiAssistantModule
   ],
   controllers: [AppController],
   providers: [AppService],
