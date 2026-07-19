@@ -39,6 +39,7 @@ export const AiAssistantReportSchema = z.object({
     'inventory',
     'products',
     'purchases',
+    'customers',
   ]),
   title: z.string().min(1),
   generatedAt: z.string().datetime(),
