@@ -32,7 +32,6 @@ import { JournalEntryStatus } from '../shared/utils/journal-entry-status.enum';
 import { PaymentStatus } from '../shared/utils/payments-status.enum';
 import { PurchasePaymentStatus } from '../shared/utils/purchase-payment-status.enum';
 import { Payment } from '../database/entites/payments.entity';
-import { StoreSession } from '../database/entites/store-session.entity';
 import { JournalEntryItem } from '../database/entites/journal-entry-item.entity';
 
 @Injectable()
@@ -139,16 +138,7 @@ export class PurchaseService {
       Payment,
       { purchase: { id: purchase.id }, status: PaymentStatus.Done },
       {
-        populate: ['storeSession', 'storeSession.openedBy'],
-        fields: [
-          'id',
-          'amount',
-          'createdAt',
-          'storeSession.id',
-          'storeSession.openedBy.id',
-          'storeSession.openedBy.firstName',
-          'storeSession.openedBy.lastName',
-        ],
+        fields: ['id', 'amount', 'createdAt'],
         orderBy: { createdAt: 'ASC' },
       },
     );
@@ -159,13 +149,6 @@ export class PurchaseService {
       id: payment.id,
       amount: Number(payment.amount),
       paidAt: payment.createdAt,
-      cashier: payment.storeSession?.openedBy
-        ? {
-            id: payment.storeSession.openedBy.id,
-            firstName: payment.storeSession.openedBy.firstName,
-            lastName: payment.storeSession.openedBy.lastName,
-          }
-        : null,
     }));
 
     if (purchasedItemIds.length === 0) {
@@ -281,24 +264,10 @@ export class PurchaseService {
         ),
       );
       const paymentAmount = this.resolvePurchasePaymentAmount(dto, totalAmount);
-      const activeSession =
-        paymentAmount > 0
-          ? await em.findOne(StoreSession, {
-              store,
-              openedBy: { id: employeeId },
-              closedAt: null,
-            })
-          : null;
-
-      if (paymentAmount > 0 && !activeSession)
-        throw new BadRequestException(
-          'No active session found. Please open a session first.',
-        );
 
       if (paymentAmount > 0) {
         const payment = em.create(Payment, {
           purchase,
-          storeSession: activeSession!,
           amount: paymentAmount,
           status: PaymentStatus.Done,
         });
@@ -433,14 +402,7 @@ export class PurchaseService {
       }
 
       if (hasPaymentUpdate)
-        await this.addPaymentToPurchase(
-          em,
-          store,
-          purchase,
-          employee!,
-          employeeId,
-          dto,
-        );
+        await this.addPaymentToPurchase(em, purchase, employee!, dto);
 
       await em.flush();
 
@@ -490,10 +452,8 @@ export class PurchaseService {
 
   private async addPaymentToPurchase(
     em: EntityManager,
-    store: Store,
     purchase: Purchase,
     employee: Employee,
-    employeeId: string,
     dto: UpdatePurchaseDto,
   ): Promise<void> {
     if (dto.amount === undefined || dto.paymentStatus === undefined)
@@ -538,19 +498,8 @@ export class PurchaseService {
         `paymentStatus must be '${newPaymentStatus}' for this payment amount.`,
       );
 
-    const activeSession = await em.findOne(StoreSession, {
-      store,
-      openedBy: { id: employeeId },
-      closedAt: null,
-    });
-    if (!activeSession)
-      throw new BadRequestException(
-        'No active session found. Please open a session first.',
-      );
-
     const payment = em.create(Payment, {
       purchase,
-      storeSession: activeSession,
       amount: paymentAmount,
       status: PaymentStatus.Done,
     });

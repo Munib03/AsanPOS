@@ -53,10 +53,5 @@ export interface PurchaseDetail extends PurchaseListItem {
     id: string;
     amount: number;
     paidAt?: Date;
-    cashier: {
-      id: string;
-      firstName: string;
-      lastName: string;
-    } | null;
   }[];
 }
