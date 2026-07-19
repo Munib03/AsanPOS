@@ -3,9 +3,7 @@ import { Observable } from 'rxjs';
 import type { AiAssistantStreamPart } from '../../shared/types/ai-assistant.types';
 import {
   AiAssistantGraphSchema,
-  AiAssistantReportSchema,
   type AiAssistantGraph,
-  type AiAssistantReport,
 } from './ai-assistant.response.schema';
 
 interface StreamAiAssistantResponseParams {
@@ -35,7 +33,6 @@ export function streamAiAssistantResponse({
     let closed = false;
     let draft = '';
     const graphs: AiAssistantGraph[] = [];
-    const reports: AiAssistantReport[] = [];
     const emit = (type: string, data: Record<string, unknown>) => {
       if (!closed) subscriber.next({ type, data });
     };
@@ -57,14 +54,6 @@ export function streamAiAssistantResponse({
             if (verifiedGraph) {
               graphs.push(verifiedGraph);
               emit('graph', verifiedGraph);
-            }
-            const verifiedReport =
-              part.toolName === 'createBusinessReport'
-                ? getVerifiedReport(part.output)
-                : null;
-            if (verifiedReport) {
-              reports.push(verifiedReport);
-              emit('report', verifiedReport);
             }
             continue;
           }
@@ -92,12 +81,7 @@ export function streamAiAssistantResponse({
         const assistantMessage = await saveAssistantMessage(
           result.threadId,
           draft,
-          graphs.length || reports.length
-            ? {
-                ...(graphs.length ? { graph: graphs[0], graphs } : {}),
-                ...(reports.length ? { report: reports[0], reports } : {}),
-              }
-            : undefined,
+          graphs.length ? { graph: graphs[0], graphs } : undefined,
         );
         emit('done', {
           content: draft,
@@ -109,7 +93,9 @@ export function streamAiAssistantResponse({
       } catch (error) {
         try {
           await saveFailedAssistantMessage(result.threadId, draft, error);
-        } catch {}
+        } catch {
+          // Preserve the original streaming error when failure persistence also fails.
+        }
         emit('error', {
           threadId: result.threadId,
           userMessageId: result.userMessageId,
@@ -134,12 +120,4 @@ function getVerifiedGraph(output: unknown): AiAssistantGraph | null {
 
   const parsedGraph = AiAssistantGraphSchema.safeParse(output.graph);
   return parsedGraph.success ? parsedGraph.data : null;
-}
-
-function getVerifiedReport(output: unknown): AiAssistantReport | null {
-  if (!output || typeof output !== 'object' || !('report' in output))
-    return null;
-
-  const parsedReport = AiAssistantReportSchema.safeParse(output.report);
-  return parsedReport.success ? parsedReport.data : null;
 }

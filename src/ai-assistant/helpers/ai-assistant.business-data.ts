@@ -25,16 +25,12 @@ import { SaleStatus } from '../../shared/utils/sale-status.enum';
 import {
   AiAssistantGraphSchema,
   type AiAssistantGraph,
-  AiAssistantReportSchema,
-  type AiAssistantReport,
 } from './ai-assistant.response.schema';
 import type {
   BusinessDateRange,
   BusinessGraphComparisonPeriod,
   BusinessGraphInput,
   BusinessGraphSubject,
-  BusinessReportInput,
-  BusinessReportSubject,
   CustomerInsightInput,
   DashboardGraphMetricName,
   ProductCode,
@@ -83,7 +79,6 @@ type TransactionSummaryRecord = {
   items: { getItems: () => TransactionItem[] };
 };
 type SequenceLike = { prefix: string; lastIndex: number };
-type ReportPeriod = NonNullable<AiAssistantReport['period']>;
 
 const DASHBOARD_SUBJECT_METRICS: Partial<
   Record<BusinessGraphSubject, DashboardGraphMetricName>
@@ -160,8 +155,6 @@ export function createAiAssistantBusinessData(
   return {
     createBusinessGraph: (input: BusinessGraphInput) =>
       createBusinessGraph(context, input),
-    createBusinessReport: (input: BusinessReportInput) =>
-      createBusinessReport(context, input),
     searchProducts: async ({
       query,
       productCode,
@@ -319,270 +312,6 @@ function summarizeTransactions(
       createdAt: transaction.createdAt,
     })),
   };
-}
-
-async function createBusinessReport(
-  { dashboardService, em, store, employeeId, storeWhere }: DataContext,
-  {
-    subject,
-    dateRange,
-    limit: requestedLimit,
-    includeGraphs,
-  }: BusinessReportInput,
-): Promise<AiAssistantReport> {
-  const reportLimit = requestedLimit ?? 20;
-  if (subject === 'inventory') {
-    const inventoryWhere = { store: storeWhere };
-    const [inventoryCount, lowStockCount, outOfStockCount, records] =
-      await Promise.all([
-        em.count(Inventory, inventoryWhere),
-        em.count(StockQuantity, {
-          inventory: inventoryWhere,
-          quantity: { $gt: 0, $lte: 10 },
-        }),
-        em.count(StockQuantity, { inventory: inventoryWhere, quantity: 0 }),
-        em.find(
-          StockQuantity,
-          { inventory: inventoryWhere },
-          {
-            populate: ['inventory', 'product'],
-            orderBy: { quantity: 'ASC' },
-            limit: reportLimit,
-            refresh: true,
-          },
-        ),
-      ]);
-    return createReport(
-      subject,
-      'Inventory report',
-      [
-        reportMetric('Inventories', inventoryCount),
-        reportMetric('Low stock products', lowStockCount),
-        reportMetric('Out of stock products', outOfStockCount),
-      ],
-      [
-        reportTable(
-          'Inventory quantities',
-          ['Product', 'Inventory', 'Quantity', 'Unit price'],
-          records.map((record) => [
-            record.product.name ?? '',
-            record.inventory.name,
-            record.quantity ?? 0,
-            record.product.price ?? 0,
-          ]),
-        ),
-      ],
-    );
-  }
-  if (subject === 'products') {
-    const [totalProducts, products] = await Promise.all([
-      em.count(Product, { store: storeWhere }),
-      em.find(
-        Product,
-        { store: storeWhere },
-        {
-          populate: ['sequence'],
-          orderBy: { name: 'ASC' },
-          limit: reportLimit,
-          refresh: true,
-        },
-      ),
-    ]);
-    return createReport(
-      subject,
-      'Product catalog report',
-      [reportMetric('Total products', totalProducts)],
-      [
-        reportTable(
-          'Products',
-          ['Product code', 'Name', 'Unit price'],
-          products.map((product) => [
-            getSequenceCode(product.sequence),
-            product.name ?? '',
-            product.price ?? 0,
-          ]),
-        ),
-      ],
-    );
-  }
-  if (subject === 'customers') {
-    const customerWhere = { store: storeWhere };
-    const customerLimit =
-      requestedLimit ?? (await em.count(Customer, customerWhere));
-    const customers = await em.find(Customer, customerWhere, {
-      orderBy: { name: 'ASC' },
-      limit: customerLimit,
-      refresh: true,
-    });
-    const customerIds = customers.map((customer) => customer.id);
-    const profitByCustomer = new Map(
-      customerIds.length
-        ? (
-            await dashboardService.getCustomerProfitBreakdown(
-              store,
-              dateRange,
-              customerIds.length,
-              customerIds,
-            )
-          ).map((customer) => [customer.id, customer.value])
-        : [],
-    );
-    const customerProfits = customers.map((customer) => ({
-      label: customer.name,
-      value: roundMoney(profitByCustomer.get(customer.id) ?? 0),
-    }));
-    const period = dateRange
-      ? {
-          from: dateRange.from,
-          to: dateRange.to,
-          label: getBusinessDateRangeLabel(dateRange),
-        }
-      : undefined;
-    const periodSuffix = period ? ` ${period.label}` : '';
-
-    return createReport(
-      subject,
-      `Customer profit report${periodSuffix}`,
-      [
-        reportMetric(
-          'Total profit',
-          roundMoney(
-            customerProfits.reduce(
-              (total, customer) => total + customer.value,
-              0,
-            ),
-          ),
-          'currency',
-        ),
-      ],
-      [
-        reportTable(
-          'Customer profit',
-          ['Customer', 'Profit'],
-          customerProfits.map((customer) => [customer.label, customer.value]),
-        ),
-      ],
-      period,
-      includeGraphs
-        ? [
-            toGraph(customerProfits, {
-              type: 'bar',
-              title: `Profit by customer${periodSuffix}`,
-              xAxisLabel: 'Customer',
-              yAxisLabel: 'Profit',
-              valueFormat: 'currency',
-            }),
-          ]
-        : [],
-    );
-  }
-  if (!dateRange)
-    throw new Error(
-      `An explicit dateRange is required for ${subject} reports.`,
-    );
-
-  const period: ReportPeriod = {
-    from: dateRange.from,
-    to: dateRange.to,
-    label: getBusinessDateRangeLabel(dateRange),
-  };
-  if (subject === 'purchases') {
-    const purchases = await em.find(
-      Purchase,
-      {
-        store: storeWhere,
-        status: PurchaseStatus.DONE,
-        ...getBusinessGraphDateRange(dateRange),
-      },
-      {
-        populate: ['customer', 'items', 'sequence'],
-        orderBy: { createdAt: 'DESC' },
-        limit: reportLimit,
-        refresh: true,
-      },
-    );
-    const total = purchases.reduce(
-      (sum, purchase) => sum + getItemsTotal(purchase.items.getItems()),
-      0,
-    );
-    return createReport(
-      subject,
-      `Purchase report ${period.label}`,
-      [
-        reportMetric('Purchases shown', purchases.length),
-        reportMetric('Purchase cost', total, 'currency'),
-      ],
-      [
-        reportTable(
-          'Purchases',
-          ['Purchase code', 'Customer', 'Items', 'Total', 'Date'],
-          purchases.map((purchase) => [
-            getSequenceCode(purchase.sequence, purchase.id),
-            purchase.customer.name,
-            purchase.items.getItems().length,
-            getItemsTotal(purchase.items.getItems()),
-            purchase.createdAt?.toISOString() ?? '',
-          ]),
-        ),
-      ],
-      period,
-    );
-  }
-
-  const stats = await getDashboardRangeStats(
-    dashboardService,
-    store,
-    employeeId,
-    dateRange,
-  );
-  const dailyStats = stats.dailyBreakdown ?? [];
-  const salesOnly = subject === 'sales';
-  const profitOnly = subject === 'profit';
-  const graphRows = dailyStats.map((day) => ({
-    label: day.date,
-    value: profitOnly ? day.profit.total : day.sales.total,
-  }));
-  return createReport(
-    subject,
-    `${salesOnly ? 'Sales' : profitOnly ? 'Profit' : 'Business summary'} report ${period.label}`,
-    [
-      ...(!profitOnly
-        ? [reportMetric('Total sales', stats.sales.total, 'currency')]
-        : []),
-      ...(!salesOnly
-        ? [reportMetric('Profit', stats.profit.total, 'currency')]
-        : []),
-    ],
-    [
-      reportTable(
-        'Daily performance',
-        salesOnly
-          ? ['Date', 'Sales']
-          : profitOnly
-            ? ['Date', 'Profit']
-            : ['Date', 'Sales', 'Profit'],
-        dailyStats.map((day) =>
-          salesOnly
-            ? [day.date, day.sales.total]
-            : profitOnly
-              ? [day.date, day.profit.total]
-              : [day.date, day.sales.total, day.profit.total],
-        ),
-      ),
-    ],
-    period,
-    includeGraphs
-      ? [
-          toGraph(graphRows, {
-            type: 'line',
-            title: `${profitOnly ? 'Profit' : 'Sales'} ${period.label}`,
-            xAxisLabel: 'Date',
-            yAxisLabel: profitOnly ? 'Profit' : 'Sales',
-            valueFormat: 'currency',
-          }),
-        ]
-      : [],
-  );
 }
 
 async function createBusinessGraph(
@@ -1064,42 +793,6 @@ function toGraph(
         data: rows.map((row) => Number(row.value) || 0),
       },
     ],
-  });
-}
-
-function reportMetric(
-  label: string,
-  value: number,
-  valueFormat: 'number' | 'currency' = 'number',
-) {
-  return { label, value, valueFormat };
-}
-
-function reportTable(
-  title: string,
-  columns: string[],
-  rows: Array<Array<string | number>>,
-) {
-  return { title, columns, rows };
-}
-
-function createReport(
-  reportType: BusinessReportSubject,
-  title: string,
-  summary: AiAssistantReport['summary'],
-  tables: AiAssistantReport['tables'],
-  period?: ReportPeriod,
-  graphs: AiAssistantGraph[] = [],
-): AiAssistantReport {
-  return AiAssistantReportSchema.parse({
-    type: 'report',
-    reportType,
-    title,
-    generatedAt: new Date().toISOString(),
-    summary,
-    tables,
-    graphs,
-    ...(period ? { period } : {}),
   });
 }
 

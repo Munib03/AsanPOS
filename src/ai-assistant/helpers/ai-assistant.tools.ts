@@ -21,7 +21,6 @@ import { createAiAssistantBusinessData } from './ai-assistant.business-data';
 
 const DEFAULT_TOOL_LIMIT = 10;
 const MAX_TOOL_LIMIT = 50;
-const MAX_REPORT_LIMIT = 1000;
 const TOOL_LIMIT = z
   .number()
   .int()
@@ -100,15 +99,6 @@ export const BUSINESS_GRAPH_SUBJECTS = [
   'purchase_customers_by_paid_amount',
   'sales_by_cashier',
 ] as const;
-export const BUSINESS_REPORT_SUBJECTS = [
-  'business_summary',
-  'sales',
-  'profit',
-  'inventory',
-  'products',
-  'purchases',
-  'customers',
-] as const;
 export const DASHBOARD_GRAPH_METRIC_NAMES = [
   'sales',
   'profit',
@@ -120,7 +110,6 @@ export const DASHBOARD_GRAPH_METRIC_NAMES = [
 
 export type LiveEntityResource = (typeof LIVE_ENTITY_RESOURCES)[number];
 export type BusinessGraphSubject = (typeof BUSINESS_GRAPH_SUBJECTS)[number];
-export type BusinessReportSubject = (typeof BUSINESS_REPORT_SUBJECTS)[number];
 export type DashboardGraphMetricName =
   (typeof DASHBOARD_GRAPH_METRIC_NAMES)[number];
 export type BusinessDateRange = { from: string; to: string; label?: string };
@@ -142,12 +131,6 @@ export type BusinessGraphInput = {
   comparisonPeriods?: BusinessGraphComparisonPeriod[];
   limit: number;
   type: AiAssistantGraph['type'];
-};
-export type BusinessReportInput = {
-  subject: BusinessReportSubject;
-  dateRange?: BusinessDateRange;
-  limit?: number;
-  includeGraphs: boolean;
 };
 
 interface CreateAiAssistantToolsParams {
@@ -217,21 +200,6 @@ export function createAiAssistantTools({
       execute: async (input) => ({
         scope,
         graph: await data.createBusinessGraph(input),
-      }),
-    }),
-
-    createBusinessReport: tool({
-      description:
-        'Create one verified report payload for the frontend to preview and export as a PDF. Use this alone whenever the user asks to create, download, export, print, or prepare a PDF/report; do not call another tool for that request. It returns JSON only, never a PDF file. Choose only the requested report subject. Use customers when the user asks for customer data or profit by customer: it returns a Customer and Profit table only, plus one matching graph only when includeGraphs is true. Set includeGraphs to true only when the user explicitly asks for charts or graphs in the report. Use limit only when the user requests a specific number of rows; omit it for a complete customer report. Use an explicit dateRange for business_summary, sales, profit, and purchases reports. Inventory and products reports are current snapshots; customer reports may use an optional date range.',
-      inputSchema: z.object({
-        subject: z.enum(BUSINESS_REPORT_SUBJECTS),
-        dateRange: DATE_RANGE_INPUT.optional(),
-        limit: z.number().int().min(1).max(MAX_REPORT_LIMIT).optional(),
-        includeGraphs: z.boolean().optional().default(false),
-      }),
-      execute: async (input) => ({
-        scope,
-        report: await data.createBusinessReport(input),
       }),
     }),
 
