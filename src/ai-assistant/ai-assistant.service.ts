@@ -30,17 +30,19 @@ const AI_CHAT_PROVIDER = 'opencode';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1';
 const DEFAULT_OPENCODE_MODEL = 'deepseek-v4-flash-free';
 const AI_ASSISTANT_INSTRUCTIONS =
-  'You are the AsanPOS assistant. Interpret each request using the conversation, the current UTC date, and the available tool descriptions. Independently decide whether a tool is needed, which tool or tools to call, their inputs, and their order. For current business facts, use fresh results from the appropriate tools and never invent values or reuse stale values from chat history. Resolve time references into exact ISO date ranges when a selected tool needs dates. Decide whether a visualization is useful and use the graph tool only when it improves the answer. Do not rely on keyword rules, fixed request categories, or fixed tool sequences. For requests outside AsanPOS or unsupported capabilities, state the limitation plainly. Use plain text only, without Markdown, emojis, hidden reasoning, thinking tags, or internal tool details.';
+  'You are the AsanPOS assistant. Interpret each request using the conversation, the current UTC date, and the available tool descriptions. Independently decide whether a tool is needed, which tool or tools to call, their inputs, and their order. For current business facts, use fresh results from the appropriate tools and never invent values or reuse stale values from chat history. Resolve time references into exact ISO date ranges when a selected tool needs dates. Use getCustomerSummary for any customer-specific question, including contact details, sales, purchases, payments, outstanding balances, and profit. For one chart with multiple compatible dashboard measures, call createBusinessGraph once with metrics. For one measure compared across periods, call it once with subject and comparisonPeriods. Use the customer paid-sales-and-profit subject when the user asks to compare those two customer measures in one chart. Decide whether a visualization is useful and use the graph tool only when it improves the answer. When the user requests a report, export, printout, or PDF, call createBusinessReport exactly once and no other tool. Choose only the report subject they requested, include graphs only when they explicitly request charts or graphs, and reply briefly that the frontend can render and download the returned report data as a PDF. Do not claim that a PDF file was created. Do not rely on keyword rules, fixed request categories, or fixed tool sequences. For requests outside AsanPOS or unsupported capabilities, state the limitation plainly. Use plain text only, without Markdown, emojis, hidden reasoning, thinking tags, or internal tool details.';
 
 @Injectable()
 export class AiAssistantService {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly em: EntityManager,
-  ) { }
+  ) {}
 
-
-  async findAllThreads(store: Store, employeeId: string): Promise<AiChatThreadSummary[]> {
+  async findAllThreads(
+    store: Store,
+    employeeId: string,
+  ): Promise<AiChatThreadSummary[]> {
     const threads = await this.em.find(
       AiChatThread,
       { store, employee: { id: employeeId }, deletedAt: null },
@@ -56,16 +58,18 @@ export class AiAssistantService {
     }));
   }
 
-
-  async findOneThread(store: Store, employeeId: string, threadId: string): Promise<AiChatThreadDetail> {
+  async findOneThread(
+    store: Store,
+    employeeId: string,
+    threadId: string,
+  ): Promise<AiChatThreadDetail> {
     const thread = await this.em.findOne(AiChatThread, {
       id: threadId,
       store,
       employee: { id: employeeId },
       deletedAt: null,
     });
-    if (!thread)
-      throw new NotFoundException('AI chat thread not found');
+    if (!thread) throw new NotFoundException('AI chat thread not found');
 
     const messages = await this.em.find(
       AiChatMessage,
@@ -94,8 +98,11 @@ export class AiAssistantService {
     };
   }
 
-
-  streamAnswer(store: Store, employeeId: string, body: AskAiAssistantDto): Observable<MessageEvent> {
+  streamAnswer(
+    store: Store,
+    employeeId: string,
+    body: AskAiAssistantDto,
+  ): Observable<MessageEvent> {
     const model =
       process.env.OPENCODE_MODEL ??
       process.env.OPENAI_MODEL ??
@@ -103,12 +110,13 @@ export class AiAssistantService {
 
     return defer(async () => {
       if (!process.env.OPENAI_API_KEY) {
-        throw new ServiceUnavailableException('OPENAI_API_KEY is not configured');
+        throw new ServiceUnavailableException(
+          'OPENAI_API_KEY is not configured',
+        );
       }
 
       const prompt = body.question?.trim();
-      if (!prompt)
-        throw new BadRequestException('question is required');
+      if (!prompt) throw new BadRequestException('question is required');
 
       const employee = await this.em.findOne(
         Employee,
@@ -116,8 +124,7 @@ export class AiAssistantService {
         { populate: ['store'], refresh: true },
       );
 
-      if (!employee)
-        throw new NotFoundException('Employee or store not found');
+      if (!employee) throw new NotFoundException('Employee or store not found');
 
       const verifiedStore = employee.store;
       let thread: AiChatThread;
@@ -134,8 +141,7 @@ export class AiAssistantService {
           throw new NotFoundException('AI chat thread not found');
 
         thread = existingThread;
-      }
-      else {
+      } else {
         const now = new Date();
         thread = this.em.create(AiChatThread, {
           store: verifiedStore,
@@ -235,7 +241,6 @@ export class AiAssistantService {
     }).pipe(switchMap((events) => events));
   }
 
-
   async updateThreadTitle(
     store: Store,
     employeeId: string,
@@ -265,7 +270,6 @@ export class AiAssistantService {
     };
   }
 
-
   async deleteThread(
     store: Store,
     employeeId: string,
@@ -285,9 +289,6 @@ export class AiAssistantService {
     await this.em.flush();
     return { message: 'AI chat thread deleted successfully.', id: thread.id };
   }
-
-
-  
 
   private async saveAssistantMessage(
     threadId: string,

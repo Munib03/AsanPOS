@@ -39,12 +39,16 @@ type DashboardSaleItem = {
 type DashboardSale = {
   id: string;
   createdAt?: Date;
+  customerId: string;
+  customerName: string;
   items: DashboardSaleItem[];
   paidAmount: number;
 };
 type DashboardSaleRow = {
   saleId: string;
   createdAt: Date | string | null;
+  customerId: string | null;
+  customerName: string | null;
   itemId: string | null;
   productId: string | null;
   quantity: string | number | null;
@@ -61,6 +65,11 @@ type HistoricalSaleItemRow = {
   id: string;
   productId: string;
   quantity: string | number;
+};
+export type CustomerProfitBreakdown = {
+  id: string;
+  label: string;
+  value: number;
 };
 type StockSummaryRecord = {
   quantity?: number;
@@ -193,6 +202,59 @@ export class DashboardService {
       );
 
     return response;
+  }
+
+  async getCustomerProfitBreakdown(
+    store: Store,
+    dateRange?: { from: string; to: string },
+    limit = 10,
+    customerIds?: string[],
+  ): Promise<CustomerProfitBreakdown[]> {
+    const from = dateRange
+      ? startOfUtcDay(new Date(dateRange.from))
+      : new Date('1970-01-01T00:00:00.000Z');
+    const to = dateRange ? endOfUtcDay(new Date(dateRange.to)) : new Date();
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to)
+      throw new BadRequestException('Invalid customer profit date range');
+
+    const sales = await this.findDashboardSales(
+      store.id,
+      from,
+      to,
+      customerIds,
+    );
+    const productIds = [
+      ...new Set(
+        sales.flatMap((sale) => sale.items.map((item) => item.productId)),
+      ),
+    ];
+    const costPriceMap = await this.buildSaleItemCostMap(store, productIds, to);
+    const profitByCustomer = new Map<string, CustomerProfitBreakdown>();
+
+    for (const sale of sales) {
+      const profit = sale.items.reduce((total, item) => {
+        const costPrice = costPriceMap.get(item.id);
+        if (costPrice === undefined) return total;
+        return (
+          total +
+          (item.unitPrice / (1 + DashboardService.TAX_RATE) - costPrice) *
+            item.quantity *
+            paidRatio(sale)
+        );
+      }, 0);
+      const row = profitByCustomer.get(sale.customerId) ?? {
+        id: sale.customerId,
+        label: sale.customerName,
+        value: 0,
+      };
+      row.value += profit;
+      profitByCustomer.set(row.id, row);
+    }
+
+    return [...profitByCustomer.values()]
+      .map((row) => ({ ...row, value: round2(row.value) }))
+      .sort((first, second) => second.value - first.value)
+      .slice(0, limit);
   }
 
   private getRangeContext(
@@ -590,27 +652,35 @@ export class DashboardService {
     storeId: string,
     from: Date,
     to: Date,
+    customerIds?: string[],
   ): Promise<DashboardSale[]> {
-    const rows = (await this.em
+    const query = this.em
       .getKnex()<DashboardSaleRow>('sale as sale')
       .leftJoin('sale_items as item', 'item.sale_id', 'sale.id')
+      .leftJoin('customer', 'customer.id', 'sale.customer_id')
       .where('sale.store_id', storeId)
       .whereBetween('sale.created_at', [from, to])
-      .orderBy('sale.created_at', 'asc')
-      .select(
-        'sale.id as saleId',
-        'sale.created_at as createdAt',
-        'item.id as itemId',
-        'item.product_id as productId',
-        'item.quantity',
-        'item.unit_price as unitPrice',
-      )) as DashboardSaleRow[];
+      .orderBy('sale.created_at', 'asc');
+    if (customerIds?.length) query.whereIn('sale.customer_id', customerIds);
+
+    const rows = (await query.select(
+      'sale.id as saleId',
+      'sale.created_at as createdAt',
+      'sale.customer_id as customerId',
+      'customer.name as customerName',
+      'item.id as itemId',
+      'item.product_id as productId',
+      'item.quantity',
+      'item.unit_price as unitPrice',
+    )) as DashboardSaleRow[];
 
     const salesById = new Map<string, DashboardSale>();
     for (const row of rows) {
       const sale = salesById.get(row.saleId) ?? {
         id: row.saleId,
         createdAt: row.createdAt ? new Date(row.createdAt) : undefined,
+        customerId: row.customerId ?? '',
+        customerName: row.customerName ?? 'Unknown customer',
         items: [],
         paidAmount: 0,
       };

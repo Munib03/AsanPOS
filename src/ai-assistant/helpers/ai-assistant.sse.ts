@@ -1,7 +1,12 @@
 import type { MessageEvent } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import type { AiAssistantStreamPart } from '../../shared/types/ai-assistant.types';
-import { AiAssistantGraphSchema, type AiAssistantGraph } from './ai-assistant.response.schema';
+import {
+  AiAssistantGraphSchema,
+  AiAssistantReportSchema,
+  type AiAssistantGraph,
+  type AiAssistantReport,
+} from './ai-assistant.response.schema';
 
 interface StreamAiAssistantResponseParams {
   result: {
@@ -9,8 +14,16 @@ interface StreamAiAssistantResponseParams {
     userMessageId: string;
     fullStream: AsyncIterable<AiAssistantStreamPart>;
   };
-  saveAssistantMessage: (threadId: string, content: string, metadata?: Record<string, unknown>) => Promise<{ id: string }>;
-  saveFailedAssistantMessage: (threadId: string, content: string, error: unknown) => Promise<void>;
+  saveAssistantMessage: (
+    threadId: string,
+    content: string,
+    metadata?: Record<string, unknown>,
+  ) => Promise<{ id: string }>;
+  saveFailedAssistantMessage: (
+    threadId: string,
+    content: string,
+    error: unknown,
+  ) => Promise<void>;
 }
 
 export function streamAiAssistantResponse({
@@ -22,6 +35,7 @@ export function streamAiAssistantResponse({
     let closed = false;
     let draft = '';
     const graphs: AiAssistantGraph[] = [];
+    const reports: AiAssistantReport[] = [];
     const emit = (type: string, data: Record<string, unknown>) => {
       if (!closed) subscriber.next({ type, data });
     };
@@ -36,10 +50,21 @@ export function streamAiAssistantResponse({
           }
           if (part.type === 'tool-result') {
             emit('tool', { name: part.toolName, status: 'completed' });
-            const verifiedGraph = part.toolName === 'createBusinessGraph' ? getVerifiedGraph(part.output) : null;
+            const verifiedGraph =
+              part.toolName === 'createBusinessGraph'
+                ? getVerifiedGraph(part.output)
+                : null;
             if (verifiedGraph) {
               graphs.push(verifiedGraph);
               emit('graph', verifiedGraph);
+            }
+            const verifiedReport =
+              part.toolName === 'createBusinessReport'
+                ? getVerifiedReport(part.output)
+                : null;
+            if (verifiedReport) {
+              reports.push(verifiedReport);
+              emit('report', verifiedReport);
             }
             continue;
           }
@@ -47,7 +72,10 @@ export function streamAiAssistantResponse({
             emit('tool', {
               name: part.toolName,
               status: 'failed',
-              message: part.error instanceof Error ? part.error.message : 'Tool execution failed.',
+              message:
+                part.error instanceof Error
+                  ? part.error.message
+                  : 'Tool execution failed.',
             });
             continue;
           }
@@ -59,11 +87,17 @@ export function streamAiAssistantResponse({
         }
 
         draft = draft.trim();
-        if (!draft) throw new Error('The assistant returned an empty response.');
+        if (!draft)
+          throw new Error('The assistant returned an empty response.');
         const assistantMessage = await saveAssistantMessage(
           result.threadId,
           draft,
-          graphs.length ? { graph: graphs[0], graphs } : undefined,
+          graphs.length || reports.length
+            ? {
+                ...(graphs.length ? { graph: graphs[0], graphs } : {}),
+                ...(reports.length ? { report: reports[0], reports } : {}),
+              }
+            : undefined,
         );
         emit('done', {
           content: draft,
@@ -79,7 +113,10 @@ export function streamAiAssistantResponse({
         emit('error', {
           threadId: result.threadId,
           userMessageId: result.userMessageId,
-          message: error instanceof Error ? error.message : 'Failed to stream assistant response.',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to stream assistant response.',
         });
         if (!closed) subscriber.complete();
       }
@@ -92,8 +129,17 @@ export function streamAiAssistantResponse({
 }
 
 function getVerifiedGraph(output: unknown): AiAssistantGraph | null {
-  if (!output || typeof output !== 'object' || !('graph' in output)) return null;
+  if (!output || typeof output !== 'object' || !('graph' in output))
+    return null;
 
   const parsedGraph = AiAssistantGraphSchema.safeParse(output.graph);
   return parsedGraph.success ? parsedGraph.data : null;
+}
+
+function getVerifiedReport(output: unknown): AiAssistantReport | null {
+  if (!output || typeof output !== 'object' || !('report' in output))
+    return null;
+
+  const parsedReport = AiAssistantReportSchema.safeParse(output.report);
+  return parsedReport.success ? parsedReport.data : null;
 }
