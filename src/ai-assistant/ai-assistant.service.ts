@@ -27,8 +27,8 @@ const ASSISTANT_MESSAGE_ROLE = 'assistant';
 const MESSAGE_STATUS_COMPLETED = 'completed';
 const MESSAGE_STATUS_FAILED = 'failed';
 const AI_CHAT_PROVIDER = 'opencode';
-const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/go/v1';
-const DEFAULT_OPENCODE_MODEL = 'minimax-m3';
+const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1';
+const DEFAULT_OPENCODE_MODEL = 'deepseek-v4-flash-free';
 const AI_ASSISTANT_INSTRUCTIONS =
   'You are the AsanPOS assistant. Interpret each request using the conversation, the current UTC date, and the available tool descriptions. Independently decide whether a tool is needed, which tool or tools to call, their inputs, and their order. For current business facts, use fresh results from the appropriate tools and never invent values or reuse stale values from chat history. Resolve time references into exact ISO date ranges when a selected tool needs dates. Decide whether a visualization is useful and use the graph tool only when it improves the answer. Do not rely on keyword rules, fixed request categories, or fixed tool sequences. For requests outside AsanPOS or unsupported capabilities, state the limitation plainly. Use plain text only, without Markdown, emojis, hidden reasoning, thinking tags, or internal tool details.';
 

@@ -68,10 +68,7 @@ const DATE_RANGE_INPUT = z.object({
     .string()
     .min(1)
     .describe('Inclusive ISO date, for example 2026-07-01.'),
-  to: z
-    .string()
-    .min(1)
-    .describe('Inclusive ISO date, for example 2026-07-16.'),
+  to: z.string().min(1).describe('Inclusive ISO date, for example 2026-07-16.'),
   label: z
     .string()
     .min(1)
@@ -81,18 +78,35 @@ const DATE_RANGE_INPUT = z.object({
 const COMPARISON_PERIOD_INPUT = DATE_RANGE_INPUT.extend({
   label: z.string().min(1).describe('Human-readable label for this period.'),
 });
+const LIVE_ENTITY_RESOURCES = [
+  'employees',
+  'categories',
+  'payments',
+  'stock_ins',
+  'stock_outs',
+  'stock_movements',
+  'cash_movements',
+  'receipts',
+  'journal_entries',
+] as const;
+const BUSINESS_GRAPH_SUBJECTS = [
+  'dashboard_sales',
+  'dashboard_profit',
+  'dashboard_cash_in',
+  'dashboard_cash_out',
+  'dashboard_sessions_opened',
+  'dashboard_sessions_closed',
+  'top_selling_products',
+  'products_by_sold_value',
+  'inventory_by_quantity',
+  'customers_by_paid_sales',
+  'top_purchased_products',
+  'products_by_purchase_cost',
+  'purchase_customers_by_paid_amount',
+  'sales_by_cashier',
+] as const;
 
-type LiveEntityResource =
-  | 'employees'
-  | 'categories'
-  | 'payments'
-  | 'stock_ins'
-  | 'stock_outs'
-  | 'stock_movements'
-  | 'cash_movements'
-  | 'receipts'
-  | 'journal_entries';
-
+type LiveEntityResource = (typeof LIVE_ENTITY_RESOURCES)[number];
 type DashboardGraphMetricName =
   | 'sales'
   | 'profit'
@@ -100,31 +114,9 @@ type DashboardGraphMetricName =
   | 'cash_out'
   | 'sessions_opened'
   | 'sessions_closed';
-type BusinessGraphSubject =
-  | 'dashboard_sales'
-  | 'dashboard_profit'
-  | 'dashboard_cash_in'
-  | 'dashboard_cash_out'
-  | 'dashboard_sessions_opened'
-  | 'dashboard_sessions_closed'
-  | 'top_selling_products'
-  | 'products_by_sold_value'
-  | 'inventory_by_quantity'
-  | 'customers_by_paid_sales'
-  | 'top_purchased_products'
-  | 'products_by_purchase_cost'
-  | 'purchase_customers_by_paid_amount'
-  | 'sales_by_cashier';
-type BusinessDateRange = {
-  from: string;
-  to: string;
-  label?: string;
-};
-type BusinessGraphComparisonPeriod = {
-  label: string;
-  from: string;
-  to: string;
-};
+type BusinessGraphSubject = (typeof BUSINESS_GRAPH_SUBJECTS)[number];
+type BusinessDateRange = { from: string; to: string; label?: string };
+type BusinessGraphComparisonPeriod = BusinessDateRange & { label: string };
 type DashboardGraphMetric = {
   label: string;
   valueFormat: 'currency' | 'number';
@@ -137,6 +129,18 @@ type GraphDefinition = {
   yAxisLabel: string;
   valueFormat: AiAssistantGraph['valueFormat'];
   loadRows: () => Promise<GraphRow[]>;
+};
+type TransactionItem = {
+  product: { id: string; name?: string };
+  quantity?: number;
+  unitPrice?: number;
+};
+type TransactionSummaryRecord = {
+  id: string;
+  status: string;
+  customer?: { name?: string };
+  createdAt?: Date;
+  items: { getItems: () => TransactionItem[] };
 };
 
 const DASHBOARD_SUBJECT_METRICS: Partial<
@@ -225,40 +229,21 @@ export function createAiAssistantTools({
       inputSchema: z.object({
         dateRange: DATE_RANGE_INPUT,
       }),
-      execute: async ({ dateRange }) => {
-        const stats = await dashboardService.getDashboardStats(
-          store,
-          employeeId,
-          {
-            range: DashboardRange.CUSTOM,
-            from: dateRange.from,
-            to: dateRange.to,
-          },
-        );
-        return { scope, stats };
-      },
+      execute: async ({ dateRange }) => ({
+        scope,
+        stats: await dashboardService.getDashboardStats(store, employeeId, {
+          range: DashboardRange.CUSTOM,
+          from: dateRange.from,
+          to: dateRange.to,
+        }),
+      }),
     }),
 
     createBusinessGraph: tool({
       description:
         'Create one verified graph from current-store data. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, current inventory quantity, customers by paid sales, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier. Supply an explicit dateRange for a time-based graph, or comparisonPeriods for a comparison. Omit dateRange only when all available history is intended or when graphing current inventory. Historical comparisons work for time-based subjects; inventory quantity is a current snapshot.',
       inputSchema: z.object({
-        subject: z.enum([
-          'dashboard_sales',
-          'dashboard_profit',
-          'dashboard_cash_in',
-          'dashboard_cash_out',
-          'dashboard_sessions_opened',
-          'dashboard_sessions_closed',
-          'top_selling_products',
-          'products_by_sold_value',
-          'inventory_by_quantity',
-          'customers_by_paid_sales',
-          'top_purchased_products',
-          'products_by_purchase_cost',
-          'purchase_customers_by_paid_amount',
-          'sales_by_cashier',
-        ]),
+        subject: z.enum(BUSINESS_GRAPH_SUBJECTS),
         dateRange: DATE_RANGE_INPUT.optional(),
         comparisonPeriods: z
           .array(COMPARISON_PERIOD_INPUT)
@@ -273,26 +258,16 @@ export function createAiAssistantTools({
           .optional()
           .default('bar'),
       }),
-      execute: async ({
-        subject,
-        dateRange,
-        comparisonPeriods,
-        limit,
-        type,
-      }) => {
-        const graph = await createBusinessGraph({
+      execute: async (input) => ({
+        scope,
+        graph: await createBusinessGraph({
           dashboardService,
           em,
           store,
           employeeId,
-          subject,
-          dateRange,
-          comparisonPeriods,
-          limit,
-          type,
-        });
-        return { scope, graph };
-      },
+          ...input,
+        }),
+      }),
     }),
 
     searchProducts: tool({
@@ -462,26 +437,12 @@ export function createAiAssistantTools({
       description:
         'Return the exact current count for a CRUD resource in the verified store. Use this for employees, categories, payments, stock-ins, stock-outs, stock movements, cash movements, receipts, or journal entries.',
       inputSchema: z.object({
-        resource: z.enum([
-          'employees',
-          'categories',
-          'payments',
-          'stock_ins',
-          'stock_outs',
-          'stock_movements',
-          'cash_movements',
-          'receipts',
-          'journal_entries',
-        ]),
+        resource: z.enum(LIVE_ENTITY_RESOURCES),
       }),
       execute: async ({ resource }) => ({
         scope,
         resource,
-        totalCount: await getLiveEntityCount(
-          em,
-          storeWhere,
-          resource as LiveEntityResource,
-        ),
+        totalCount: await getLiveEntityCount(em, storeWhere, resource),
       }),
     }),
 
@@ -490,7 +451,6 @@ export function createAiAssistantTools({
         'Get all sales totals, status breakdown, recent sales, and top products for the current logged-in employee.',
       inputSchema: LIMIT_INPUT,
       execute: async ({ limit }) => {
-        const take = limit;
         const saleIds = await getEmployeeSaleIds(em, store, employeeId);
         const sales = saleIds.length
           ? await em.find(
@@ -506,71 +466,15 @@ export function createAiAssistantTools({
               },
             )
           : [];
-
-        const statusBreakdown = sales.reduce<Record<string, number>>(
-          (summary, sale) => {
-            summary[sale.status] = (summary[sale.status] ?? 0) + 1;
-            return summary;
-          },
-          {},
-        );
-        const productTotals = new Map<
-          string,
-          {
-            productId: string;
-            name?: string;
-            quantity: number;
-            sales: number;
-          }
-        >();
-
-        for (const sale of sales) {
-          for (const item of sale.items.getItems()) {
-            const productId = item.product.id;
-            const current = productTotals.get(productId) ?? {
-              productId,
-              name: item.product.name,
-              quantity: 0,
-              sales: 0,
-            };
-            current.quantity += item.quantity ?? 0;
-            current.sales += (item.quantity ?? 0) * (item.unitPrice ?? 0);
-            productTotals.set(productId, current);
-          }
-        }
+        const summary = summarizeTransactions(sales, limit, true);
 
         return {
           scope,
-          count: sales.length,
-          totalSales: sales.reduce(
-            (sum, sale) =>
-              sum +
-              sale.items
-                .getItems()
-                .reduce(
-                  (itemSum, item) =>
-                    itemSum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
-                  0,
-                ),
-            0,
-          ),
-          statusBreakdown,
-          topProducts: Array.from(productTotals.values())
-            .sort((a, b) => b.sales - a.sales)
-            .slice(0, take),
-          recentSales: sales.slice(0, take).map((sale) => ({
-            id: sale.id,
-            status: sale.status,
-            customerName: sale.customer?.name,
-            total: sale.items
-              .getItems()
-              .reduce(
-                (sum, item) =>
-                  sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
-                0,
-              ),
-            createdAt: sale.createdAt,
-          })),
+          count: summary.count,
+          totalSales: summary.total,
+          statusBreakdown: summary.statusBreakdown,
+          topProducts: summary.topProducts,
+          recentSales: summary.recentTransactions,
         };
       },
     }),
@@ -580,69 +484,31 @@ export function createAiAssistantTools({
         'Get all purchase totals, status breakdown, recent purchases, and purchased products for the current logged-in employee.',
       inputSchema: LIMIT_INPUT,
       execute: async ({ limit }) => {
-        const take = limit;
         const purchaseIds = await getEmployeeCreatedEntityIds(
           em,
           store,
           employeeId,
           AuditEntityType.Purchase,
         );
-
-        if (!purchaseIds.length) {
-          return {
-            scope,
-            count: 0,
-            totalPurchases: 0,
-            statusBreakdown: {},
-            recentPurchases: [],
-          };
-        }
-
-        const purchases = await em.find(
-          Purchase,
-          {
-            store: storeWhere,
-            id: { $in: purchaseIds },
-          },
-          {
-            populate: ['items', 'items.product', 'customer'],
-            orderBy: { createdAt: 'DESC' },
-            refresh: true,
-          },
-        );
-
-        const statusBreakdown = purchases.reduce<Record<string, number>>(
-          (summary, purchase) => {
-            summary[purchase.status] = (summary[purchase.status] ?? 0) + 1;
-            return summary;
-          },
-          {},
-        );
+        const purchases = purchaseIds.length
+          ? await em.find(
+              Purchase,
+              { store: storeWhere, id: { $in: purchaseIds } },
+              {
+                populate: ['items', 'items.product', 'customer'],
+                orderBy: { createdAt: 'DESC' },
+                refresh: true,
+              },
+            )
+          : [];
+        const summary = summarizeTransactions(purchases, limit);
 
         return {
           scope,
-          count: purchases.length,
-          totalPurchases: purchases.reduce(
-            (sum, purchase) =>
-              sum +
-              purchase.items
-                .getItems()
-                .reduce(
-                  (itemSum, item) => itemSum + item.quantity * item.unitPrice,
-                  0,
-                ),
-            0,
-          ),
-          statusBreakdown,
-          recentPurchases: purchases.slice(0, take).map((purchase) => ({
-            id: purchase.id,
-            status: purchase.status,
-            customerName: purchase.customer?.name,
-            total: purchase.items
-              .getItems()
-              .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
-            createdAt: purchase.createdAt,
-          })),
+          count: summary.count,
+          totalPurchases: summary.total,
+          statusBreakdown: summary.statusBreakdown,
+          recentPurchases: summary.recentTransactions,
         };
       },
     }),
@@ -808,6 +674,66 @@ export function createAiAssistantTools({
   };
 }
 
+function summarizeTransactions(
+  transactions: TransactionSummaryRecord[],
+  limit: number,
+  includeTopProducts = false,
+) {
+  const statusBreakdown: Record<string, number> = {};
+  const productTotals = new Map<
+    string,
+    { productId: string; name?: string; quantity: number; sales: number }
+  >();
+  let total = 0;
+
+  for (const transaction of transactions) {
+    statusBreakdown[transaction.status] =
+      (statusBreakdown[transaction.status] ?? 0) + 1;
+    const transactionTotal = transaction.items
+      .getItems()
+      .reduce((sum, item) => {
+        const quantity = item.quantity ?? 0;
+        const itemTotal = quantity * (item.unitPrice ?? 0);
+        if (includeTopProducts) {
+          const product = productTotals.get(item.product.id) ?? {
+            productId: item.product.id,
+            name: item.product.name,
+            quantity: 0,
+            sales: 0,
+          };
+          product.quantity += quantity;
+          product.sales += itemTotal;
+          productTotals.set(product.productId, product);
+        }
+        return sum + itemTotal;
+      }, 0);
+    total += transactionTotal;
+  }
+
+  return {
+    count: transactions.length,
+    total,
+    statusBreakdown,
+    topProducts: includeTopProducts
+      ? [...productTotals.values()]
+          .sort((first, second) => second.sales - first.sales)
+          .slice(0, limit)
+      : [],
+    recentTransactions: transactions.slice(0, limit).map((transaction) => ({
+      id: transaction.id,
+      status: transaction.status,
+      customerName: transaction.customer?.name,
+      total: transaction.items
+        .getItems()
+        .reduce(
+          (sum, item) => sum + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+          0,
+        ),
+      createdAt: transaction.createdAt,
+    })),
+  };
+}
+
 async function createBusinessGraph({
   dashboardService,
   em,
@@ -845,7 +771,9 @@ async function createBusinessGraph({
 
   if (dashboardMetricName) {
     if (!dateRange) {
-      throw new Error('An explicit dateRange is required for dashboard graph metrics.');
+      throw new Error(
+        'An explicit dateRange is required for dashboard graph metrics.',
+      );
     }
 
     const metric = DASHBOARD_GRAPH_METRICS[dashboardMetricName];
@@ -1057,7 +985,9 @@ async function createBusinessComparisonGraph({
   type: AiAssistantGraph['type'];
 }): Promise<AiAssistantGraph> {
   if (subject === 'inventory_by_quantity') {
-    throw new Error('Inventory quantity is a live snapshot and cannot be compared across historical periods.');
+    throw new Error(
+      'Inventory quantity is a live snapshot and cannot be compared across historical periods.',
+    );
   }
 
   const graphs = await Promise.all(
@@ -1081,7 +1011,10 @@ async function createBusinessComparisonGraph({
     return toGraph(
       periods.map((period, index) => ({
         label: period.label,
-        value: graphs[index].datasets[0].data.reduce((total, value) => total + value, 0),
+        value: graphs[index].datasets[0].data.reduce(
+          (total, value) => total + value,
+          0,
+        ),
       })),
       {
         type,
