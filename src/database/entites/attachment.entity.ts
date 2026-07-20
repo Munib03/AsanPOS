@@ -4,12 +4,17 @@ import { AttachmentEntityType } from '../../shared/utils/attachment-entity-type.
 
 @Entity({ tableName: 'attachments' })
 export class Attachment {
-
   @PrimaryKey({ type: 'uuid' })
   id: string = uuidv4();
 
+  @Property({ nullable: false })
+  fileUrl!: string;
+
   @Property({ nullable: true })
-  imageUrl?: string;
+  fileName?: string;
+
+  @Property({ nullable: true })
+  mimeType?: string;
 
   @Property({ type: 'uuid', nullable: true })
   entityId?: string;
@@ -17,15 +22,15 @@ export class Attachment {
   @Property({ type: 'string', nullable: false })
   entityType!: AttachmentEntityType;
 
-  @Property({ nullable: true, fieldName: "claimed_at" })
+  @Property({ nullable: true, fieldName: 'claimed_at' })
   claimedAt?: Date;
-  
+
   @Property({ defaultRaw: 'now()', nullable: true })
   createdAt?: Date;
-  
+
   @Property({ onUpdate: () => new Date(), defaultRaw: 'now()', nullable: true })
   updatedAt?: Date;
-  
+
   @Property({ persist: false })
   signedUrl?: string;
 }

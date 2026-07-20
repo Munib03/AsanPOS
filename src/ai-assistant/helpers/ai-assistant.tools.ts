@@ -69,7 +69,6 @@ const CUSTOMER_INSIGHT_INPUT = z.object({
     .describe('Set true only when the user asks about customer profit.'),
   limit: TOOL_LIMIT,
 });
-
 export const LIVE_ENTITY_RESOURCES = [
   'employees',
   'categories',
@@ -108,6 +107,38 @@ export const DASHBOARD_GRAPH_METRIC_NAMES = [
   'sessions_closed',
 ] as const;
 
+const BUSINESS_GRAPH_INPUT = z.object({
+  subject: z.enum(BUSINESS_GRAPH_SUBJECTS).optional(),
+  metrics: z
+    .array(z.enum(DASHBOARD_GRAPH_METRIC_NAMES))
+    .min(2)
+    .max(DASHBOARD_GRAPH_METRIC_NAMES.length)
+    .optional()
+    .describe(
+      'Use for one graph with multiple compatible dashboard metrics over the same dateRange, for example sales and profit. Every selected metric must use the same value format.',
+    ),
+  dateRange: DATE_RANGE_INPUT.optional(),
+  comparisonPeriods: z
+    .array(COMPARISON_PERIOD_INPUT)
+    .min(2)
+    .optional()
+    .describe(
+      'Use only when the request compares two or more time periods. Send every requested period here, with exact dates and labels, to create one graph. This supports arbitrary comparison periods for every time-based subject.',
+    ),
+  limit: z.number().int().min(1).max(20).optional().default(10),
+  type: z.enum(['line', 'bar', 'pie', 'doughnut']).optional().default('bar'),
+});
+const BUSINESS_PDF_INPUT = BUSINESS_GRAPH_INPUT.extend({
+  title: z.string().min(1).optional().describe('Optional exact PDF title.'),
+  includeGraph: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Set true only when the user explicitly asks for a graph in the PDF.',
+    ),
+});
+
 export type LiveEntityResource = (typeof LIVE_ENTITY_RESOURCES)[number];
 export type BusinessGraphSubject = (typeof BUSINESS_GRAPH_SUBJECTS)[number];
 export type DashboardGraphMetricName =
@@ -131,6 +162,10 @@ export type BusinessGraphInput = {
   comparisonPeriods?: BusinessGraphComparisonPeriod[];
   limit: number;
   type: AiAssistantGraph['type'];
+};
+export type BusinessPdfInput = BusinessGraphInput & {
+  title?: string;
+  includeGraph: boolean;
 };
 
 interface CreateAiAssistantToolsParams {
@@ -173,33 +208,20 @@ export function createAiAssistantTools({
     createBusinessGraph: tool({
       description:
         'Create exactly one verified graph from current-store data. Use subject for one business measure. Use comparisonPeriods with one subject to compare that same measure across two or more requested periods in one graph. Use metrics with an explicit dateRange to put two or more compatible dashboard measures, such as sales and profit, into one graph as separate datasets. Do not use metrics and comparisonPeriods together. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, current inventory quantity, customer paid sales, customer profit, customer paid sales and profit in the same chart, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier.',
-      inputSchema: z.object({
-        subject: z.enum(BUSINESS_GRAPH_SUBJECTS).optional(),
-        metrics: z
-          .array(z.enum(DASHBOARD_GRAPH_METRIC_NAMES))
-          .min(2)
-          .max(DASHBOARD_GRAPH_METRIC_NAMES.length)
-          .optional()
-          .describe(
-            'Use for one graph with multiple compatible dashboard metrics over the same dateRange, for example sales and profit. Every selected metric must use the same value format.',
-          ),
-        dateRange: DATE_RANGE_INPUT.optional(),
-        comparisonPeriods: z
-          .array(COMPARISON_PERIOD_INPUT)
-          .min(2)
-          .optional()
-          .describe(
-            'Use only when the request compares two or more time periods. Send every requested period here, with exact dates and labels, to create one graph. This supports arbitrary comparison periods for every time-based subject.',
-          ),
-        limit: z.number().int().min(1).max(20).optional().default(10),
-        type: z
-          .enum(['line', 'bar', 'pie', 'doughnut'])
-          .optional()
-          .default('bar'),
-      }),
+      inputSchema: BUSINESS_GRAPH_INPUT,
       execute: async (input) => ({
         scope,
         graph: await data.createBusinessGraph(input),
+      }),
+    }),
+
+    createBusinessPdf: tool({
+      description:
+        'Create exactly one backend-generated PDF from verified current-store data. It always includes a summary and data table. Set includeGraph to true only when the user explicitly asks for a graph or chart inside the PDF. Use subject for one measure, comparisonPeriods for one measure across multiple periods, or metrics for multiple compatible dashboard measures over one date range. Do not use metrics and comparisonPeriods together.',
+      inputSchema: BUSINESS_PDF_INPUT,
+      execute: async (input) => ({
+        scope,
+        pdf: await data.createBusinessPdf(input),
       }),
     }),
 

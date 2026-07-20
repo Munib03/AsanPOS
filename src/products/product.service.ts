@@ -208,7 +208,7 @@ export class ProductService {
     const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
 
     if (image.imageUrl)
-      await this.attachmentService.deleteAttachmentByUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
+      await this.attachmentService.deleteAttachmentByFileUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
 
     this.auditService.log(
       this.em, employee, AuditEntityType.Product, image.product.id, AuditActionType.Delete,
@@ -226,7 +226,7 @@ export class ProductService {
     const attachments = await this.em.findAll(Attachment, { where: { id: { $in: attachmentIds } } });
 
     attachments.forEach((attachment) =>
-      this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
+      this.em.create(ProductImage, { product, imageUrl: attachment.fileUrl }),
     );
   }
 

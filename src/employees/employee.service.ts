@@ -217,7 +217,7 @@ export class EmployeeService {
         employee.id,
         AttachmentEntityType.EMPLOYEE,
       );
-      employee.imageUrl = attachment.imageUrl;
+      employee.imageUrl = attachment.fileUrl;
     }
 
     if (dto.password) {
@@ -350,7 +350,7 @@ export class EmployeeService {
     if (!employee.imageUrl)
       throw new NotFoundException(`Employee has no profile picture`);
 
-    await this.attachmentService.deleteAttachmentByUrl(
+    await this.attachmentService.deleteAttachmentByFileUrl(
       employee.imageUrl,
       AttachmentEntityType.EMPLOYEE,
     );
