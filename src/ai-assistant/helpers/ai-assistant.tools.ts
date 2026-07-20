@@ -10,11 +10,16 @@ import { Employee } from '../../database/entites/employee.entity';
 import { JournalEntry } from '../../database/entites/journal-entry.entity';
 import { Payment } from '../../database/entites/payments.entity';
 import { Receipt } from '../../database/entites/receipt.entity';
+import { Product } from '../../database/entites/product.entity';
 import { StockIn } from '../../database/entites/stock-in.entity';
 import { StockMovement } from '../../database/entites/stock-movement.entity';
 import { StockOut } from '../../database/entites/stock-out.entity';
 import { Store } from '../../database/entites/store.entity';
 import { StoreSession } from '../../database/entites/store-session.entity';
+import { AuditService } from '../../audit/audit.service';
+import { SequenceService } from '../../sequence/sequence.service';
+import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
+import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
 import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
 import type { AiAssistantGraph } from './ai-assistant.response.schema';
 import { createAiAssistantBusinessData } from './ai-assistant.business-data';
@@ -43,6 +48,14 @@ const PRODUCT_FILTER_FIELDS = {
     .optional(),
 };
 const PRODUCT_QUERY_INPUT = z.object(PRODUCT_FILTER_FIELDS);
+const PRODUCT_CATEGORY_INPUT = z.object({
+  categoryName: z.string().trim().min(1).max(255),
+});
+const CREATE_PRODUCT_INPUT = z.object({
+  name: z.string().trim().min(1).max(255),
+  price: z.number().finite().nonnegative(),
+  categoryName: z.string().trim().min(1).max(255),
+});
 const DATE_RANGE_INPUT = z.object({
   from: z
     .string()
@@ -173,6 +186,8 @@ interface CreateAiAssistantToolsParams {
   em: EntityManager;
   store: Store;
   employeeId: string;
+  auditService: AuditService;
+  sequenceService: SequenceService;
 }
 
 export function createAiAssistantTools({
@@ -180,6 +195,8 @@ export function createAiAssistantTools({
   em,
   store,
   employeeId,
+  auditService,
+  sequenceService,
 }: CreateAiAssistantToolsParams) {
   const storeWhere = { id: store.id };
   const scope = { storeId: store.id, storeName: store.name };
@@ -189,7 +206,14 @@ export function createAiAssistantTools({
     store,
     employeeId,
   });
-
+  const getCurrentEmployee = async () => {
+    const employee = await em.findOne(Employee, {
+      id: employeeId,
+      store: storeWhere,
+    });
+    if (!employee) throw new Error('Employee not found');
+    return employee;
+  };
   return {
     getDashboardStats: tool({
       description:
@@ -237,6 +261,81 @@ export function createAiAssistantTools({
         scope,
         ...(await data.searchProducts(input)),
       }),
+    }),
+
+    getProductCategory: tool({
+      description:
+        'Verify whether one product category is available in the verified store. Use this before creating a product when the user gives a category name. Do not create a category.',
+      inputSchema: PRODUCT_CATEGORY_INPUT,
+      execute: async ({ categoryName }) => {
+        const category = await em.findOne(Category, {
+          name: { $ilike: categoryName },
+          store: storeWhere,
+        });
+
+        return {
+          scope,
+          available: Boolean(category),
+          category: category ? { id: category.id, name: category.name } : null,
+        };
+      },
+    }),
+
+    createProduct: tool({
+      description:
+        'Create one product in the verified store. Call only after the user has supplied a name, non-negative selling price, and category. The category is checked again here, and no product is created when it is unavailable.',
+      inputSchema: CREATE_PRODUCT_INPUT,
+      execute: async ({ name, price, categoryName }) => {
+        const category = await em.findOne(Category, {
+          name: { $ilike: categoryName },
+          store: storeWhere,
+        });
+        if (!category)
+          return {
+            scope,
+            created: false,
+            message: `Category "${categoryName}" is not available in this store.`,
+          };
+
+        const sequence = await sequenceService.generateSequence(
+          store,
+          'Product',
+          'PDT',
+        );
+        const product = em.create(Product, {
+          name,
+          price,
+          sequence,
+          store,
+          updatedAt: null,
+        });
+        product.categories.add(category);
+
+        const employee = await getCurrentEmployee();
+
+        auditService.log(
+          em,
+          employee,
+          AuditEntityType.Product,
+          product.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.persistAndFlush(product);
+
+        return {
+          scope,
+          created: true,
+          product: {
+            id: product.id,
+            name,
+            price,
+            category: { id: category.id, name: category.name },
+            productCode: sequenceService.formatSequence(sequence),
+          },
+        };
+      },
     }),
 
     getProductCount: tool({
