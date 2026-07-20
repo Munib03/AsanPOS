@@ -3,10 +3,13 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { DashboardService } from '../../dashboard/dashboard.service';
 import { DashboardRange } from '../../dashboard/dto/dashboard.dto';
+import { Account } from '../../database/entites/account.entity';
 import { AuditLog } from '../../database/entites/audit-log.entity';
 import { CashMovement } from '../../database/entites/cash-movement.entity';
 import { Category } from '../../database/entites/category.entity';
+import { Customer } from '../../database/entites/customer.entity';
 import { Employee } from '../../database/entites/employee.entity';
+import { Inventory } from '../../database/entites/inventory.entity';
 import { JournalEntry } from '../../database/entites/journal-entry.entity';
 import { Payment } from '../../database/entites/payments.entity';
 import { Receipt } from '../../database/entites/receipt.entity';
@@ -55,6 +58,18 @@ const CREATE_PRODUCT_INPUT = z.object({
   name: z.string().trim().min(1).max(255),
   price: z.number().finite().nonnegative(),
   categoryName: z.string().trim().min(1).max(255),
+});
+const CREATE_CATEGORY_INPUT = z.object({
+  name: z.string().trim().min(1).max(255),
+});
+const CREATE_INVENTORY_INPUT = z.object({
+  name: z.string().trim().min(1).max(255),
+  address: z.string().trim().min(1).max(255),
+});
+const CREATE_CUSTOMER_INPUT = z.object({
+  name: z.string().trim().min(1).max(255),
+  phone: z.string().trim().min(1).max(255),
+  address: z.string().trim().min(1).max(255),
 });
 const DATE_RANGE_INPUT = z.object({
   from: z
@@ -206,8 +221,8 @@ export function createAiAssistantTools({
     store,
     employeeId,
   });
-  const getCurrentEmployee = async () => {
-    const employee = await em.findOne(Employee, {
+  const getCurrentEmployee = async (manager = em) => {
+    const employee = await manager.findOne(Employee, {
       id: employeeId,
       store: storeWhere,
     });
@@ -261,6 +276,43 @@ export function createAiAssistantTools({
         scope,
         ...(await data.searchProducts(input)),
       }),
+    }),
+
+    createCategory: tool({
+      description:
+        'Create one category in the verified store after the user supplies its name. Do not create a product with it unless the user separately asks for a product.',
+      inputSchema: CREATE_CATEGORY_INPUT,
+      execute: async ({ name }) => {
+        const existing = await em.findOne(Category, {
+          name,
+          store: storeWhere,
+        });
+        if (existing)
+          return {
+            scope,
+            created: false,
+            message: `Category "${name}" already exists in this store.`,
+          };
+
+        const category = em.create(Category, { name, store });
+        await em.persistAndFlush(category);
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Category,
+          category.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.flush();
+
+        return {
+          scope,
+          created: true,
+          category: { id: category.id, name: category.name },
+        };
+      },
     }),
 
     getProductCategory: tool({
@@ -361,6 +413,47 @@ export function createAiAssistantTools({
       }),
     }),
 
+    createInventory: tool({
+      description:
+        'Create one inventory in the verified store after the user supplies its name and address. An inventory starts empty; do not add products or stock unless the user separately asks.',
+      inputSchema: CREATE_INVENTORY_INPUT,
+      execute: async ({ name, address }) => {
+        const existing = await em.findOne(Inventory, {
+          name,
+          store: storeWhere,
+        });
+        if (existing)
+          return {
+            scope,
+            created: false,
+            message: `Inventory "${name}" already exists in this store.`,
+          };
+
+        const inventory = em.create(Inventory, { name, address, store });
+        await em.persistAndFlush(inventory);
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Inventory,
+          inventory.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.flush();
+
+        return {
+          scope,
+          created: true,
+          inventory: {
+            id: inventory.id,
+            name: inventory.name,
+            address: inventory.address,
+          },
+        };
+      },
+    }),
+
     getLiveEntityCount: tool({
       description:
         'Return the exact current count for a CRUD resource in the verified store. Use this for employees, categories, payments, stock-ins, stock-outs, stock movements, cash movements, receipts, or journal entries.',
@@ -400,6 +493,68 @@ export function createAiAssistantTools({
         scope,
         ...(await data.getCustomerSummary(input)),
       }),
+    }),
+
+    createCustomer: tool({
+      description:
+        'Create one customer in the verified store after the user supplies a name, phone number, and address. It also creates the customer payable and receivable accounts. Do not create a customer when the phone number already belongs to a customer in this store.',
+      inputSchema: CREATE_CUSTOMER_INPUT,
+      execute: async ({ name, phone, address }) =>
+        em.transactional(async (transactionalEm) => {
+          const existing = await transactionalEm.findOne(Customer, {
+            phone,
+            store: storeWhere,
+          });
+          if (existing)
+            return {
+              scope,
+              created: false,
+              message: `Customer with phone "${phone}" already exists in this store.`,
+            };
+
+          const payable = transactionalEm.create(Account, {
+            name: `${name} - Accounts Payable`,
+            type: 'liability',
+          });
+          const receivable = transactionalEm.create(Account, {
+            name: `${name} - Accounts Receivable`,
+            type: 'asset',
+          });
+          transactionalEm.persist(payable);
+          transactionalEm.persist(receivable);
+
+          const customer = transactionalEm.create(Customer, {
+            name,
+            phone,
+            address,
+            store,
+            payable,
+            receivable,
+          });
+          await transactionalEm.persistAndFlush(customer);
+
+          auditService.log(
+            transactionalEm,
+            await getCurrentEmployee(transactionalEm),
+            AuditEntityType.Customer,
+            customer.id,
+            AuditActionType.Create,
+            null,
+            null,
+          );
+          await transactionalEm.flush();
+
+          return {
+            scope,
+            created: true,
+            customer: {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              address: customer.address,
+            },
+          };
+        }),
     }),
 
     getOpenSessions: tool({
