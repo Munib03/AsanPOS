@@ -8,29 +8,24 @@ import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
-import * as paginateQueryTypes from '../shared/types/paginate-query.types';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class ReportController {
-    constructor(private readonly reportService: ReportService) { }
+  constructor(private readonly reportService: ReportService) {}
 
-    @Get()
-    getReport(
-        @CurrentStore() store: Store,
-        @Query() reportQuery: ReportQueryDto,
-        @Query() query: paginateQueryTypes.PaginateQuery,
-    ) {
-        return this.reportService.getReport(store, reportQuery, query);
-    }
+  @Get()
+  getReport(@CurrentStore() store: Store, @Query() query: ReportQueryDto) {
+    return this.reportService.getReport(store, query, query);
+  }
 
-    @Get('export')
-    async exportReport(
-        @CurrentStore() store: Store,
-        @Query() exportQuery: ReportExportQueryDto,
-        @Res() res: express.Response,
-    ) {
-        return this.reportService.exportReport(store, exportQuery, res);
-    }
+  @Get('export')
+  async exportReport(
+    @CurrentStore() store: Store,
+    @Query() exportQuery: ReportExportQueryDto,
+    @Res() res: express.Response,
+  ) {
+    return this.reportService.exportReport(store, exportQuery, res);
+  }
 }

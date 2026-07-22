@@ -18,7 +18,7 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { CreateStockInDto } from './dto/create-stock-in.dto';
 import { UpdateStockInDto } from './dto/update-stock-in.dto';
-import type { PaginateQuery } from '../shared/types/paginate-query.types';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('stock-in')
 @UseGuards(JwtAuthGuard, RolesGuard)

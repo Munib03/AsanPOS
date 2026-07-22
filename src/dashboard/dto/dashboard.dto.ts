@@ -1,4 +1,5 @@
-import { IsDateString, IsEnum, IsNumberString, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsEnum, IsInt, IsOptional, Min } from 'class-validator';
 
 export enum DashboardRange {
   TODAY = 'today',
@@ -22,20 +23,28 @@ export class DashboardQueryDto {
   to?: string;
 
   @IsOptional()
-  @IsNumberString()
-  lowStockPage?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  lowStockPage?: number;
 
   @IsOptional()
-  @IsNumberString()
-  lowStockPageSize?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  lowStockPageSize?: number;
 
   @IsOptional()
-  @IsNumberString()
-  outOfStockPage?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  outOfStockPage?: number;
 
   @IsOptional()
-  @IsNumberString()
-  outOfStockPageSize?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  outOfStockPageSize?: number;
 }
 
 export interface StockPagination<T> {

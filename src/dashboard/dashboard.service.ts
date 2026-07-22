@@ -367,8 +367,8 @@ export class DashboardService {
   private async getStockPage(
     store: Store,
     stockWhere: Record<string, unknown>,
-    rawPage: string | undefined,
-    rawPageSize: string | undefined,
+    rawPage: number | undefined,
+    rawPageSize: number | undefined,
     orderBy: Record<string, 'ASC' | 'DESC'>,
   ) {
     const page = this.getPage(rawPage);
@@ -403,15 +403,15 @@ export class DashboardService {
     inventoryName: record.inventory.name ?? '',
   });
 
-  private getPage(rawValue?: string): number {
-    const value = Number(rawValue);
+  private getPage(rawValue?: number): number {
+    const value = rawValue ?? DashboardService.DEFAULT_STOCK_PAGE;
     if (!Number.isInteger(value) || value <= 0)
       return DashboardService.DEFAULT_STOCK_PAGE;
     return value;
   }
 
-  private getPageSize(rawValue?: string): number {
-    const value = Number(rawValue);
+  private getPageSize(rawValue?: number): number {
+    const value = rawValue ?? DashboardService.DEFAULT_STOCK_PAGE_SIZE;
     if (!Number.isInteger(value) || value <= 0)
       return DashboardService.DEFAULT_STOCK_PAGE_SIZE;
     return Math.min(value, DashboardService.MAX_STOCK_PAGE_SIZE);

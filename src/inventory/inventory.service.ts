@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
+import { InventoryDetailQueryDto } from './dto/inventory-detail-query.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
 import { AuditLog } from '../database/entites/audit-log.entity';
@@ -21,11 +22,6 @@ import { MinioService } from '../shared/services/minio.service';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { normalizePagination } from '../shared/utils/pagination';
-
-type InventoryDetailQuery = PaginateQuery & {
-  stockMovementAuditPage?: number;
-  stockMovementAuditItemsPerPage?: number;
-};
 
 @Injectable()
 export class InventoryService {
@@ -77,7 +73,7 @@ export class InventoryService {
     };
   }
 
-  async findOne(store: Store, id: string, query: InventoryDetailQuery = {}) {
+  async findOne(store: Store, id: string, query: InventoryDetailQueryDto = {}) {
     const inventory = await this.em.findOne(
       Inventory,
       { id, store },
@@ -104,7 +100,7 @@ export class InventoryService {
   private async getPaginatedInventoryProducts(
     store: Store,
     inventoryId: string,
-    query: InventoryDetailQuery,
+    query: InventoryDetailQueryDto,
   ) {
     const { currentPage, limit, offset } = normalizePagination(
       query.page,
@@ -160,7 +156,7 @@ export class InventoryService {
   private async getPaginatedStockMovementAudits(
     store: Store,
     inventoryId: string,
-    query: InventoryDetailQuery,
+    query: InventoryDetailQueryDto,
   ) {
     const { currentPage, limit, offset } = normalizePagination(
       query.stockMovementAuditPage,
