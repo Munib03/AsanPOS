@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsDateString,
   IsNumberString,
+  IsUUID,
   Length,
   MaxLength,
   MinLength,
@@ -52,6 +53,10 @@ export class CreateEmployeeDto {
   @IsString()
   @MaxLength(2048)
   imageUrl?: string;
+
+  @IsOptional()
+  @IsUUID()
+  attachmentId?: string;
 
   @IsOptional()
   @IsEnum(EmployeeGender)

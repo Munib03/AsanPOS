@@ -149,10 +149,20 @@ export class EmployeeService {
       role: dto.role ?? Role.Cashier,
       gender: dto.gender,
       dob: dto.dob,
-      imageUrl: dto.imageUrl,
       password: hashedPassword,
       store,
     });
+
+    if (dto.attachmentId) {
+      const attachment = await this.attachmentService.claimAttachment(
+        dto.attachmentId,
+        employee.id,
+        AttachmentEntityType.EMPLOYEE,
+      );
+      employee.imageUrl = attachment.fileUrl;
+    } else {
+      employee.imageUrl = dto.imageUrl;
+    }
 
     const code = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -182,7 +192,10 @@ export class EmployeeService {
   async remove(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
+      throw new NotFoundException(`Employee with id ${id} not found!`);
+
+    if (employee.role === 'Admin')
+      throw new BadRequestException('Admin employee cannot be deleted!');
 
     employee.deletedAt = new Date();
 
