@@ -13,6 +13,8 @@ import { Store } from '../database/entites/store.entity';
 import { SecurityAction } from '../database/entites/securityAction.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import * as OTPAuth from 'otpauth';
@@ -20,11 +22,12 @@ import * as QRCode from 'qrcode';
 import { generateOTP } from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 import Redis from 'ioredis';
-import { create } from 'domain';
 import { Account } from '../database/entites/account.entity';
 import { StoreSettings } from '../database/entites/store-settings.entity';
 import { Role } from '../shared/utils/role.enum';
 import { Customer } from '../database/entites/customer.entity';
+
+const PASSWORD_RESET_ACTION = 'password-reset';
 
 @Injectable()
 export class AuthService {
@@ -237,6 +240,64 @@ export class AuthService {
       message: 'Email verified successfully',
       token: this.generateJWT(employee),
     };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const employee = await this.em.findOne(Employee, { email: dto.email });
+
+    if (!employee || employee.role !== Role.Admin) 
+      throw new BadRequestException('This employee with email ${dto.email} does not exist or is not an admin');
+
+    await this.em.nativeDelete(SecurityAction, {
+      employee,
+      actionType: PASSWORD_RESET_ACTION,
+    });
+
+    const code = generateOTP();
+    const securityAction = this.em.create(SecurityAction, {
+      employee,
+      actionType: PASSWORD_RESET_ACTION,
+      secret: await bcrypt.hash(code, 10),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      createdAt: new Date(),
+    });
+
+    await this.em.persistAndFlush(securityAction);
+    await this.queueService.sendVerificationEmail(employee.email, code);
+
+    return { message: "Reset code sent to your email. Please check your inbox." };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const employee = await this.em.findOne(Employee, { email: dto.email });
+    if (!employee || employee.role !== Role.Admin)
+      throw new BadRequestException('Invalid password reset request');
+
+    const securityAction = await this.em.findOne(
+      SecurityAction,
+      { employee, actionType: PASSWORD_RESET_ACTION },
+      { orderBy: { createdAt: 'DESC' } },
+    );
+    if (!securityAction?.secret)
+      throw new BadRequestException('Invalid password reset code');
+
+    if (securityAction.expiresAt && securityAction.expiresAt <= new Date()) {
+      await this.em.removeAndFlush(securityAction);
+      throw new BadRequestException('Password reset code has expired');
+    }
+
+    const isCodeValid = await bcrypt.compare(dto.code, securityAction.secret);
+    if (!isCodeValid)
+      throw new BadRequestException('Invalid password reset code');
+
+    employee.password = await bcrypt.hash(dto.newPassword, 10);
+    await this.em.nativeDelete(SecurityAction, {
+      employee,
+      actionType: PASSWORD_RESET_ACTION,
+    });
+    await this.em.flush();
+
+    return { message: 'Password reset successfully' };
   }
 
   async login(dto: LoginDto) {

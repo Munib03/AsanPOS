@@ -1,6 +1,5 @@
 import {
   Controller,
-  Get,
   Post,
   Body,
   Delete,
@@ -15,10 +14,12 @@ import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -31,6 +32,17 @@ export class AuthController {
     return this.authService.verifyRegister(dto);
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

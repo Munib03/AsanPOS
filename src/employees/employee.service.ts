@@ -354,7 +354,6 @@ export class EmployeeService {
     };
   }
 
-
   async deleteEmployeeImage(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
