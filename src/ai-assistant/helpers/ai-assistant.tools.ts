@@ -24,6 +24,7 @@ import { StoreSession } from '../../database/entites/store-session.entity';
 import { AuditService } from '../../audit/audit.service';
 import { CreateInventoryDto } from '../../inventory/dto/create-inventory.dto';
 import { CreateProductDto } from '../../products/dto/create-product.dto';
+import { UpdateProductDto } from '../../products/dto/update-product.dto';
 import { SequenceService } from '../../sequence/sequence.service';
 import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
 import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
@@ -63,6 +64,14 @@ const CREATE_PRODUCT_INPUT = z.object({
   name: z.string(),
   price: z.number(),
   categoryName: z.string(),
+});
+const PRODUCT_ID_INPUT = z.object({
+  productId: z.string().uuid(),
+});
+const UPDATE_PRODUCT_INPUT = PRODUCT_ID_INPUT.extend({
+  name: z.string().optional(),
+  price: z.number().optional(),
+  categoryName: z.string().optional(),
 });
 const CREATE_CATEGORY_INPUT = z.object({
   name: z.string(),
@@ -403,6 +412,166 @@ export function createAiAssistantTools({
             price,
             category: { id: category.id, name: category.name },
             productCode: sequenceService.formatSequence(sequence),
+          },
+        };
+      },
+    }),
+
+    updateProduct: tool({
+      description:
+        'Update one existing product in the verified store. First use searchProducts to identify the exact product and use its returned ID. Send only fields the user explicitly wants to change: name, price, or categoryName. When changing category, it must already exist in the verified store. Do not update product images or attachments.',
+      inputSchema: UPDATE_PRODUCT_INPUT,
+      execute: async ({ productId, ...input }) => {
+        const validation = await validateDto(UpdateProductDto, input);
+        if (!validation.valid)
+          return {
+            scope,
+            updated: false,
+            message: validation.errors.join(' '),
+          };
+
+        const dto = validation.value;
+        if (
+          dto.name === undefined &&
+          dto.price === undefined &&
+          dto.categoryName === undefined
+        )
+          return {
+            scope,
+            updated: false,
+            message: 'Provide at least one product field to update.',
+          };
+
+        const product = await em.findOne(
+          Product,
+          { id: productId, store: storeWhere },
+          { populate: ['categories'] },
+        );
+        if (!product)
+          return {
+            scope,
+            updated: false,
+            message: 'Product not found in this store.',
+          };
+
+        const category =
+          dto.categoryName === undefined
+            ? undefined
+            : await em.findOne(Category, {
+                name: { $ilike: dto.categoryName },
+                store: storeWhere,
+              });
+        if (dto.categoryName !== undefined && !category)
+          return {
+            scope,
+            updated: false,
+            message: `Category "${dto.categoryName}" is not available in this store.`,
+          };
+
+        const before: Record<string, unknown> = {};
+        const after: Record<string, unknown> = {};
+
+        if (dto.name !== undefined && dto.name !== product.name) {
+          before.name = product.name;
+          after.name = dto.name;
+          product.name = dto.name;
+        }
+
+        if (dto.price !== undefined && dto.price !== product.price) {
+          before.price = product.price;
+          after.price = dto.price;
+          product.price = dto.price;
+        }
+
+        const currentCategoryName = product.categories
+          .getItems()
+          .map((currentCategory) => currentCategory.name)
+          .join(', ');
+        if (category && category.name !== currentCategoryName) {
+          before.category = currentCategoryName;
+          after.category = category.name;
+          product.categories.set([category]);
+        }
+
+        const categories = product.categories
+          .getItems()
+          .map((currentCategory) => ({
+            id: currentCategory.id,
+            name: currentCategory.name,
+          }));
+        if (!Object.keys(before).length)
+          return {
+            scope,
+            updated: false,
+            message: 'The product already has the requested values.',
+            product: {
+              id: product.id,
+              name: product.name,
+              price: product.price,
+              categories,
+            },
+          };
+
+        product.updatedAt = new Date();
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Product,
+          product.id,
+          AuditActionType.Update,
+          before,
+          after,
+        );
+        await em.flush();
+
+        return {
+          scope,
+          updated: true,
+          product: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            categories,
+          },
+        };
+      },
+    }),
+
+    deleteProduct: tool({
+      description:
+        'Soft-delete one existing product in the verified store. First use searchProducts to identify the exact product and use its returned ID. Call only when the user explicitly asks to delete that product. Do not delete when the product is ambiguous.',
+      inputSchema: PRODUCT_ID_INPUT,
+      execute: async ({ productId }) => {
+        const product = await em.findOne(Product, {
+          id: productId,
+          store: storeWhere,
+        });
+        if (!product)
+          return {
+            scope,
+            deleted: false,
+            message: 'Product not found in this store.',
+          };
+
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Product,
+          product.id,
+          AuditActionType.Delete,
+          { name: product.name, price: product.price },
+          null,
+        );
+        product.deletedAt = new Date();
+        await em.flush();
+
+        return {
+          scope,
+          deleted: true,
+          product: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
           },
         };
       },
