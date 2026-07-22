@@ -15,19 +15,26 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { NewPasswordDto } from './dto/new-password.dto';
 import { VerifyDto } from '../employees/dto/verify.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
-import { generateOTP } from '../shared/utils/auth.utils';
+import {
+  generateOTP,
+  getAuthTokenVersionKey,
+} from '../shared/utils/auth.utils';
 import { QueueService } from '../queue/queue.service';
 import Redis from 'ioredis';
 import { Account } from '../database/entites/account.entity';
 import { StoreSettings } from '../database/entites/store-settings.entity';
 import { Role } from '../shared/utils/role.enum';
 import { Customer } from '../database/entites/customer.entity';
+import { randomUUID } from 'crypto';
 
 const PASSWORD_RESET_ACTION = 'password-reset';
+const PASSWORD_RESET_TOKEN_TTL_SECONDS = 5 * 60;
+const PASSWORD_RESET_TOKEN_KEY_PREFIX = 'auth:password-reset:';
 
 @Injectable()
 export class AuthService {
@@ -238,15 +245,17 @@ export class AuthService {
 
     return {
       message: 'Email verified successfully',
-      token: this.generateJWT(employee),
+      token: await this.generateJWT(employee),
     };
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
 
-    if (!employee || employee.role !== Role.Admin) 
-      throw new BadRequestException('This employee with email ${dto.email} does not exist or is not an admin');
+    if (!employee || employee.role !== Role.Admin)
+      throw new BadRequestException(
+        `Employee with email ${dto.email} not found or is not an admin`,
+      );
 
     await this.em.nativeDelete(SecurityAction, {
       employee,
@@ -265,10 +274,12 @@ export class AuthService {
     await this.em.persistAndFlush(securityAction);
     await this.queueService.sendVerificationEmail(employee.email, code);
 
-    return { message: "Reset code sent to your email. Please check your inbox." };
+    return {
+      message: 'Reset code sent to your email. Please check your inbox.',
+    };
   }
 
-  async resetPassword(dto: ResetPasswordDto) {
+  async verifyResetCode(dto: ResetPasswordDto) {
     const employee = await this.em.findOne(Employee, { email: dto.email });
     if (!employee || employee.role !== Role.Admin)
       throw new BadRequestException('Invalid password reset request');
@@ -290,12 +301,37 @@ export class AuthService {
     if (!isCodeValid)
       throw new BadRequestException('Invalid password reset code');
 
+    const resetToken = randomUUID();
+    await this.em.removeAndFlush(securityAction);
+    await this.redis.set(
+      `${PASSWORD_RESET_TOKEN_KEY_PREFIX}${resetToken}`,
+      employee.id,
+      'EX',
+      PASSWORD_RESET_TOKEN_TTL_SECONDS,
+    );
+
+    return {
+      message: 'Reset code verified successfully',
+      resetToken,
+    };
+  }
+
+  async setNewPassword(dto: NewPasswordDto) {
+    const employeeId = await this.redis.getdel(
+      `${PASSWORD_RESET_TOKEN_KEY_PREFIX}${dto.resetToken}`,
+    );
+    if (!employeeId)
+      throw new BadRequestException(
+        'Password reset session is invalid or expired',
+      );
+
+    const employee = await this.em.findOne(Employee, { id: employeeId });
+    if (!employee || employee.role !== Role.Admin)
+      throw new BadRequestException('Invalid password reset request');
+
     employee.password = await bcrypt.hash(dto.newPassword, 10);
-    await this.em.nativeDelete(SecurityAction, {
-      employee,
-      actionType: PASSWORD_RESET_ACTION,
-    });
     await this.em.flush();
+    await this.redis.incr(getAuthTokenVersionKey(employee.id));
 
     return { message: 'Password reset successfully' };
   }
@@ -335,15 +371,21 @@ export class AuthService {
 
     return {
       message: 'Login successful',
-      token: this.generateJWT(employee),
+      token: await this.generateJWT(employee),
     };
   }
 
-  private generateJWT(employee: Employee): string {
+  private async generateJWT(employee: Employee): Promise<string> {
+    const storedTokenVersion = await this.redis.get(
+      getAuthTokenVersionKey(employee.id),
+    );
+    const tokenVersion = Number.parseInt(storedTokenVersion ?? '0', 10) || 0;
+
     return this.jwtService.sign({
       sub: employee.id,
       email: employee.email,
       role: employee.role,
+      tokenVersion,
     });
   }
 }

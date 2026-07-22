@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { NewPasswordDto } from './dto/new-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -41,7 +42,13 @@ export class AuthController {
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+    return this.authService.verifyResetCode(dto);
+  }
+
+  @Post('new-password')
+  @HttpCode(HttpStatus.OK)
+  newPassword(@Body() dto: NewPasswordDto) {
+    return this.authService.setNewPassword(dto);
   }
 
   @Post('login')

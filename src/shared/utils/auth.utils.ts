@@ -6,6 +6,10 @@ export function generateOTP(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
+export function getAuthTokenVersionKey(employeeId: string): string {
+  return `auth:token-version:${employeeId}`;
+}
+
 export async function sendEmail(to: string, code: string): Promise<void> {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
