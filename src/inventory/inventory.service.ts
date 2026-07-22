@@ -22,6 +22,11 @@ import { AuditActionType } from '../shared/utils/audit-action-type.enum';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { normalizePagination } from '../shared/utils/pagination';
 
+type InventoryDetailQuery = PaginateQuery & {
+  stockMovementAuditPage?: number;
+  stockMovementAuditItemsPerPage?: number;
+};
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -66,14 +71,13 @@ export class InventoryService {
     return {
       data: serialize(inventories).map((inventory) => ({
         ...inventory,
-        productTypeCount:
-          productIdsByInventoryId.get(inventory.id)?.size ?? 0,
+        productTypeCount: productIdsByInventoryId.get(inventory.id)?.size ?? 0,
       })),
       meta,
     };
   }
 
-  async findOne(store: Store, id: string, query: PaginateQuery = {}) {
+  async findOne(store: Store, id: string, query: InventoryDetailQuery = {}) {
     const inventory = await this.em.findOne(
       Inventory,
       { id, store },
@@ -85,13 +89,30 @@ export class InventoryService {
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 
+    const [products, stockMovementAudits] = await Promise.all([
+      this.getPaginatedInventoryProducts(store, id, query),
+      this.getPaginatedStockMovementAudits(store, id, query),
+    ]);
+
+    return {
+      ...serialize(inventory),
+      products,
+      stockMovementAudits,
+    };
+  }
+
+  private async getPaginatedInventoryProducts(
+    store: Store,
+    inventoryId: string,
+    query: InventoryDetailQuery,
+  ) {
     const { currentPage, limit, offset } = normalizePagination(
       query.page,
       query.itemsPerPage,
     );
     const [stockQuantities, totalItems] = await this.em.findAndCount(
       StockQuantity,
-      { inventory: { id, store }, product: { store } },
+      { inventory: { id: inventoryId, store }, product: { store } },
       {
         populate: [
           'product',
@@ -104,44 +125,6 @@ export class InventoryService {
         offset,
       },
     );
-
-    const stockMovements = await this.em.find(
-      StockMovement,
-      {
-        store,
-        $or: [{ sourceInventory: { id } }, { destinationInventory: { id } }],
-      },
-      { fields: ['id'] },
-    );
-
-    const stockMovementIds = stockMovements.map((movement) => movement.id);
-    const stockMovementAudits = stockMovementIds.length
-      ? await this.em.find(
-          AuditLog,
-          {
-            entityType: AuditEntityType.StockMovement,
-            entityId: { $in: stockMovementIds },
-          },
-          {
-            populate: ['employee'],
-            orderBy: { createdAt: 'DESC' },
-            fields: [
-              'id',
-              'entityType',
-              'entityId',
-              'actionType',
-              'before',
-              'after',
-              'createdAt',
-              'employee.id',
-              'employee.firstName',
-              'employee.lastName',
-              'employee.email',
-            ],
-          },
-        )
-      : [];
-
     const products = await Promise.all(
       stockQuantities.map(async (stockQuantity) => {
         const product = serialize(stockQuantity.product, {
@@ -169,17 +152,67 @@ export class InventoryService {
     );
 
     return {
-      ...serialize(inventory),
-      products: {
-        data: products,
-        meta: {
-          currentPage,
-          itemsPerPage: limit,
-          totalItems,
-          totalPages: Math.ceil(totalItems / limit),
-        },
+      data: products,
+      meta: this.createPaginationMeta(currentPage, limit, totalItems),
+    };
+  }
+
+  private async getPaginatedStockMovementAudits(
+    store: Store,
+    inventoryId: string,
+    query: InventoryDetailQuery,
+  ) {
+    const { currentPage, limit, offset } = normalizePagination(
+      query.stockMovementAuditPage,
+      query.stockMovementAuditItemsPerPage,
+    );
+    const stockMovements = await this.em.find(
+      StockMovement,
+      {
+        store,
+        $or: [
+          { sourceInventory: { id: inventoryId } },
+          { destinationInventory: { id: inventoryId } },
+        ],
       },
-      stockMovementAudits: stockMovementAudits.map((audit) => ({
+      { fields: ['id'] },
+    );
+    const stockMovementIds = stockMovements.map((movement) => movement.id);
+    if (!stockMovementIds.length)
+      return {
+        data: [],
+        meta: this.createPaginationMeta(currentPage, limit, 0),
+      };
+
+    const [audits, totalItems] = await this.em.findAndCount(
+      AuditLog,
+      {
+        entityType: AuditEntityType.StockMovement,
+        entityId: { $in: stockMovementIds },
+      },
+      {
+        populate: ['employee'],
+        orderBy: { createdAt: 'DESC' },
+        limit,
+        offset,
+        fields: [
+          'id',
+          'entityType',
+          'entityId',
+          'actionType',
+          'before',
+          'after',
+          'createdAt',
+          'employee.id',
+          'employee.firstName',
+          'employee.lastName',
+          'employee.email',
+        ],
+      },
+    );
+
+    return {
+      data: audits.map((audit) => ({
         id: audit.id,
         entityType: audit.entityType,
         entityId: audit.entityId,
@@ -192,6 +225,20 @@ export class InventoryService {
           name: getEmployeeFullName(audit.employee),
         },
       })),
+      meta: this.createPaginationMeta(currentPage, limit, totalItems),
+    };
+  }
+
+  private createPaginationMeta(
+    currentPage: number,
+    itemsPerPage: number,
+    totalItems: number,
+  ) {
+    return {
+      currentPage,
+      itemsPerPage,
+      totalItems,
+      totalPages: Math.ceil(totalItems / itemsPerPage),
     };
   }
 
