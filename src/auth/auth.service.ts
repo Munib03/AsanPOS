@@ -33,8 +33,8 @@ import { Customer } from '../database/entites/customer.entity';
 import { randomUUID } from 'crypto';
 
 const PASSWORD_RESET_ACTION = 'password-reset';
-const PASSWORD_RESET_TOKEN_TTL_SECONDS = 5 * 60;
-const PASSWORD_RESET_TOKEN_KEY_PREFIX = 'auth:password-reset:';
+const PASSWORD_RESET_SESSION_TTL_SECONDS = 5 * 60;
+const PASSWORD_RESET_SESSION_KEY_PREFIX = 'auth:password-reset-session:';
 
 @Injectable()
 export class AuthService {
@@ -301,24 +301,24 @@ export class AuthService {
     if (!isCodeValid)
       throw new BadRequestException('Invalid password reset code');
 
-    const resetToken = randomUUID();
+    const passwordResetSession = randomUUID();
     await this.em.removeAndFlush(securityAction);
     await this.redis.set(
-      `${PASSWORD_RESET_TOKEN_KEY_PREFIX}${resetToken}`,
+      `${PASSWORD_RESET_SESSION_KEY_PREFIX}${passwordResetSession}`,
       employee.id,
       'EX',
-      PASSWORD_RESET_TOKEN_TTL_SECONDS,
+      PASSWORD_RESET_SESSION_TTL_SECONDS,
     );
 
     return {
       message: 'Reset code verified successfully',
-      resetToken,
+      passwordResetSession,
     };
   }
 
-  async setNewPassword(dto: NewPasswordDto) {
+  async setNewPassword(dto: NewPasswordDto, passwordResetSession: string) {
     const employeeId = await this.redis.getdel(
-      `${PASSWORD_RESET_TOKEN_KEY_PREFIX}${dto.resetToken}`,
+      `${PASSWORD_RESET_SESSION_KEY_PREFIX}${passwordResetSession}`,
     );
     if (!employeeId)
       throw new BadRequestException(
