@@ -24,7 +24,6 @@ export class PaginateQuery {
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(255)
   search?: string;
 
