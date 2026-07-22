@@ -7,8 +7,10 @@ import {
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
+import { AuditLog } from '../database/entites/audit-log.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
+import { StockMovement } from '../database/entites/stock-movement.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
@@ -17,6 +19,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { normalizePagination } from '../shared/utils/pagination';
 
 @Injectable()
@@ -102,6 +105,43 @@ export class InventoryService {
       },
     );
 
+    const stockMovements = await this.em.find(
+      StockMovement,
+      {
+        store,
+        $or: [{ sourceInventory: { id } }, { destinationInventory: { id } }],
+      },
+      { fields: ['id'] },
+    );
+
+    const stockMovementIds = stockMovements.map((movement) => movement.id);
+    const stockMovementAudits = stockMovementIds.length
+      ? await this.em.find(
+          AuditLog,
+          {
+            entityType: AuditEntityType.StockMovement,
+            entityId: { $in: stockMovementIds },
+          },
+          {
+            populate: ['employee'],
+            orderBy: { createdAt: 'DESC' },
+            fields: [
+              'id',
+              'entityType',
+              'entityId',
+              'actionType',
+              'before',
+              'after',
+              'createdAt',
+              'employee.id',
+              'employee.firstName',
+              'employee.lastName',
+              'employee.email',
+            ],
+          },
+        )
+      : [];
+
     const products = await Promise.all(
       stockQuantities.map(async (stockQuantity) => {
         const product = serialize(stockQuantity.product, {
@@ -139,6 +179,19 @@ export class InventoryService {
           totalPages: Math.ceil(totalItems / limit),
         },
       },
+      stockMovementAudits: stockMovementAudits.map((audit) => ({
+        id: audit.id,
+        entityType: audit.entityType,
+        entityId: audit.entityId,
+        actionType: audit.actionType,
+        before: audit.before,
+        after: audit.after,
+        createdAt: audit.createdAt,
+        performedBy: {
+          id: audit.employee.id,
+          name: getEmployeeFullName(audit.employee),
+        },
+      })),
     };
   }
 
