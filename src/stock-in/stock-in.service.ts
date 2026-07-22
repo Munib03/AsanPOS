@@ -32,6 +32,19 @@ const STOCK_IN_POPULATE = [
   'items.purchasedItem',
 ] as const;
 
+const NESTED_IDENTIFIER_FIELDS = new Set([
+  'id',
+  'store',
+  'sequence',
+  'customer',
+  'inventory',
+  'stockIn',
+  'product',
+  'purchase',
+  'warehouse',
+  'purchasedItem',
+]);
+
 @Injectable()
 export class StockInService {
   constructor(
@@ -54,7 +67,7 @@ export class StockInService {
     );
 
     return {
-      data: serialize(result.data, { populate: STOCK_IN_POPULATE }),
+      data: result.data.map((stockIn) => this.toStockInResponse(stockIn)),
       meta: result.meta,
     };
   }
@@ -69,7 +82,35 @@ export class StockInService {
     if (!stockIn)
       throw new NotFoundException(`Stock in with id ${id} not found`);
 
-    return serialize(stockIn, { populate: STOCK_IN_POPULATE });
+    return this.toStockInResponse(stockIn);
+  }
+
+  private toStockInResponse(stockIn: StockIn): Record<string, unknown> {
+    const removeNestedIdentifiers = (
+      value: unknown,
+      isRoot = false,
+    ): unknown => {
+      if (Array.isArray(value))
+        return value.map((item) => removeNestedIdentifiers(item));
+      if (!value || typeof value !== 'object') return value;
+
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([key, child]) => {
+            if (key === 'id') return isRoot;
+            return (
+              !NESTED_IDENTIFIER_FIELDS.has(key) ||
+              (child !== null && typeof child === 'object')
+            );
+          })
+          .map(([key, child]) => [key, removeNestedIdentifiers(child)]),
+      );
+    };
+
+    return removeNestedIdentifiers(
+      serialize(stockIn, { populate: STOCK_IN_POPULATE }),
+      true,
+    ) as Record<string, unknown>;
   }
 
   async createFromPurchase(
