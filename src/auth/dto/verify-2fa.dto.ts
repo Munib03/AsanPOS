@@ -1,7 +1,8 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsNumberString, Length } from 'class-validator';
 
 export class VerifyTwoFactorDto {
   @IsNotEmpty()
-  @IsString()
+  @IsNumberString()
+  @Length(6, 6)
   code!: string;
 }

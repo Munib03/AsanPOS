@@ -2,50 +2,69 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsNumberString,
   IsOptional,
   IsString,
+  IsUUID,
+  Length,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 import { EmployeeGender } from '../../shared/utils/employeeGenderEnum';
+import { Role } from '../../shared/utils/role.enum';
 
 export class UpdateEmployeeDto {
   @IsOptional()
-  @IsString()
+  @IsUUID()
   id?: string;
 
   @IsOptional()
   @IsEmail()
+  @MaxLength(255)
   email?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(8)
+  @MaxLength(128)
   password?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
+  @MaxLength(128)
   oldPassword?: string;
 
   @IsOptional()
-  @IsString()
-  role?: string;
+  @IsEnum(Role)
+  role?: Role;
 
   @IsOptional()
-  @IsString()
+  @IsNumberString()
+  @Length(10, 10)
   phone?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(3)
+  @MaxLength(255)
   storeName?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
   imageUrl?: string | null;
 
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(100)
   firstName?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(100)
   lastName?: string;
 
   @IsOptional()
@@ -57,6 +76,6 @@ export class UpdateEmployeeDto {
   gender?: EmployeeGender;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   attachmentId?: string;
 }

@@ -1,7 +1,8 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
+import { StockInStatus } from '../../shared/utils/stock-in-status.enum';
 
 export class UpdateStockInDto {
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(StockInStatus)
+  status?: StockInStatus;
 }

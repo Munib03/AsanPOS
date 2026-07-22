@@ -1,4 +1,11 @@
-import { IsUUID, IsNumber, IsArray, ValidateNested, Min } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsNumber,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class StockInItemDto {
@@ -18,6 +25,7 @@ export class CreateStockInDto {
   inventoryId!: string;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => StockInItemDto)
   items!: StockInItemDto[];

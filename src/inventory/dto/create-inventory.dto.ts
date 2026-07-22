@@ -1,11 +1,15 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateInventoryDto {
-    @IsNotEmpty()
-    @IsString()
-    name!: string;
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(255)
+  name!: string;
 
-    @IsNotEmpty()
-    @IsString()
-    address!: string;
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(255)
+  address!: string;
 }

@@ -1,6 +1,8 @@
 import { EntityManager } from '@mikro-orm/postgresql';
 import { tool } from 'ai';
 import { z } from 'zod';
+import { CreateCategoryDto } from '../../categories/dto/create-category.dto';
+import { CreateCustomerDto } from '../../customer/dto/create-customer.dto';
 import { DashboardService } from '../../dashboard/dashboard.service';
 import { DashboardRange } from '../../dashboard/dto/dashboard.dto';
 import { Account } from '../../database/entites/account.entity';
@@ -20,10 +22,13 @@ import { StockOut } from '../../database/entites/stock-out.entity';
 import { Store } from '../../database/entites/store.entity';
 import { StoreSession } from '../../database/entites/store-session.entity';
 import { AuditService } from '../../audit/audit.service';
+import { CreateInventoryDto } from '../../inventory/dto/create-inventory.dto';
+import { CreateProductDto } from '../../products/dto/create-product.dto';
 import { SequenceService } from '../../sequence/sequence.service';
 import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
 import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
 import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
+import { validateDto } from '../../shared/utils/validate-dto.util';
 import type { AiAssistantGraph } from './ai-assistant.response.schema';
 import { createAiAssistantBusinessData } from './ai-assistant.business-data';
 
@@ -55,21 +60,21 @@ const PRODUCT_CATEGORY_INPUT = z.object({
   categoryName: z.string().trim().min(1).max(255),
 });
 const CREATE_PRODUCT_INPUT = z.object({
-  name: z.string().trim().min(1).max(255),
-  price: z.number().finite().nonnegative(),
-  categoryName: z.string().trim().min(1).max(255),
+  name: z.string(),
+  price: z.number(),
+  categoryName: z.string(),
 });
 const CREATE_CATEGORY_INPUT = z.object({
-  name: z.string().trim().min(1).max(255),
+  name: z.string(),
 });
 const CREATE_INVENTORY_INPUT = z.object({
-  name: z.string().trim().min(1).max(255),
-  address: z.string().trim().min(1).max(255),
+  name: z.string(),
+  address: z.string(),
 });
 const CREATE_CUSTOMER_INPUT = z.object({
-  name: z.string().trim().min(1).max(255),
-  phone: z.string().trim().min(1).max(255),
-  address: z.string().trim().min(1).max(255),
+  name: z.string(),
+  phone: z.string(),
+  address: z.string(),
 });
 const DATE_RANGE_INPUT = z.object({
   from: z
@@ -229,6 +234,11 @@ export function createAiAssistantTools({
     if (!employee) throw new Error('Employee not found');
     return employee;
   };
+  const invalidInput = (errors: string[]) => ({
+    scope,
+    created: false,
+    message: errors.join(' '),
+  });
   return {
     getDashboardStats: tool({
       description:
@@ -282,7 +292,11 @@ export function createAiAssistantTools({
       description:
         'Create one category in the verified store after the user supplies its name. Do not create a product with it unless the user separately asks for a product.',
       inputSchema: CREATE_CATEGORY_INPUT,
-      execute: async ({ name }) => {
+      execute: async (input) => {
+        const validation = await validateDto(CreateCategoryDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name } = validation.value;
         const existing = await em.findOne(Category, {
           name,
           store: storeWhere,
@@ -335,9 +349,13 @@ export function createAiAssistantTools({
 
     createProduct: tool({
       description:
-        'Create one product in the verified store. Call only after the user has supplied a name, non-negative selling price, and category. The category is checked again here, and no product is created when it is unavailable.',
+        'Create one product in the verified store. Call only after the user has supplied a name, selling price, and category. The category is checked again here, and no product is created when it is unavailable.',
       inputSchema: CREATE_PRODUCT_INPUT,
-      execute: async ({ name, price, categoryName }) => {
+      execute: async (input) => {
+        const validation = await validateDto(CreateProductDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, price, categoryName } = validation.value;
         const category = await em.findOne(Category, {
           name: { $ilike: categoryName },
           store: storeWhere,
@@ -417,7 +435,11 @@ export function createAiAssistantTools({
       description:
         'Create one inventory in the verified store after the user supplies its name and address. An inventory starts empty; do not add products or stock unless the user separately asks.',
       inputSchema: CREATE_INVENTORY_INPUT,
-      execute: async ({ name, address }) => {
+      execute: async (input) => {
+        const validation = await validateDto(CreateInventoryDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, address } = validation.value;
         const existing = await em.findOne(Inventory, {
           name,
           store: storeWhere,
@@ -499,8 +521,12 @@ export function createAiAssistantTools({
       description:
         'Create one customer in the verified store after the user supplies a name, phone number, and address. It also creates the customer payable and receivable accounts. Do not create a customer when the phone number already belongs to a customer in this store.',
       inputSchema: CREATE_CUSTOMER_INPUT,
-      execute: async ({ name, phone, address }) =>
-        em.transactional(async (transactionalEm) => {
+      execute: async (input) => {
+        const validation = await validateDto(CreateCustomerDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, phone, address } = validation.value;
+        return em.transactional(async (transactionalEm) => {
           const existing = await transactionalEm.findOne(Customer, {
             phone,
             store: storeWhere,
@@ -554,7 +580,8 @@ export function createAiAssistantTools({
               address: customer.address,
             },
           };
-        }),
+        });
+      },
     }),
 
     getOpenSessions: tool({

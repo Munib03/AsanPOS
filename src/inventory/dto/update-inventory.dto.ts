@@ -1,12 +1,15 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateInventoryDto {
-    @IsOptional()
-    @IsString()
-    name?: string;
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  name?: string;
 
-
-    @IsOptional()
-    @IsString()
-    address?: string;
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  address?: string;
 }
