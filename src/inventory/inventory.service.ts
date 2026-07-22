@@ -207,20 +207,76 @@ export class InventoryService {
       },
     );
 
+    const auditedStockMovementIds = audits
+      .map((audit) => audit.entityId)
+      .filter((movementId): movementId is string => Boolean(movementId));
+    const movements = auditedStockMovementIds.length
+      ? await this.em.find(
+          StockMovement,
+          { id: { $in: auditedStockMovementIds }, store },
+          {
+            populate: [
+              'sourceInventory',
+              'destinationInventory',
+              'items',
+              'items.product',
+            ],
+            fields: [
+              'id',
+              'status',
+              'sourceInventory.id',
+              'sourceInventory.name',
+              'destinationInventory.id',
+              'destinationInventory.name',
+              'items.id',
+              'items.quantity',
+              'items.product.id',
+              'items.product.name',
+            ],
+          },
+        )
+      : [];
+    const movementsById = new Map(
+      movements.map((movement) => [movement.id, movement]),
+    );
+
     return {
-      data: audits.map((audit) => ({
-        id: audit.id,
-        entityType: audit.entityType,
-        entityId: audit.entityId,
-        actionType: audit.actionType,
-        before: audit.before,
-        after: audit.after,
-        createdAt: audit.createdAt,
-        performedBy: {
-          id: audit.employee.id,
-          name: getEmployeeFullName(audit.employee),
-        },
-      })),
+      data: audits.map((audit) => {
+        const movement = movementsById.get(audit.entityId ?? '');
+
+        return {
+          id: audit.id,
+          entityType: audit.entityType,
+          entityId: audit.entityId,
+          actionType: audit.actionType,
+          before: audit.before,
+          after: audit.after,
+          createdAt: audit.createdAt,
+          performedBy: {
+            id: audit.employee.id,
+            name: getEmployeeFullName(audit.employee),
+          },
+          stockMovement: movement
+            ? {
+                id: movement.id,
+                status: movement.status,
+                sourceInventory: {
+                  id: movement.sourceInventory.id,
+                  name: movement.sourceInventory.name,
+                },
+                destinationInventory: {
+                  id: movement.destinationInventory.id,
+                  name: movement.destinationInventory.name,
+                },
+                products: movement.items.getItems().map((item) => ({
+                  id: item.product.id,
+                  name: item.product.name,
+                  quantity: item.quantity,
+                })),
+              }
+            : null,
+        };
+      }),
       meta: this.createPaginationMeta(currentPage, limit, totalItems),
     };
   }
