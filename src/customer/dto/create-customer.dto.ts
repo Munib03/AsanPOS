@@ -1,8 +1,7 @@
 import {
   IsNotEmpty,
-  IsNumberString,
+  IsPhoneNumber,
   IsString,
-  Length,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -20,7 +19,6 @@ export class CreateCustomerDto {
   @MaxLength(255)
   address!: string;
 
-  @IsNumberString()
-  @Length(10, 10)
+  @IsPhoneNumber()
   phone!: string;
 }

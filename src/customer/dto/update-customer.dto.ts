@@ -1,8 +1,7 @@
 import {
-  IsNumberString,
   IsOptional,
+  IsPhoneNumber,
   IsString,
-  Length,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -21,7 +20,6 @@ export class UpdateCustomerDto {
   address?: string;
 
   @IsOptional()
-  @IsNumberString()
-  @Length(12, 12)
+  @IsPhoneNumber()
   phone?: string;
 }

@@ -2,11 +2,10 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
-  IsNumberString,
   IsOptional,
+  IsPhoneNumber,
   IsString,
   IsUUID,
-  Length,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -40,8 +39,7 @@ export class UpdateEmployeeDto {
   role?: Role;
 
   @IsOptional()
-  @IsNumberString()
-  @Length(10, 10)
+  @IsPhoneNumber()
   phone?: string;
 
   @IsOptional()

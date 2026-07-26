@@ -5,8 +5,7 @@ import {
   IsOptional,
   IsEnum,
   IsDateString,
-  IsNumberString,
-  Length,
+  IsPhoneNumber,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -36,8 +35,7 @@ export class RegisterDto {
   role?: Role;
 
   @IsOptional()
-  @IsNumberString()
-  @Length(10, 10)
+  @IsPhoneNumber()
   phone?: string;
 
   @IsString()

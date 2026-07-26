@@ -5,9 +5,8 @@ import {
   IsOptional,
   IsEnum,
   IsDateString,
-  IsNumberString,
+  IsPhoneNumber,
   IsUUID,
-  Length,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -39,8 +38,7 @@ export class CreateEmployeeDto {
   password!: string;
 
   @IsOptional()
-  @IsNumberString()
-  @Length(10, 10)
+  @IsPhoneNumber()
   phone?: string;
 
   @IsOptional()
