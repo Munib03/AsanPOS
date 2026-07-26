@@ -19,10 +19,7 @@ import { Attachment } from '../database/entites/attachment.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
 import { AttachmentEntityType } from '../shared/utils/attachment-entity-type.enum';
-import {
-  AiChatThreadDetail,
-  AiChatThreadSummary,
-} from '../shared/types/ai-assistant.types';
+import {AiChatThreadDetail, AiChatThreadSummary } from '../shared/types/ai-assistant.types';
 import { AskAiAssistantDto } from './dto/ask-ai-assistant.dto';
 import type { AiAssistantPdf } from './helpers/ai-assistant.response.schema';
 import { renderAiAssistantPdf } from './helpers/ai-assistant.pdfmake';

@@ -40,6 +40,7 @@ export class ProductService {
           'id',
           'name',
           'price',
+          'barcode',
           'sequence.prefix',
           'sequence.lastIndex',
           'images.imageUrl',
@@ -66,6 +67,7 @@ export class ProductService {
           'id',
           'name',
           'price',
+          'barcode',
           'sequence.prefix',
           'sequence.lastIndex',
           'images.imageUrl',
@@ -102,6 +104,7 @@ export class ProductService {
     const sequence = await this.sequenceService.generateSequence(store, 'Product', 'PDT');
     const product = this.em.create(Product, {
       ...stripUndefined({ name: dto.name, price: dto.price }),
+      barcode: this.sequenceService.formatSequence(sequence),
       updatedAt: null,
       sequence,
       store,
@@ -142,13 +145,25 @@ export class ProductService {
       after.price = dto.price;
     }
 
+    if (dto.barcode !== undefined && dto.barcode !== product.barcode) {
+      before.barcode = product.barcode;
+      after.barcode = dto.barcode;
+    }
+
     const currentCategoryName = product.categories.getItems().map((c) => c.name).join(', ');
     if (dto.categoryName && dto.categoryName !== currentCategoryName) {
       before.category = currentCategoryName;
       after.category = dto.categoryName;
     }
 
-    this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
+    this.em.assign(
+      product,
+      stripUndefined({
+        name: dto.name,
+        price: dto.price,
+        barcode: dto.barcode,
+      }),
+    );
 
     if (dto.categoryName) {
       const category = await this.findOrFail<Category>(

@@ -344,7 +344,10 @@ export class AuthService {
       throw new BadRequestException('Please verify your email first');
 
     const isMatch = await bcrypt.compare(dto.password, employee.password);
-    if (!isMatch) throw new NotFoundException('Invalid email or password');
+
+
+    if (!isMatch) 
+      throw new NotFoundException('Invalid email or password');
 
     const twoFactor = await this.em.findOne(TwoFactorAuth, { employee });
 

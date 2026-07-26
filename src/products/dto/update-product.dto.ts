@@ -23,6 +23,12 @@ export class UpdateProductDto {
   scannerId?: string;
 
   @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  barcode?: string;
+
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   price?: number;

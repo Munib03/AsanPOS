@@ -16,6 +16,7 @@ type ProductSeed = {
   id: string;
   name: string;
   price: number;
+  barcode: string;
   purchasePrice: number;
   sequence_id: string;
 };
@@ -544,6 +545,7 @@ function buildProducts(
       id: uuidv4(),
       name: `${SEED_PREFIX} ${productTypes[index % productTypes.length]} Product ${index + 1}`,
       price,
+      barcode: `${sequences[index].prefix}-${String(sequences[index].last_index).padStart(4, '0')}`,
       purchasePrice: Math.max(1, Math.round(price * 0.72)),
       store_id: storeId,
       sequence_id: sequences[index].id,

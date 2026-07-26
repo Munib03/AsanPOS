@@ -27,6 +27,9 @@ export class Product {
   @Property({ nullable: true, columnType: 'decimal(10,2)', runtimeType: 'number' })
   price?: number;
 
+  @Property({ nullable: true })
+  barcode?: string;
+
   @OneToOne(() => Sequence, { nullable: true, fieldName: 'sequence_id' })
   sequence?: Sequence;
 

@@ -22,6 +22,6 @@ export class UpdateCustomerDto {
 
   @IsOptional()
   @IsNumberString()
-  @Length(10, 10)
+  @Length(12, 12)
   phone?: string;
 }

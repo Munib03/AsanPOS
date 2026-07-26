@@ -386,6 +386,7 @@ export function createAiAssistantTools({
         const product = em.create(Product, {
           name,
           price,
+          barcode: sequenceService.formatSequence(sequence),
           sequence,
           store,
           updatedAt: null,
