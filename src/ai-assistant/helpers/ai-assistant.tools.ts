@@ -219,7 +219,7 @@ export function createAiAssistantTools({
   sequenceService,
 }: CreateAiAssistantToolsParams) {
   const storeWhere = { id: store.id };
-  const scope = { storeId: store.id, storeName: store.name };
+  const scope = { storeId: store.id, storeName: store.name, currency: 'AFN' };
   const data = createAiAssistantBusinessData({
     dashboardService,
     em,
