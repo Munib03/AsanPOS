@@ -9,6 +9,7 @@ import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { StockIn } from '../database/entites/stock-in.entity';
 import { StockOut } from '../database/entites/stock-out.entity';
 import { getEmployeeFullName } from '../shared/utils/employee-name.util';
+import { Store } from '../database/entites/store.entity';
 
 @Injectable()
 export class AuditService {
@@ -55,9 +56,13 @@ export class AuditService {
     });
   }
 
-  async findAll(query: PaginateQuery, type?: AuditEntityType) {
+  async findAll(
+    store: Store,
+    query: PaginateQuery,
+    type?: AuditEntityType,
+  ) {
     const [logs, meta] = await this.auditRepository.findAndPaginate(
-      type ? { entityType: type } : {},
+      { employee: { store }, ...(type ? { entityType: type } : {}) },
       {
         populate: ['employee'],
         orderBy: { createdAt: 'DESC' },
@@ -82,16 +87,16 @@ export class AuditService {
     return { data: logs, meta };
   }
 
-  async findByEntity(entityId: string, query: PaginateQuery) {
+  async findByEntity(store: Store, entityId: string, query: PaginateQuery) {
     const [stockIns, stockOuts] = await Promise.all([
       this.em.find(
         StockIn,
-        { inventory: { id: entityId } },
+        { inventory: { id: entityId, store }, purchase: { store } },
         { fields: ['id'] },
       ),
       this.em.find(
         StockOut,
-        { inventory: { id: entityId } },
+        { inventory: { id: entityId, store }, sale: { store } },
         { fields: ['id'] },
       ),
     ]);
@@ -101,7 +106,7 @@ export class AuditService {
     const entityIds = [entityId, ...stockInIds, ...stockOutIds];
 
     const [logs, meta] = await this.auditRepository.findAndPaginate(
-      { entityId: { $in: entityIds } },
+      { entityId: { $in: entityIds }, employee: { store } },
       {
         populate: ['employee'],
         orderBy: { createdAt: 'DESC' },
@@ -136,7 +141,11 @@ export class AuditService {
       pageStockInIds.length
         ? this.em.find(
             StockIn,
-            { id: { $in: pageStockInIds } },
+            {
+              id: { $in: pageStockInIds },
+              inventory: { store },
+              purchase: { store },
+            },
             {
               populate: [
                 'inventory',
@@ -151,7 +160,11 @@ export class AuditService {
       pageStockOutIds.length
         ? this.em.find(
             StockOut,
-            { id: { $in: pageStockOutIds } },
+            {
+              id: { $in: pageStockOutIds },
+              inventory: { store },
+              sale: { store },
+            },
             {
               populate: [
                 'inventory',

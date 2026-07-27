@@ -27,8 +27,8 @@ export class CustomerController {
 
   @Get(':id')
   @Roles(Role.Admin, Role.Cashier)
-  findOne(@Param('id') id: string) {
-    return this.customerService.findOne(id);
+  findOne(@CurrentStore() store: Store, @Param('id') id: string) {
+    return this.customerService.findOne(store, id);
   }
 
   @Post()
@@ -44,19 +44,21 @@ export class CustomerController {
   @Put(':id')
   @Roles(Role.Admin)
   update(
+    @CurrentStore() store: Store,
     @CurrentUser() user: { id: string },
     @Param('id') id: string,
     @Body() dto: UpdateCustomerDto,
   ) {
-    return this.customerService.update(id, user.id, dto);
+    return this.customerService.update(store, id, user.id, dto);
   }
 
   @Delete(':id')
   @Roles(Role.Admin)
   remove(
+    @CurrentStore() store: Store,
     @CurrentUser() user: { id: string },
     @Param('id') id: string,
   ) {
-    return this.customerService.remove(id, user.id);
+    return this.customerService.remove(store, id, user.id);
   }
 }

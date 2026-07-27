@@ -119,10 +119,13 @@ export class StockInService {
     dto: CreateStockInDto,
   ): Promise<{ message: string }> {
     return await this.em.transactional(async (em) => {
-      const inventory = await em.findOne(Inventory, { id: dto.inventoryId });
+      const inventory = await em.findOne(Inventory, {
+        id: dto.inventoryId,
+        store,
+      });
       const purchase = await em.findOne(
         Purchase,
-        { id: dto.purchaseId },
+        { id: dto.purchaseId, store },
         { populate: ['items', 'items.product', 'customer'] },
       );
 
@@ -179,7 +182,7 @@ export class StockInService {
         });
       }
 
-      const employee = await em.findOne(Employee, { id: employeeId });
+      const employee = await em.findOne(Employee, { id: employeeId, store });
       if (!employee) throw new NotFoundException('Employee not found');
 
       this.auditService.logStatusChange(
@@ -279,7 +282,7 @@ export class StockInService {
           );
         }
 
-        const employee = await em.findOne(Employee, { id: employeeId });
+        const employee = await em.findOne(Employee, { id: employeeId, store });
         if (!employee) throw new NotFoundException('Employee not found');
 
         this.auditService.logStatusChange(

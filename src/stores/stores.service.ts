@@ -15,28 +15,37 @@ export class StoresService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll() {
-    return this.em.findAll(Store, {});
+  async findAll(store: Store) {
+    return this.em.find(Store, { id: store.id });
   }
 
-  async findOne(id: string) {
-    const store = await this.em.findOne(Store, { id });
+  async findOne(currentStore: Store, id: string) {
+    if (id !== currentStore.id)
+      throw new NotFoundException(`Store with id ${id} not found`);
+
+    const store = await this.em.findOne(Store, { id: currentStore.id });
     if (!store)
       throw new NotFoundException(`Store with id ${id} not found`);
 
     return store;
   }
 
-  async update(id: string, employeeId: string, dto: UpdateStoreDto) {
-    const store = await this.em.findOne(Store, { id });
-    if (!store)
-      throw new NotFoundException(`Store with id ${id} not found`);
+  async update(
+    currentStore: Store,
+    id: string,
+    employeeId: string,
+    dto: UpdateStoreDto,
+  ) {
+    const store = await this.findOne(currentStore, id);
 
     const before = { name: store.name, address: store.address };
 
     this.em.assign(store, stripUndefined(dto));
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
+    const employee = await this.em.findOne(Employee, {
+      id: employeeId,
+      store: currentStore,
+    });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
@@ -55,12 +64,13 @@ export class StoresService {
     return store;
   }
 
-  async remove(id: string, employeeId: string) {
-    const store = await this.em.findOne(Store, { id });
-    if (!store)
-      throw new NotFoundException(`Store with id ${id} not found`);
+  async remove(currentStore: Store, id: string, employeeId: string) {
+    const store = await this.findOne(currentStore, id);
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
+    const employee = await this.em.findOne(Employee, {
+      id: employeeId,
+      store: currentStore,
+    });
     if (!employee)
       throw new NotFoundException('Employee not found');
 

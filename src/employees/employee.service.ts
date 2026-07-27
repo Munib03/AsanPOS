@@ -189,8 +189,8 @@ export class EmployeeService {
     };
   }
 
-  async remove(id: string) {
-    const employee = await this.em.findOne(Employee, { id });
+  async remove(store: Store, id: string) {
+    const employee = await this.em.findOne(Employee, { id, store });
     if (!employee)
       throw new NotFoundException(`Employee with id ${id} not found!`);
 
@@ -206,6 +206,7 @@ export class EmployeeService {
 
 
   async updateEmployeeInfo(
+    store: Store,
     id: string,
     dto: UpdateEmployeeDto,
   ) {
@@ -214,7 +215,7 @@ export class EmployeeService {
 
     const employee = await this.em.findOne(
       Employee,
-      { id },
+      { id, store },
       { populate: ['store'] },
     );
     if (!employee)

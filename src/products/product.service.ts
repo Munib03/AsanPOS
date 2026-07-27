@@ -216,11 +216,25 @@ export class ProductService {
     return { message: `Product ${id} deleted successfully` };
   }
 
-  async deleteProductImage(imageId: string, employeeId: string): Promise<{ message: string }> {
-    const image = await this.em.findOne(ProductImage, { id: imageId }, { populate: ['product'] });
+  async deleteProductImage(
+    store: Store,
+    imageId: string,
+    employeeId: string,
+  ): Promise<{ message: string }> {
+    const image = await this.em.findOne(
+      ProductImage,
+      { id: imageId, product: { store } },
+      { populate: ['product'] },
+    );
     if (!image) throw new NotFoundException('Image not found');
 
-    const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
+    const employee = await this.findOrFail<Employee>(
+      this.em,
+      Employee,
+      { id: employeeId, store },
+      'Employee not found',
+      true,
+    );
 
     if (image.imageUrl)
       await this.attachmentService.deleteAttachmentByFileUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
