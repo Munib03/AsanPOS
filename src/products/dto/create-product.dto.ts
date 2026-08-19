@@ -1,23 +1,41 @@
-import { IsNotEmpty, IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateProductDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(255)
   name!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   scannerId?: string;
 
-  @IsNotEmpty()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   price!: number;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(255)
   categoryName!: string;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
   attachmentIds?: string[];
 }

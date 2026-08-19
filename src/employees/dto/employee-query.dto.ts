@@ -1,12 +1,9 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 import { Role } from '../../shared/utils/role.enum';
+import { PaginateQuery } from '../../shared/types/paginate-query.types';
 
-export class EmployeeQueryDto {
-    @IsOptional()
-    @IsEnum(Role)
-    role?: Role;
-
-    @IsOptional()
-    @IsString()
-    search?: string;
+export class EmployeeQueryDto extends PaginateQuery {
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
 }

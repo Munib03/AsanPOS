@@ -1,10 +1,14 @@
 import {
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -16,9 +20,11 @@ export class CreatePurchaseItemDto {
   productId!: string;
 
   @IsNumber()
+  @IsPositive()
   quantity!: number;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   unitPrice!: number;
 }
 
@@ -35,6 +41,7 @@ export class CreatePurchaseDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   note?: string;
 
   @IsEnum(PurchasePaymentStatus)
@@ -45,6 +52,8 @@ export class CreatePurchaseDto {
   @Min(0)
   amount?: number;
 
+  @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreatePurchaseItemDto)
   items!: CreatePurchaseItemDto[];

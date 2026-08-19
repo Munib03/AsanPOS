@@ -20,10 +20,10 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { Role } from '../shared/utils/role.enum';
 import { Roles } from '../shared/decorators/role.decorator';
-
+import { RolesGuard } from '../shared/guards/role.guard';
 
 @Controller('ai-assistant')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class AiAssistantController {
   constructor(private readonly aiAssistantService: AiAssistantService) {}
@@ -36,7 +36,6 @@ export class AiAssistantController {
     return this.aiAssistantService.findAllThreads(store, user.id);
   }
 
-  
   @Get('threads/:id')
   findOneThread(
     @CurrentStore() store: Store,
@@ -45,8 +44,6 @@ export class AiAssistantController {
   ) {
     return this.aiAssistantService.findOneThread(store, user.id, id);
   }
-
-
   @Put('threads/:id')
   updateThreadTitle(
     @CurrentStore() store: Store,
@@ -61,8 +58,6 @@ export class AiAssistantController {
       body.name,
     );
   }
-
-
   @Delete('threads/:id')
   deleteThread(
     @CurrentStore() store: Store,
@@ -71,8 +66,6 @@ export class AiAssistantController {
   ) {
     return this.aiAssistantService.deleteThread(store, user.id, id);
   }
-
-
   @Post('ask')
   @Sse('ask')
   askStream(

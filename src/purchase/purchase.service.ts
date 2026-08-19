@@ -209,7 +209,7 @@ export class PurchaseService {
       const customer = await this.findOrFail<Customer>(
         em,
         Customer,
-        { id: dto.customerId },
+        { id: dto.customerId, store },
         `Customer with id ${dto.customerId}`,
       );
       const inventory = await this.findOrFail<Inventory>(
@@ -237,6 +237,7 @@ export class PurchaseService {
 
       const productMap = await this.findProductsOrFail(
         em,
+        store,
         dto.items.map((item) => item.productId),
       );
 
@@ -254,7 +255,7 @@ export class PurchaseService {
       const employee = await this.findOrFail<Employee>(
         em,
         Employee,
-        { id: employeeId },
+        { id: employeeId, store },
         'Employee',
       );
       const totalAmount = this.roundMoney(
@@ -336,7 +337,7 @@ export class PurchaseService {
           ? await this.findOrFail<Employee>(
               em,
               Employee,
-              { id: employeeId },
+              { id: employeeId, store },
               'Employee',
             )
           : undefined;
@@ -573,10 +574,11 @@ export class PurchaseService {
 
   private async findProductsOrFail(
     em: EntityManager,
+    store: Store,
     productIds: string[],
   ): Promise<Map<string, Product>> {
     const products = await em.findAll(Product, {
-      where: { id: { $in: productIds } },
+      where: { id: { $in: productIds }, store },
     });
     if (products.length !== productIds.length)
       throw new NotFoundException('One or more products not found');

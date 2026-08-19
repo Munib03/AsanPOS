@@ -2,8 +2,10 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { Roles } from '../shared/decorators/role.decorator';
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../shared/guards/role.guard';
-import * as paginateQueryTypes from '../shared/types/paginate-query.types';
+import { CurrentStore } from '../shared/decorators/store.decorator';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { Role } from '../shared/utils/role.enum';
+import { Store } from '../database/entites/store.entity';
 import { AuditService } from './audit.service';
 import { AuditQueryDto } from './dto/audit-query.dto';
 
@@ -11,21 +13,19 @@ import { AuditQueryDto } from './dto/audit-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.Admin)
 export class AuditController {
-  constructor(private readonly auditService: AuditService) { }
+  constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  findAll(
-    @Query() query: paginateQueryTypes.PaginateQuery,
-    @Query() filterQuery: AuditQueryDto,
-  ) {
-    return this.auditService.findAll(query, filterQuery.type);
+  findAll(@CurrentStore() store: Store, @Query() query: AuditQueryDto) {
+    return this.auditService.findAll(store, query, query.type);
   }
 
   @Get('entity/:entityId')
   findByEntity(
+    @CurrentStore() store: Store,
     @Param('entityId') entityId: string,
-    @Query() query: paginateQueryTypes.PaginateQuery,
+    @Query() query: PaginateQuery,
   ) {
-    return this.auditService.findByEntity(entityId, query);
+    return this.auditService.findByEntity(store, entityId, query);
   }
 }

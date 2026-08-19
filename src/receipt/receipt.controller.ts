@@ -6,7 +6,7 @@ import { Roles } from '../shared/decorators/role.decorator';
 import { Role } from '../shared/utils/role.enum';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { Store } from '../database/entites/store.entity';
-import type { PaginateQuery } from '../shared/types/paginate-query.types';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('receipts')
 @UseGuards(JwtAuthGuard, RolesGuard)

@@ -40,6 +40,7 @@ export class ProductService {
           'id',
           'name',
           'price',
+          'barcode',
           'sequence.prefix',
           'sequence.lastIndex',
           'images.imageUrl',
@@ -66,6 +67,7 @@ export class ProductService {
           'id',
           'name',
           'price',
+          'barcode',
           'sequence.prefix',
           'sequence.lastIndex',
           'images.imageUrl',
@@ -102,6 +104,7 @@ export class ProductService {
     const sequence = await this.sequenceService.generateSequence(store, 'Product', 'PDT');
     const product = this.em.create(Product, {
       ...stripUndefined({ name: dto.name, price: dto.price }),
+      barcode: this.sequenceService.formatSequence(sequence),
       updatedAt: null,
       sequence,
       store,
@@ -142,13 +145,25 @@ export class ProductService {
       after.price = dto.price;
     }
 
+    if (dto.barcode !== undefined && dto.barcode !== product.barcode) {
+      before.barcode = product.barcode;
+      after.barcode = dto.barcode;
+    }
+
     const currentCategoryName = product.categories.getItems().map((c) => c.name).join(', ');
     if (dto.categoryName && dto.categoryName !== currentCategoryName) {
       before.category = currentCategoryName;
       after.category = dto.categoryName;
     }
 
-    this.em.assign(product, stripUndefined({ name: dto.name, price: dto.price }));
+    this.em.assign(
+      product,
+      stripUndefined({
+        name: dto.name,
+        price: dto.price,
+        barcode: dto.barcode,
+      }),
+    );
 
     if (dto.categoryName) {
       const category = await this.findOrFail<Category>(
@@ -201,14 +216,28 @@ export class ProductService {
     return { message: `Product ${id} deleted successfully` };
   }
 
-  async deleteProductImage(imageId: string, employeeId: string): Promise<{ message: string }> {
-    const image = await this.em.findOne(ProductImage, { id: imageId }, { populate: ['product'] });
+  async deleteProductImage(
+    store: Store,
+    imageId: string,
+    employeeId: string,
+  ): Promise<{ message: string }> {
+    const image = await this.em.findOne(
+      ProductImage,
+      { id: imageId, product: { store } },
+      { populate: ['product'] },
+    );
     if (!image) throw new NotFoundException('Image not found');
 
-    const employee = await this.findOrFail<Employee>(this.em, Employee, { id: employeeId }, 'Employee not found', true);
+    const employee = await this.findOrFail<Employee>(
+      this.em,
+      Employee,
+      { id: employeeId, store },
+      'Employee not found',
+      true,
+    );
 
     if (image.imageUrl)
-      await this.attachmentService.deleteAttachmentByUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
+      await this.attachmentService.deleteAttachmentByFileUrl(image.imageUrl, AttachmentEntityType.PRODUCT);
 
     this.auditService.log(
       this.em, employee, AuditEntityType.Product, image.product.id, AuditActionType.Delete,
@@ -226,7 +255,7 @@ export class ProductService {
     const attachments = await this.em.findAll(Attachment, { where: { id: { $in: attachmentIds } } });
 
     attachments.forEach((attachment) =>
-      this.em.create(ProductImage, { product, imageUrl: attachment.imageUrl }),
+      this.em.create(ProductImage, { product, imageUrl: attachment.fileUrl }),
     );
   }
 

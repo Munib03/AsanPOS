@@ -5,10 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
+import { InventoryDetailQueryDto } from './dto/inventory-detail-query.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { Inventory } from '../database/entites/inventory.entity';
+import { AuditLog } from '../database/entites/audit-log.entity';
 import { Employee } from '../database/entites/employee.entity';
 import { Store } from '../database/entites/store.entity';
+import { StockMovement } from '../database/entites/stock-movement.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditEntityType } from '../shared/utils/audit-entity-type.enum';
 import { stripUndefined } from '../shared/utils/strip-undefined.util';
@@ -17,6 +20,7 @@ import { PaginateQuery } from '../shared/types/paginate-query.types';
 import { StockQuantity } from '../database/entites/stock-quantity.entity';
 import { MinioService } from '../shared/services/minio.service';
 import { AuditActionType } from '../shared/utils/audit-action-type.enum';
+import { getEmployeeFullName } from '../shared/utils/employee-name.util';
 import { normalizePagination } from '../shared/utils/pagination';
 
 @Injectable()
@@ -63,14 +67,13 @@ export class InventoryService {
     return {
       data: serialize(inventories).map((inventory) => ({
         ...inventory,
-        productTypeCount:
-          productIdsByInventoryId.get(inventory.id)?.size ?? 0,
+        productTypeCount: productIdsByInventoryId.get(inventory.id)?.size ?? 0,
       })),
       meta,
     };
   }
 
-  async findOne(store: Store, id: string, query: PaginateQuery = {}) {
+  async findOne(store: Store, id: string, query: InventoryDetailQueryDto = {}) {
     const inventory = await this.em.findOne(
       Inventory,
       { id, store },
@@ -82,13 +85,30 @@ export class InventoryService {
     if (!inventory)
       throw new NotFoundException(`Inventory with id ${id} not found`);
 
+    const [products, stockMovementAudits] = await Promise.all([
+      this.getPaginatedInventoryProducts(store, id, query),
+      this.getPaginatedStockMovementAudits(store, id, query),
+    ]);
+
+    return {
+      ...serialize(inventory),
+      products,
+      stockMovementAudits,
+    };
+  }
+
+  private async getPaginatedInventoryProducts(
+    store: Store,
+    inventoryId: string,
+    query: InventoryDetailQueryDto,
+  ) {
     const { currentPage, limit, offset } = normalizePagination(
       query.page,
       query.itemsPerPage,
     );
     const [stockQuantities, totalItems] = await this.em.findAndCount(
       StockQuantity,
-      { inventory: { id, store }, product: { store } },
+      { inventory: { id: inventoryId, store }, product: { store } },
       {
         populate: [
           'product',
@@ -101,7 +121,6 @@ export class InventoryService {
         offset,
       },
     );
-
     const products = await Promise.all(
       stockQuantities.map(async (stockQuantity) => {
         const product = serialize(stockQuantity.product, {
@@ -129,16 +148,149 @@ export class InventoryService {
     );
 
     return {
-      ...serialize(inventory),
-      products: {
-        data: products,
-        meta: {
-          currentPage,
-          itemsPerPage: limit,
-          totalItems,
-          totalPages: Math.ceil(totalItems / limit),
-        },
+      data: products,
+      meta: this.createPaginationMeta(currentPage, limit, totalItems),
+    };
+  }
+
+  private async getPaginatedStockMovementAudits(
+    store: Store,
+    inventoryId: string,
+    query: InventoryDetailQueryDto,
+  ) {
+    const { currentPage, limit, offset } = normalizePagination(
+      query.stockMovementAuditPage,
+      query.stockMovementAuditItemsPerPage,
+    );
+    const stockMovements = await this.em.find(
+      StockMovement,
+      {
+        store,
+        $or: [
+          { sourceInventory: { id: inventoryId } },
+          { destinationInventory: { id: inventoryId } },
+        ],
       },
+      { fields: ['id'] },
+    );
+    const stockMovementIds = stockMovements.map((movement) => movement.id);
+    if (!stockMovementIds.length)
+      return {
+        data: [],
+        meta: this.createPaginationMeta(currentPage, limit, 0),
+      };
+
+    const [audits, totalItems] = await this.em.findAndCount(
+      AuditLog,
+      {
+        entityType: AuditEntityType.StockMovement,
+        entityId: { $in: stockMovementIds },
+      },
+      {
+        populate: ['employee'],
+        orderBy: { createdAt: 'DESC' },
+        limit,
+        offset,
+        fields: [
+          'id',
+          'entityType',
+          'entityId',
+          'actionType',
+          'before',
+          'after',
+          'createdAt',
+          'employee.id',
+          'employee.firstName',
+          'employee.lastName',
+          'employee.email',
+        ],
+      },
+    );
+
+    const auditedStockMovementIds = audits
+      .map((audit) => audit.entityId)
+      .filter((movementId): movementId is string => Boolean(movementId));
+    const movements = auditedStockMovementIds.length
+      ? await this.em.find(
+          StockMovement,
+          { id: { $in: auditedStockMovementIds }, store },
+          {
+            populate: [
+              'sourceInventory',
+              'destinationInventory',
+              'items',
+              'items.product',
+            ],
+            fields: [
+              'id',
+              'status',
+              'sourceInventory.id',
+              'sourceInventory.name',
+              'destinationInventory.id',
+              'destinationInventory.name',
+              'items.id',
+              'items.quantity',
+              'items.product.id',
+              'items.product.name',
+            ],
+          },
+        )
+      : [];
+    const movementsById = new Map(
+      movements.map((movement) => [movement.id, movement]),
+    );
+
+    return {
+      data: audits.map((audit) => {
+        const movement = movementsById.get(audit.entityId ?? '');
+
+        return {
+          id: audit.id,
+          entityType: audit.entityType,
+          entityId: audit.entityId,
+          actionType: audit.actionType,
+          before: audit.before,
+          after: audit.after,
+          createdAt: audit.createdAt,
+          performedBy: {
+            id: audit.employee.id,
+            name: getEmployeeFullName(audit.employee),
+          },
+          stockMovement: movement
+            ? {
+                id: movement.id,
+                status: movement.status,
+                sourceInventory: {
+                  id: movement.sourceInventory.id,
+                  name: movement.sourceInventory.name,
+                },
+                destinationInventory: {
+                  id: movement.destinationInventory.id,
+                  name: movement.destinationInventory.name,
+                },
+                products: movement.items.getItems().map((item) => ({
+                  id: item.product.id,
+                  name: item.product.name,
+                  quantity: item.quantity,
+                })),
+              }
+            : null,
+        };
+      }),
+      meta: this.createPaginationMeta(currentPage, limit, totalItems),
+    };
+  }
+
+  private createPaginationMeta(
+    currentPage: number,
+    itemsPerPage: number,
+    totalItems: number,
+  ) {
+    return {
+      currentPage,
+      itemsPerPage,
+      totalItems,
+      totalPages: Math.ceil(totalItems / itemsPerPage),
     };
   }
 

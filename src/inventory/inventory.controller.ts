@@ -12,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../shared/guards/jwt-auth.guard';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
+import { InventoryDetailQueryDto } from './dto/inventory-detail-query.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { CurrentStore } from '../shared/decorators/store.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
@@ -40,7 +41,7 @@ export class InventoryController {
   findOne(
     @CurrentStore() store: Store,
     @Param('id') id: string,
-    @Query() query: paginateQueryTypes.PaginateQuery,
+    @Query() query: InventoryDetailQueryDto,
   ) {
     return this.inventoryService.findOne(store, id, query);
   }

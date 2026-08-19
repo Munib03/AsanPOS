@@ -1,11 +1,13 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
   IsArray,
   IsEnum,
-  Min,
   IsNumber,
   IsOptional,
   IsUUID,
+  Min,
+  IsPositive,
   ValidateNested,
 } from 'class-validator';
 import { SalePaymentStatus } from '../../shared/utils/sale-payment-status.enum';
@@ -15,9 +17,11 @@ export class SaleItemDto {
   productId!: string;
 
   @IsNumber()
+  @IsPositive()
   quantity!: number;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   unitPrice!: number;
 }
 
@@ -37,6 +41,7 @@ export class CreateSaleDto {
   amount?: number;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => SaleItemDto)
   items!: SaleItemDto[];

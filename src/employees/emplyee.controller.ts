@@ -57,11 +57,12 @@ export class EmployeeController {
 
   @Put('info')
   updateEmployeeInfo(
+    @CurrentStore() store: Store,
     @CurrentUser() user: { id: string },
     @Body() dto: UpdateEmployeeDto,
   ) {
     const targetId = dto.id ?? user.id;
-    return this.employeeService.updateEmployeeInfo(targetId, dto);
+    return this.employeeService.updateEmployeeInfo(store, targetId, dto);
   }
 
   @Put('verify-employee-email')
@@ -80,7 +81,7 @@ export class EmployeeController {
 
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.employeeService.remove(id);
+  remove(@CurrentStore() store: Store, @Param('id') id: string) {
+    return this.employeeService.remove(store, id);
   }
 }

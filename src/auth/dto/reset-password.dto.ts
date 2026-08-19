@@ -6,7 +6,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export class VerifyDto {
+export class ResetPasswordDto {
   @IsNotEmpty()
   @IsEmail()
   @MaxLength(255)

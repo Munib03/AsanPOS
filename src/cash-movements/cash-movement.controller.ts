@@ -16,7 +16,7 @@ import { CurrentStore } from '../shared/decorators/store.decorator';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Store } from '../database/entites/store.entity';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
-import type { PaginateQuery } from '../shared/types/paginate-query.types';
+import { PaginateQuery } from '../shared/types/paginate-query.types';
 
 @Controller('cash-movement')
 @UseGuards(JwtAuthGuard, RolesGuard)

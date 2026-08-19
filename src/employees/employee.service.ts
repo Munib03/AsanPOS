@@ -149,10 +149,20 @@ export class EmployeeService {
       role: dto.role ?? Role.Cashier,
       gender: dto.gender,
       dob: dto.dob,
-      imageUrl: dto.imageUrl,
       password: hashedPassword,
       store,
     });
+
+    if (dto.attachmentId) {
+      const attachment = await this.attachmentService.claimAttachment(
+        dto.attachmentId,
+        employee.id,
+        AttachmentEntityType.EMPLOYEE,
+      );
+      employee.imageUrl = attachment.fileUrl;
+    } else {
+      employee.imageUrl = dto.imageUrl;
+    }
 
     const code = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -179,10 +189,13 @@ export class EmployeeService {
     };
   }
 
-  async remove(id: string) {
-    const employee = await this.em.findOne(Employee, { id });
+  async remove(store: Store, id: string) {
+    const employee = await this.em.findOne(Employee, { id, store });
     if (!employee)
-      throw new NotFoundException(`Employee with id ${id} not found`);
+      throw new NotFoundException(`Employee with id ${id} not found!`);
+
+    if (employee.role === 'Admin')
+      throw new BadRequestException('Admin employee cannot be deleted!');
 
     employee.deletedAt = new Date();
 
@@ -193,6 +206,7 @@ export class EmployeeService {
 
 
   async updateEmployeeInfo(
+    store: Store,
     id: string,
     dto: UpdateEmployeeDto,
   ) {
@@ -201,7 +215,7 @@ export class EmployeeService {
 
     const employee = await this.em.findOne(
       Employee,
-      { id },
+      { id, store },
       { populate: ['store'] },
     );
     if (!employee)
@@ -217,7 +231,7 @@ export class EmployeeService {
         employee.id,
         AttachmentEntityType.EMPLOYEE,
       );
-      employee.imageUrl = attachment.imageUrl;
+      employee.imageUrl = attachment.fileUrl;
     }
 
     if (dto.password) {
@@ -341,7 +355,6 @@ export class EmployeeService {
     };
   }
 
-
   async deleteEmployeeImage(id: string) {
     const employee = await this.em.findOne(Employee, { id });
     if (!employee)
@@ -350,7 +363,7 @@ export class EmployeeService {
     if (!employee.imageUrl)
       throw new NotFoundException(`Employee has no profile picture`);
 
-    await this.attachmentService.deleteAttachmentByUrl(
+    await this.attachmentService.deleteAttachmentByFileUrl(
       employee.imageUrl,
       AttachmentEntityType.EMPLOYEE,
     );

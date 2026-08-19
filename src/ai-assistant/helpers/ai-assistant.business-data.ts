@@ -25,11 +25,14 @@ import { SaleStatus } from '../../shared/utils/sale-status.enum';
 import {
   AiAssistantGraphSchema,
   type AiAssistantGraph,
+  AiAssistantPdfSchema,
+  type AiAssistantPdf,
 } from './ai-assistant.response.schema';
 import type {
   BusinessDateRange,
   BusinessGraphComparisonPeriod,
   BusinessGraphInput,
+  BusinessPdfInput,
   BusinessGraphSubject,
   CustomerInsightInput,
   DashboardGraphMetricName,
@@ -155,6 +158,8 @@ export function createAiAssistantBusinessData(
   return {
     createBusinessGraph: (input: BusinessGraphInput) =>
       createBusinessGraph(context, input),
+    createBusinessPdf: (input: BusinessPdfInput) =>
+      createBusinessPdf(context, input),
     searchProducts: async ({
       query,
       productCode,
@@ -552,6 +557,37 @@ async function createBusinessGraph(
   });
 }
 
+async function createBusinessPdf(
+  context: DataContext,
+  { title, includeGraph, ...graphInput }: BusinessPdfInput,
+): Promise<AiAssistantPdf> {
+  const graph = await createBusinessGraph(context, graphInput);
+
+  return AiAssistantPdfSchema.parse({
+    type: 'pdf',
+    title: title ?? `${graph.title} report`,
+    generatedAt: new Date().toISOString(),
+    summary: graph.datasets.map((dataset) => ({
+      label: `Total ${dataset.label}`,
+      value: dataset.data.reduce((total, value) => total + value, 0),
+      valueFormat: graph.valueFormat,
+    })),
+    table: {
+      title: graph.title,
+      columns: [
+        graph.xAxisLabel,
+        ...graph.datasets.map((dataset) => dataset.label),
+      ],
+      rows: graph.labels.map((label, index) => [
+        label,
+        ...graph.datasets.map((dataset) => dataset.data[index] ?? 0),
+      ]),
+      valueFormat: graph.valueFormat,
+    },
+    ...(includeGraph ? { graph } : {}),
+  });
+}
+
 async function createDashboardMetricsGraph(
   { dashboardService, store, employeeId }: DataContext,
   {
@@ -802,9 +838,7 @@ function getItemsTotal<T extends { quantity?: number; unitPrice?: number }>(
 ): number {
   return items.reduce(
     (total, item) =>
-      onItem
-        ? total + onItem(item)
-        : total + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+      total + (onItem?.(item) ?? (item.quantity ?? 0) * (item.unitPrice ?? 0)),
     0,
   );
 }
@@ -1024,13 +1058,7 @@ async function getEmployeeSaleIds({ em, store, employeeId }: DataContext) {
     },
     { populate: ['sale'], refresh: true },
   );
-  return [
-    ...new Set(
-      payments
-        .map((payment) => payment.sale?.id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
+  return uniqueIds(payments.map((payment) => payment.sale?.id));
 }
 
 async function getEmployeeCreatedEntityIds(
@@ -1046,11 +1074,11 @@ async function getEmployeeCreatedEntityIds(
     },
     { refresh: true },
   );
-  return [
-    ...new Set(
-      logs.map((log) => log.entityId).filter((id): id is string => Boolean(id)),
-    ),
-  ];
+  return uniqueIds(logs.map((log) => log.entityId));
+}
+
+function uniqueIds(ids: Array<string | undefined>): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 async function getEmployeeTransactions(

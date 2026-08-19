@@ -1,16 +1,11 @@
-import {
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsPositive,
-  IsString,
-} from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
 import { SalePaymentStatus } from '../../shared/utils/sale-payment-status.enum';
+import { SaleStatus } from '../../shared/utils/sale-status.enum';
 
 export class UpdateSaleDto {
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(SaleStatus)
+  status?: SaleStatus;
 
   @IsOptional()
   @IsEnum(SalePaymentStatus)
@@ -18,6 +13,6 @@ export class UpdateSaleDto {
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(0)
   amount?: number;
 }

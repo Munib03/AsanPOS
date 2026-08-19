@@ -83,7 +83,7 @@ export class StockOutService {
           { id: dto.saleId, store },
           { populate: ['items', 'items.product'] },
         ),
-        em.findOne(Inventory, { id: dto.inventoryId }),
+        em.findOne(Inventory, { id: dto.inventoryId, store }),
       ]);
 
       if (!sale)
@@ -126,7 +126,7 @@ export class StockOutService {
         });
       }
 
-      const employee = await this.findEmployeeOrFail(em, employeeId);
+      const employee = await this.findEmployeeOrFail(em, store, employeeId);
 
       this.auditService.logStatusChange(
         em,
@@ -209,7 +209,7 @@ export class StockOutService {
           }
         }
 
-        const employee = await this.findEmployeeOrFail(em, employeeId);
+        const employee = await this.findEmployeeOrFail(em, store, employeeId);
 
         this.auditService.logStatusChange(
           em,
@@ -231,9 +231,10 @@ export class StockOutService {
 
   private async findEmployeeOrFail(
     em: EntityManager,
+    store: Store,
     employeeId: string,
   ): Promise<Employee> {
-    const employee = await em.findOne(Employee, { id: employeeId });
+    const employee = await em.findOne(Employee, { id: employeeId, store });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
   }

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Attachment } from '../database/entites/attachment.entity';
 import { MinioService } from '../shared/services/minio.service';
@@ -13,22 +17,39 @@ interface MulterFile {
   size: number;
 }
 
+const IMAGE_ATTACHMENT_TYPES = [
+  AttachmentEntityType.EMPLOYEE,
+  AttachmentEntityType.PRODUCT,
+] as const;
+
 @Injectable()
 export class AttachmentService {
   constructor(
     private readonly em: EntityManager,
     private readonly minioService: MinioService,
-  ) { }
+  ) {}
 
-  async createAttachment(entityType: AttachmentEntityType, file: MulterFile): Promise<{ id: string }> {
-    if (!file)
-      throw new BadRequestException('No image file provided');
+  async createAttachment(
+    entityType: AttachmentEntityType,
+    file: MulterFile,
+  ): Promise<{ id: string }> {
+    if (!file) throw new BadRequestException('No file provided');
+    if (
+      !IMAGE_ATTACHMENT_TYPES.includes(
+        entityType as
+          | AttachmentEntityType.EMPLOYEE
+          | AttachmentEntityType.PRODUCT,
+      )
+    )
+      throw new BadRequestException('This attachment type cannot be uploaded');
 
     const key = await this.minioService.uploadFile(file);
 
     const attachment = this.em.create(Attachment, {
       entityType,
-      imageUrl: key,
+      fileUrl: key,
+      fileName: file.originalname,
+      mimeType: null,
       entityId: null,
       claimedAt: null,
     });
@@ -38,12 +59,41 @@ export class AttachmentService {
     return { id: attachment.id };
   }
 
-  async createAttachments(entityType: AttachmentEntityType, files: MulterFile[]): Promise<{ ids: string[] }> {
-    if (!Object.values(AttachmentEntityType).includes(entityType))
-      throw new BadRequestException(`Invalid entityType. Valid values: ${Object.values(AttachmentEntityType).join(', ')}`);
+  async createGeneratedDocument(
+    entityId: string,
+    fileName: string,
+    mimeType: string,
+    buffer: Buffer,
+  ): Promise<Attachment> {
+    const key = await this.minioService.uploadBuffer(
+      buffer,
+      fileName,
+      mimeType,
+    );
+    const attachment = this.em.create(Attachment, {
+      entityType: AttachmentEntityType.AI_CHAT_MESSAGE,
+      entityId,
+      fileUrl: key,
+      fileName,
+      mimeType,
+      claimedAt: new Date(),
+    });
 
-    if (!files?.length)
-      throw new BadRequestException('No image files provided');
+    await this.em.persistAndFlush(attachment);
+    attachment.signedUrl = await this.presignedUrl(attachment.fileUrl);
+    return attachment;
+  }
+
+  async createAttachments(
+    entityType: AttachmentEntityType,
+    files: MulterFile[],
+  ): Promise<{ ids: string[] }> {
+    if (!Object.values(AttachmentEntityType).includes(entityType))
+      throw new BadRequestException(
+        `Invalid entityType. Valid values: ${Object.values(AttachmentEntityType).join(', ')}`,
+      );
+
+    if (!files?.length) throw new BadRequestException('No files provided');
 
     const results = await Promise.all(
       files.map((file) => this.createAttachment(entityType, file)),
@@ -52,20 +102,27 @@ export class AttachmentService {
     return { ids: results.map((r) => r.id) };
   }
 
-  async claimAttachment(id: string, entityId: string, entityType: AttachmentEntityType): Promise<Attachment> {
+  async claimAttachment(
+    id: string,
+    entityId: string,
+    entityType: AttachmentEntityType,
+  ): Promise<Attachment> {
     const attachment = await this.getAttachment(id, entityType);
 
     attachment.entityId = entityId;
     attachment.claimedAt = new Date();
     await this.em.flush();
 
-    if (attachment.imageUrl)
-      attachment.signedUrl = await this.presignedUrl(attachment.imageUrl);
+    attachment.signedUrl = await this.presignedUrl(attachment.fileUrl);
 
     return attachment;
   }
 
-  async claimAttachments(ids: string[], entityId: string, entityType: AttachmentEntityType): Promise<void> {
+  async claimAttachments(
+    ids: string[],
+    entityId: string,
+    entityType: AttachmentEntityType,
+  ): Promise<void> {
     const attachments = await this.getAttachments(ids, entityType);
     const now = new Date();
 
@@ -77,7 +134,10 @@ export class AttachmentService {
     await this.em.persistAndFlush(attachments);
   }
 
-  async getAttachment(id: string, entityType: AttachmentEntityType): Promise<Attachment> {
+  async getAttachment(
+    id: string,
+    entityType: AttachmentEntityType,
+  ): Promise<Attachment> {
     const attachment = await this.em.findOne(Attachment, {
       id,
       entityType,
@@ -85,12 +145,17 @@ export class AttachmentService {
     });
 
     if (!attachment)
-      throw new UnprocessableEntityException('Attachment not found or already claimed');
+      throw new UnprocessableEntityException(
+        'Attachment not found or already claimed',
+      );
 
     return attachment;
   }
 
-  async getAttachments(ids: string[], entityType: AttachmentEntityType): Promise<Attachment[]> {
+  async getAttachments(
+    ids: string[],
+    entityType: AttachmentEntityType,
+  ): Promise<Attachment[]> {
     const attachments = await this.em.findAll(Attachment, {
       where: {
         id: { $in: ids },
@@ -100,18 +165,25 @@ export class AttachmentService {
     });
 
     if (attachments.length !== ids.length)
-      throw new UnprocessableEntityException('One or more attachments not found or already claimed');
+      throw new UnprocessableEntityException(
+        'One or more attachments not found or already claimed',
+      );
 
     return attachments;
   }
 
-  async deleteAttachmentByUrl(imageUrl: string, entityType: AttachmentEntityType): Promise<void> {
-    const attachment = await this.em.findOne(Attachment, { imageUrl, entityType });
+  async deleteAttachmentByFileUrl(
+    fileUrl: string,
+    entityType: AttachmentEntityType,
+  ): Promise<void> {
+    const attachment = await this.em.findOne(Attachment, {
+      fileUrl,
+      entityType,
+    });
 
-    if (attachment)
-      await this.em.removeAndFlush(attachment);
+    if (attachment) await this.em.removeAndFlush(attachment);
 
-    await this.minioService.deleteFile(imageUrl);
+    await this.minioService.deleteFile(fileUrl);
   }
 
   async presignedUrl(key: string): Promise<string> {

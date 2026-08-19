@@ -1,21 +1,34 @@
 import { EntityManager } from '@mikro-orm/postgresql';
 import { tool } from 'ai';
 import { z } from 'zod';
+import { CreateCategoryDto } from '../../categories/dto/create-category.dto';
+import { CreateCustomerDto } from '../../customer/dto/create-customer.dto';
 import { DashboardService } from '../../dashboard/dashboard.service';
 import { DashboardRange } from '../../dashboard/dto/dashboard.dto';
+import { Account } from '../../database/entites/account.entity';
 import { AuditLog } from '../../database/entites/audit-log.entity';
 import { CashMovement } from '../../database/entites/cash-movement.entity';
 import { Category } from '../../database/entites/category.entity';
+import { Customer } from '../../database/entites/customer.entity';
 import { Employee } from '../../database/entites/employee.entity';
+import { Inventory } from '../../database/entites/inventory.entity';
 import { JournalEntry } from '../../database/entites/journal-entry.entity';
 import { Payment } from '../../database/entites/payments.entity';
 import { Receipt } from '../../database/entites/receipt.entity';
+import { Product } from '../../database/entites/product.entity';
 import { StockIn } from '../../database/entites/stock-in.entity';
 import { StockMovement } from '../../database/entites/stock-movement.entity';
 import { StockOut } from '../../database/entites/stock-out.entity';
 import { Store } from '../../database/entites/store.entity';
 import { StoreSession } from '../../database/entites/store-session.entity';
+import { AuditService } from '../../audit/audit.service';
+import { CreateInventoryDto } from '../../inventory/dto/create-inventory.dto';
+import { CreateProductDto } from '../../products/dto/create-product.dto';
+import { SequenceService } from '../../sequence/sequence.service';
+import { AuditActionType } from '../../shared/utils/audit-action-type.enum';
+import { AuditEntityType } from '../../shared/utils/audit-entity-type.enum';
 import { getEmployeeFullName } from '../../shared/utils/employee-name.util';
+import { validateDto } from '../../shared/utils/validate-dto.util';
 import type { AiAssistantGraph } from './ai-assistant.response.schema';
 import { createAiAssistantBusinessData } from './ai-assistant.business-data';
 
@@ -43,6 +56,26 @@ const PRODUCT_FILTER_FIELDS = {
     .optional(),
 };
 const PRODUCT_QUERY_INPUT = z.object(PRODUCT_FILTER_FIELDS);
+const PRODUCT_CATEGORY_INPUT = z.object({
+  categoryName: z.string().trim().min(1).max(255),
+});
+const CREATE_PRODUCT_INPUT = z.object({
+  name: z.string(),
+  price: z.number(),
+  categoryName: z.string(),
+});
+const CREATE_CATEGORY_INPUT = z.object({
+  name: z.string(),
+});
+const CREATE_INVENTORY_INPUT = z.object({
+  name: z.string(),
+  address: z.string(),
+});
+const CREATE_CUSTOMER_INPUT = z.object({
+  name: z.string(),
+  phone: z.string(),
+  address: z.string(),
+});
 const DATE_RANGE_INPUT = z.object({
   from: z
     .string()
@@ -69,7 +102,6 @@ const CUSTOMER_INSIGHT_INPUT = z.object({
     .describe('Set true only when the user asks about customer profit.'),
   limit: TOOL_LIMIT,
 });
-
 export const LIVE_ENTITY_RESOURCES = [
   'employees',
   'categories',
@@ -108,6 +140,38 @@ export const DASHBOARD_GRAPH_METRIC_NAMES = [
   'sessions_closed',
 ] as const;
 
+const BUSINESS_GRAPH_INPUT = z.object({
+  subject: z.enum(BUSINESS_GRAPH_SUBJECTS).optional(),
+  metrics: z
+    .array(z.enum(DASHBOARD_GRAPH_METRIC_NAMES))
+    .min(2)
+    .max(DASHBOARD_GRAPH_METRIC_NAMES.length)
+    .optional()
+    .describe(
+      'Use for one graph with multiple compatible dashboard metrics over the same dateRange, for example sales and profit. Every selected metric must use the same value format.',
+    ),
+  dateRange: DATE_RANGE_INPUT.optional(),
+  comparisonPeriods: z
+    .array(COMPARISON_PERIOD_INPUT)
+    .min(2)
+    .optional()
+    .describe(
+      'Use only when the request compares two or more time periods. Send every requested period here, with exact dates and labels, to create one graph. This supports arbitrary comparison periods for every time-based subject.',
+    ),
+  limit: z.number().int().min(1).max(20).optional().default(10),
+  type: z.enum(['line', 'bar', 'pie', 'doughnut']).optional().default('bar'),
+});
+const BUSINESS_PDF_INPUT = BUSINESS_GRAPH_INPUT.extend({
+  title: z.string().min(1).optional().describe('Optional exact PDF title.'),
+  includeGraph: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Set true only when the user explicitly asks for a graph in the PDF.',
+    ),
+});
+
 export type LiveEntityResource = (typeof LIVE_ENTITY_RESOURCES)[number];
 export type BusinessGraphSubject = (typeof BUSINESS_GRAPH_SUBJECTS)[number];
 export type DashboardGraphMetricName =
@@ -132,12 +196,18 @@ export type BusinessGraphInput = {
   limit: number;
   type: AiAssistantGraph['type'];
 };
+export type BusinessPdfInput = BusinessGraphInput & {
+  title?: string;
+  includeGraph: boolean;
+};
 
 interface CreateAiAssistantToolsParams {
   dashboardService: DashboardService;
   em: EntityManager;
   store: Store;
   employeeId: string;
+  auditService: AuditService;
+  sequenceService: SequenceService;
 }
 
 export function createAiAssistantTools({
@@ -145,16 +215,30 @@ export function createAiAssistantTools({
   em,
   store,
   employeeId,
+  auditService,
+  sequenceService,
 }: CreateAiAssistantToolsParams) {
   const storeWhere = { id: store.id };
-  const scope = { storeId: store.id, storeName: store.name };
+  const scope = { storeId: store.id, storeName: store.name, currency: 'AFN' };
   const data = createAiAssistantBusinessData({
     dashboardService,
     em,
     store,
     employeeId,
   });
-
+  const getCurrentEmployee = async (manager = em) => {
+    const employee = await manager.findOne(Employee, {
+      id: employeeId,
+      store: storeWhere,
+    });
+    if (!employee) throw new Error('Employee not found');
+    return employee;
+  };
+  const invalidInput = (errors: string[]) => ({
+    scope,
+    created: false,
+    message: errors.join(' '),
+  });
   return {
     getDashboardStats: tool({
       description:
@@ -173,33 +257,20 @@ export function createAiAssistantTools({
     createBusinessGraph: tool({
       description:
         'Create exactly one verified graph from current-store data. Use subject for one business measure. Use comparisonPeriods with one subject to compare that same measure across two or more requested periods in one graph. Use metrics with an explicit dateRange to put two or more compatible dashboard measures, such as sales and profit, into one graph as separate datasets. Do not use metrics and comparisonPeriods together. Supports dashboard sales, profit, cash movements, sessions, top selling products, sold value by product, current inventory quantity, customer paid sales, customer profit, customer paid sales and profit in the same chart, top purchased products, purchase cost by product, purchase customers by paid amount, and sales by cashier.',
-      inputSchema: z.object({
-        subject: z.enum(BUSINESS_GRAPH_SUBJECTS).optional(),
-        metrics: z
-          .array(z.enum(DASHBOARD_GRAPH_METRIC_NAMES))
-          .min(2)
-          .max(DASHBOARD_GRAPH_METRIC_NAMES.length)
-          .optional()
-          .describe(
-            'Use for one graph with multiple compatible dashboard metrics over the same dateRange, for example sales and profit. Every selected metric must use the same value format.',
-          ),
-        dateRange: DATE_RANGE_INPUT.optional(),
-        comparisonPeriods: z
-          .array(COMPARISON_PERIOD_INPUT)
-          .min(2)
-          .optional()
-          .describe(
-            'Use only when the request compares two or more time periods. Send every requested period here, with exact dates and labels, to create one graph. This supports arbitrary comparison periods for every time-based subject.',
-          ),
-        limit: z.number().int().min(1).max(20).optional().default(10),
-        type: z
-          .enum(['line', 'bar', 'pie', 'doughnut'])
-          .optional()
-          .default('bar'),
-      }),
+      inputSchema: BUSINESS_GRAPH_INPUT,
       execute: async (input) => ({
         scope,
         graph: await data.createBusinessGraph(input),
+      }),
+    }),
+
+    createBusinessPdf: tool({
+      description:
+        'Create exactly one backend-generated PDF from verified current-store data. It always includes a summary and data table. Set includeGraph to true only when the user explicitly asks for a graph or chart inside the PDF. Use subject for one measure, comparisonPeriods for one measure across multiple periods, or metrics for multiple compatible dashboard measures over one date range. Do not use metrics and comparisonPeriods together.',
+      inputSchema: BUSINESS_PDF_INPUT,
+      execute: async (input) => ({
+        scope,
+        pdf: await data.createBusinessPdf(input),
       }),
     }),
 
@@ -215,6 +286,138 @@ export function createAiAssistantTools({
         scope,
         ...(await data.searchProducts(input)),
       }),
+    }),
+
+    createCategory: tool({
+      description:
+        'Create one category in the verified store after the user supplies its name. Do not create a product with it unless the user separately asks for a product.',
+      inputSchema: CREATE_CATEGORY_INPUT,
+      execute: async (input) => {
+        const validation = await validateDto(CreateCategoryDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name } = validation.value;
+        const existing = await em.findOne(Category, {
+          name: { $ilike: name },
+          store: storeWhere,
+        });
+        if (existing)
+          return {
+            scope,
+            created: false,
+            message: `Category "${name}" already exists in this store.`,
+          };
+
+        const category = em.create(Category, { name, store });
+        await em.persistAndFlush(category);
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Category,
+          category.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.flush();
+
+        return {
+          scope,
+          created: true,
+          category: { id: category.id, name: category.name },
+        };
+      },
+    }),
+
+    getProductCategory: tool({
+      description:
+        'Verify whether one product category is available in the verified store. Use this before creating a product when the user gives a category name. Do not create a category.',
+      inputSchema: PRODUCT_CATEGORY_INPUT,
+      execute: async ({ categoryName }) => {
+        const category = await em.findOne(Category, {
+          name: { $ilike: categoryName },
+          store: storeWhere,
+        });
+
+        return {
+          scope,
+          available: Boolean(category),
+          category: category ? { id: category.id, name: category.name } : null,
+        };
+      },
+    }),
+
+    createProduct: tool({
+      description:
+        'Create one product in the verified store. Call only after the user has supplied a name, selling price, and category. The category is checked again here, and no product is created when it is unavailable.',
+      inputSchema: CREATE_PRODUCT_INPUT,
+      execute: async (input) => {
+        const validation = await validateDto(CreateProductDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, price, categoryName } = validation.value;
+        const category = await em.findOne(Category, {
+          name: { $ilike: categoryName },
+          store: storeWhere,
+        });
+        if (!category)
+          return {
+            scope,
+            created: false,
+            message: `Category "${categoryName}" is not available in this store.`,
+          };
+
+        const existing = await em.findOne(Product, {
+          name: { $ilike: name },
+          store: storeWhere,
+        });
+        if (existing)
+          return {
+            scope,
+            created: false,
+            message: `Product "${name}" already exists in this store.`,
+          };
+
+        const sequence = await sequenceService.generateSequence(
+          store,
+          'Product',
+          'PDT',
+        );
+        const product = em.create(Product, {
+          name,
+          price,
+          barcode: sequenceService.formatSequence(sequence),
+          sequence,
+          store,
+          updatedAt: null,
+        });
+        product.categories.add(category);
+
+        const employee = await getCurrentEmployee();
+
+        auditService.log(
+          em,
+          employee,
+          AuditEntityType.Product,
+          product.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.persistAndFlush(product);
+
+        return {
+          scope,
+          created: true,
+          product: {
+            id: product.id,
+            name,
+            price,
+            category: { id: category.id, name: category.name },
+            productCode: sequenceService.formatSequence(sequence),
+          },
+        };
+      },
     }),
 
     getProductCount: tool({
@@ -238,6 +441,51 @@ export function createAiAssistantTools({
         scope,
         ...(await data.getInventorySummary(input)),
       }),
+    }),
+
+    createInventory: tool({
+      description:
+        'Create one inventory in the verified store after the user supplies its name and address. An inventory starts empty; do not add products or stock unless the user separately asks.',
+      inputSchema: CREATE_INVENTORY_INPUT,
+      execute: async (input) => {
+        const validation = await validateDto(CreateInventoryDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, address } = validation.value;
+        const existing = await em.findOne(Inventory, {
+          name: { $ilike: name },
+          store: storeWhere,
+        });
+        if (existing)
+          return {
+            scope,
+            created: false,
+            message: `Inventory "${name}" already exists in this store.`,
+          };
+
+        const inventory = em.create(Inventory, { name, address, store });
+        await em.persistAndFlush(inventory);
+        auditService.log(
+          em,
+          await getCurrentEmployee(),
+          AuditEntityType.Inventory,
+          inventory.id,
+          AuditActionType.Create,
+          null,
+          null,
+        );
+        await em.flush();
+
+        return {
+          scope,
+          created: true,
+          inventory: {
+            id: inventory.id,
+            name: inventory.name,
+            address: inventory.address,
+          },
+        };
+      },
     }),
 
     getLiveEntityCount: tool({
@@ -279,6 +527,76 @@ export function createAiAssistantTools({
         scope,
         ...(await data.getCustomerSummary(input)),
       }),
+    }),
+
+    createCustomer: tool({
+      description:
+        'Create one customer in the verified store after the user supplies a name, phone number, and address. It also creates the customer payable and receivable accounts. Do not create a customer when the phone number already belongs to a customer in this store.',
+      inputSchema: CREATE_CUSTOMER_INPUT,
+      execute: async (input) => {
+        const validation = await validateDto(CreateCustomerDto, input);
+        if (!validation.valid) return invalidInput(validation.errors);
+
+        const { name, phone, address } = validation.value;
+        return em.transactional(async (transactionalEm) => {
+          const existing = await transactionalEm.findOne(Customer, {
+            store: storeWhere,
+            $or: [{ phone }, { name: { $ilike: name } }],
+          });
+          if (existing)
+            return {
+              scope,
+              created: false,
+              message:
+                existing.phone === phone
+                  ? `Customer with phone "${phone}" already exists in this store.`
+                  : `Customer "${name}" already exists in this store.`,
+            };
+
+          const payable = transactionalEm.create(Account, {
+            name: `${name} - Accounts Payable`,
+            type: 'liability',
+          });
+          const receivable = transactionalEm.create(Account, {
+            name: `${name} - Accounts Receivable`,
+            type: 'asset',
+          });
+          transactionalEm.persist(payable);
+          transactionalEm.persist(receivable);
+
+          const customer = transactionalEm.create(Customer, {
+            name,
+            phone,
+            address,
+            store,
+            payable,
+            receivable,
+          });
+          await transactionalEm.persistAndFlush(customer);
+
+          auditService.log(
+            transactionalEm,
+            await getCurrentEmployee(transactionalEm),
+            AuditEntityType.Customer,
+            customer.id,
+            AuditActionType.Create,
+            null,
+            null,
+          );
+          await transactionalEm.flush();
+
+          return {
+            scope,
+            created: true,
+            customer: {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              address: customer.address,
+            },
+          };
+        });
+      },
     }),
 
     getOpenSessions: tool({

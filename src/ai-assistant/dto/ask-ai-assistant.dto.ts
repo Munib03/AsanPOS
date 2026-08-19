@@ -1,10 +1,18 @@
-import { IsOptional, IsString } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class AskAiAssistantDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(4000)
   question!: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   threadId?: string;
 }

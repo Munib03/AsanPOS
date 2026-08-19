@@ -37,9 +37,9 @@ export class CustomerService {
     return { data: sorted, meta };
   }
 
-  async findOne(id: string) {
+  async findOne(store: Store, id: string) {
     return this.customerRepository.findOneOrFail(
-      { id },
+      { id, store },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
   }
@@ -74,7 +74,7 @@ export class CustomerService {
 
       await em.persistAndFlush(customer);
 
-      const employee = await em.findOne(Employee, { id: employeeId });
+      const employee = await em.findOne(Employee, { id: employeeId, store });
       if (!employee)
         throw new NotFoundException('Employee not found');
 
@@ -95,16 +95,21 @@ export class CustomerService {
   }
 
 
-  async update(id: string, employeeId: string, dto: UpdateCustomerDto) {
+  async update(
+    store: Store,
+    id: string,
+    employeeId: string,
+    dto: UpdateCustomerDto,
+  ) {
     const customer = await this.customerRepository.findOneOrFail(
-      { id },
+      { id, store },
       { notFoundMessage: `Customer with id ${id} not found` },
     );
 
     if (dto.phone !== undefined) {
       const phone = await this.em.findOne(Customer, {
         phone: dto.phone,
-        store: customer.store,
+        store,
       });
       if (phone && phone.id !== id)
         throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
@@ -128,7 +133,7 @@ export class CustomerService {
 
     this.em.assign(customer, stripUndefined(dto));
 
-    const employee = await this.em.findOne(Employee, { id: employeeId });
+    const employee = await this.em.findOne(Employee, { id: employeeId, store });
     if (!employee)
       throw new NotFoundException('Employee not found');
 
@@ -151,9 +156,9 @@ export class CustomerService {
   }
 
 
-  async remove(id: string, employeeId: string) {
+  async remove(store: Store, id: string, employeeId: string) {
     return await this.em.transactional(async (em) => {
-      const customer = await em.findOne(Customer, { id });
+      const customer = await em.findOne(Customer, { id, store });
 
       if (!customer)
         throw new NotFoundException(`Customer with id ${id} not found`);
@@ -161,7 +166,7 @@ export class CustomerService {
       if (customer.name === 'Walk-in Customer')
         throw new BadRequestException(`Walk-in Customer cannot be deleted.`);
 
-      const employee = await em.findOne(Employee, { id: employeeId });
+      const employee = await em.findOne(Employee, { id: employeeId, store });
       if (!employee)
         throw new NotFoundException('Employee not found');
 
